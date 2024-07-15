@@ -16,8 +16,6 @@
  */
 package org.apache.camel.component.langchain4j.extract;
 
-import static org.apache.camel.component.langchain4j.extract.LangChain4jExtract.SCHEME;
-
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -27,6 +25,8 @@ import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.annotations.Component;
 import org.apache.camel.support.DefaultComponent;
 import org.apache.camel.util.PropertiesHelper;
+
+import static org.apache.camel.component.langchain4j.extract.LangChain4jExtract.SCHEME;
 
 @Component(SCHEME)
 public class LangChain4jExtractComponent extends DefaultComponent {

@@ -16,8 +16,6 @@
  */
 package org.apache.camel.component.langchain4j.extract;
 
-import static org.apache.camel.component.langchain4j.extract.LangChain4jExtract.SCHEME;
-
 import java.util.Map;
 
 import org.apache.camel.Category;
@@ -29,6 +27,8 @@ import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriPath;
 import org.apache.camel.support.DefaultEndpoint;
+
+import static org.apache.camel.component.langchain4j.extract.LangChain4jExtract.SCHEME;
 
 @UriEndpoint(firstVersion = "4.5.0", scheme = SCHEME,
              title = "langChain4j Extract",

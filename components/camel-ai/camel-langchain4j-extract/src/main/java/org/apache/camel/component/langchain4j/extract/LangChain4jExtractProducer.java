@@ -16,11 +16,10 @@
  */
 package org.apache.camel.component.langchain4j.extract;
 
+import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.apache.camel.Exchange;
 import org.apache.camel.support.DefaultProducer;
 import org.apache.camel.util.ObjectHelper;
-
-import dev.langchain4j.model.chat.ChatLanguageModel;
 
 public class LangChain4jExtractProducer extends DefaultProducer {
 

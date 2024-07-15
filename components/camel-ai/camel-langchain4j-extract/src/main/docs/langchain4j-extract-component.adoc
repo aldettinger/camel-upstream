@@ -1,6 +1,6 @@
-= langChain4j Chat Component
-:doctitle: langChain4j Chat
-:shortname: langchain4j-chat
+= langChain4j Extract Component
+:doctitle: langChain4j Extract
+:shortname: langchain4j-extract
 :artifactid: camel-langchain4j-extract
 :description: LangChain4j Extract component
 :since: 4.5
