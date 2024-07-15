@@ -16,175 +16,96 @@
  */
 package org.apache.camel.component.langchain4j.extract;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.IOException;
+import java.time.LocalDate;
 
-import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.UserMessage;
-import org.apache.camel.InvalidPayloadException;
-import org.apache.camel.NoSuchHeaderException;
+import dev.langchain4j.service.AiServices;
+import dev.langchain4j.service.UserMessage;
+import dev.langchain4j.service.V;
+import kotlin.text.Charsets;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.component.mock.MockEndpoint;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.apache.commons.io.IOUtils.resourceToString;
 
 @DisabledIfSystemProperty(named = "ci.env.name", matches = ".*", disabledReason = "Requires too much network resources")
 public class LangChain4jExtractIT extends OllamaTestSupport {
+
+    /**
+     * The customer birthday date format need to be forced to comply with what langchain4j gson parser need.
+     */
+    static final String CUSTOM_POJO_EXTRACT_PROMPT
+            = "Extract information about a customer from the text delimited by triple backticks: ```{{text}}```."
+              + "The customerBirthday field should be formatted as YYYY-MM-DD."
+              + "The summary field should concisely relate the customer main ask.";
+
+    static class CustomPojo {
+        private boolean customerSatisfied;
+        private String customerName;
+        private LocalDate customerBirthday;
+        private String summary;
+    }
+
+    interface CamelCustomPojoExtractor {
+        @UserMessage(CUSTOM_POJO_EXTRACT_PROMPT)
+        CustomPojo extractFromText(@V("text") String text);
+    }
 
     @Override
     protected RouteBuilder createRouteBuilder() {
         this.context.getRegistry().bind("chatModel", chatLanguageModel);
 
+        CamelCustomPojoExtractor extractionService = AiServices.create(CamelCustomPojoExtractor.class, chatLanguageModel);
+        this.context.getRegistry().bind("extractionService", extractionService);
+
         return new RouteBuilder() {
             public void configure() {
                 from("direct:send-simple-message")
-                        .to("langchain4j-chat:test1?chatModel=#chatModel&chatOperation=CHAT_SINGLE_MESSAGE")
-                        .onException(InvalidPayloadException.class) // Handle InvalidPayloadException
-                            .handled(true)
-                            .to("mock:invalid-payload")
-                        .end()
+                        .bean(extractionService)
                         .to("mock:response");
-
-                from("direct:send-message-prompt")
-                        .to("langchain4j-chat:test2?chatModel=#chatModel&chatOperation=CHAT_SINGLE_MESSAGE_WITH_PROMPT")
-                        .onException(InvalidPayloadException.class) // Handle InvalidPayloadException
-                            .handled(true)
-                            .to("mock:invalid-payload")
-                        .end()
-                        .onException(NoSuchHeaderException.class) // Handle NoSuchHeaderException
-                            .handled(true)
-                            .to("mock:invalid-header")
-                        .end()
-                        .to("mock:response");
-
-                from("direct:send-multiple")
-                        .to("langchain4j-chat:test2?chatModel=#chatModel&chatOperation=CHAT_MULTIPLE_MESSAGES")
-                        .onException(InvalidPayloadException.class) // Handle InvalidPayloadException
-                            .handled(true)
-                            .to("mock:invalid-payload")
-                        .end()
-                        .to("mock:response");
-
             }
         };
     }
 
     @Test
-    void testSendMessage() throws InterruptedException {
+    void testSendMessage() throws InterruptedException, IOException {
+
+        String[] conversationResourceNames = {
+                "01_sarah-london-10-07-1986-satisfied.txt", "02_john-doe-01-11-2001-unsatisfied.txt",
+                "03_kate-boss-13-08-1999-satisfied.txt" };
+
+        //String[] conversationResourceNames = { "01_sarah-london-10-07-1986-satisfied.txt" };
+
+        for (String conversationResourceName : conversationResourceNames) {
+            String conversation = resourceToString(String.format("/texts/%s", conversationResourceName), Charsets.UTF_8);
+
+            long begin = System.currentTimeMillis();
+            CustomPojo answer = template.requestBody("direct:send-simple-message", conversation, CustomPojo.class);
+            long duration = System.currentTimeMillis() - begin;
+
+            System.out.println(toPrettyFormat(answer));
+            System.out.println(String.format("----- Inference lasted %.1fs ------------------------------", duration / 1000.0));
+        }
+
+        /*
         MockEndpoint mockEndpoint = this.context.getEndpoint("mock:response", MockEndpoint.class);
         mockEndpoint.expectedMessageCount(1);
+        */
 
-        String response = template.requestBody("direct:send-simple-message", "Hello my name is Darth Vader!", String.class);
-        mockEndpoint.assertIsSatisfied();
+        //mockEndpoint.assertIsSatisfied();
     }
 
-    @Test
-    void testSendChatMessage() throws InterruptedException {
-        MockEndpoint mockEndpoint = this.context.getEndpoint("mock:response", MockEndpoint.class);
-        mockEndpoint.expectedMessageCount(1);
+    private final static String FORMAT = "****************************************\n"
+                                         + "customerSatisfied: %s\n"
+                                         + "customerName: %s\n"
+                                         + "customerBirthday: %td %tB %tY\n"
+                                         + "summary: %s\n"
+                                         + "****************************************\n";
 
-        ChatMessage userMessage = new UserMessage("Hello my name is Darth Vader!");
-
-        String response = template.requestBody("direct:send-simple-message", userMessage,
-                String.class);
-        mockEndpoint.assertIsSatisfied();
-        assertNotNull(response);
-    }
-
-    @Test
-    void testSendEmptyMessage() throws InterruptedException {
-        MockEndpoint mockErrorHandler = this.context.getEndpoint("mock:invalid-payload", MockEndpoint.class);
-        mockErrorHandler.expectedMessageCount(1);
-
-        template.sendBody("direct:send-simple-message", null);
-        // Assert that the error message is routed to the mock error endpoint
-        mockErrorHandler.assertIsSatisfied();
-    }
-
-    @Test
-    void testSendMessageWithPrompt() throws InterruptedException {
-        MockEndpoint mockEndpoint = this.context.getEndpoint("mock:response", MockEndpoint.class);
-        mockEndpoint.expectedMessageCount(1);
-
-        // Example copied from Langchain4j examples
-        var promptTemplate = "Create a recipe for a {{dishType}} with the following ingredients: {{ingredients}}";
-
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("dishType", "oven dish");
-        variables.put("ingredients", "potato, tomato, feta, olive oil");
-
-        String response = template.requestBodyAndHeader("direct:send-message-prompt", variables,
-                LangChain4jExtract.Headers.PROMPT_TEMPLATE, promptTemplate, String.class);
-        mockEndpoint.assertIsSatisfied();
-
-        assertTrue(response.contains("potato"));
-        assertTrue(response.contains("tomato"));
-        assertTrue(response.contains("feta"));
-        assertTrue(response.contains("olive oil"));
-    }
-
-    @Test
-    void testSendMessageEmptyPrompt() throws InterruptedException {
-        MockEndpoint mockEndpoint = this.context.getEndpoint("mock:invalid-header", MockEndpoint.class);
-        mockEndpoint.expectedMessageCount(1);
-
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("dishType", "oven dish");
-        variables.put("ingredients", "potato, tomato, feta, olive oil");
-
-        template.sendBody("direct:send-message-prompt", variables);
-        mockEndpoint.assertIsSatisfied();
-
-    }
-
-    @Test
-    void testSendMessageEmptyVariables() throws InterruptedException {
-        MockEndpoint mockEndpoint = this.context.getEndpoint("mock:invalid-payload", MockEndpoint.class);
-        mockEndpoint.expectedMessageCount(1);
-
-        // Example copied from Langchain4j examples
-        var promptTemplate = "Create a recipe for a {{dishType}} with the following ingredients: {{ingredients}}";
-
-        template.sendBodyAndHeader("direct:send-message-prompt", null,
-                LangChain4jExtract.Headers.PROMPT_TEMPLATE, promptTemplate);
-        mockEndpoint.assertIsSatisfied();
-    }
-
-    @Test
-    void testSendMultipleMessages() throws InterruptedException {
-        MockEndpoint mockEndpoint = this.context.getEndpoint("mock:response", MockEndpoint.class);
-        mockEndpoint.expectedMessageCount(1);
-
-        List<ChatMessage> messages = new ArrayList<>();
-        messages.add(new SystemMessage("You are asked to provide recommendations for a restaurant based on user reviews."));
-        messages.add(new UserMessage("Hello, my name is Karen."));
-        messages.add(new AiMessage("Hello Karen, how can I help you?"));
-        messages.add(new UserMessage("I'd like you to recommend a restaurant for me."));
-        messages.add(new AiMessage("Sure, what type of cuisine are you interested in?"));
-        messages.add(new UserMessage("I'd like Moroccan food."));
-        messages.add(new AiMessage("Sure, do you have a preference for the location?"));
-        messages.add(new UserMessage("Paris, Rue Montorgueil."));
-
-        String response = template.requestBody("direct:send-multiple", messages, String.class);
-        mockEndpoint.assertIsSatisfied();
-
-        assertNotNull(response);
-    }
-
-    @Test
-    void testSendMultipleEmpty() throws InterruptedException {
-        MockEndpoint mockEndpoint = this.context.getEndpoint("mock:invalid-payload", MockEndpoint.class);
-        mockEndpoint.expectedMessageCount(1);
-
-        template.sendBody("direct:send-multiple", null);
-        mockEndpoint.assertIsSatisfied();
+    public static String toPrettyFormat(CustomPojo extract) {
+        return String.format(FORMAT, extract.customerSatisfied, extract.customerName, extract.customerBirthday,
+                extract.customerBirthday, extract.customerBirthday, extract.summary);
     }
 
 }

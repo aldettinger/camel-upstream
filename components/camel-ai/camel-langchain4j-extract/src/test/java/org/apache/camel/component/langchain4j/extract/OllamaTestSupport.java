@@ -43,7 +43,8 @@ public class OllamaTestSupport extends CamelTestSupport {
         return OllamaChatModel.builder()
                 .baseUrl(OLLAMA.getBaseUrl())
                 .modelName(OLLAMA.getModel())
-                .temperature(0.3)
+                .temperature(0.0)
+                .format("json")
                 .timeout(ofSeconds(3000))
                 .build();
     }
