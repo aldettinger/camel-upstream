@@ -22,13 +22,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
 import io.atlasmap.api.AtlasContext;
 import io.atlasmap.api.AtlasContextFactory;
 import io.atlasmap.api.AtlasException;
 import io.atlasmap.api.AtlasSession;
-import io.atlasmap.core.DefaultAtlasContextFactory;
 import io.atlasmap.v2.Audit;
 import io.atlasmap.v2.DataSource;
 import io.atlasmap.v2.DataSourceType;
@@ -40,8 +38,6 @@ import org.apache.camel.component.ResourceEndpoint;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.support.MessageHelper;
-import org.apache.camel.support.ResourceHelper;
-import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +49,7 @@ import static io.atlasmap.api.AtlasContextFactory.Format.JSON;
  * Transforms the message using an AtlasMap transformation.
  */
 @UriEndpoint(firstVersion = "3.7.0", scheme = "atlasmap", title = "AtlasMap", syntax = "atlasmap:resourceUri",
-             producerOnly = true, category = { Category.TRANSFORMATION })
+             producerOnly = true, category = { Category.TRANSFORMATION }, headersClass = AtlasMapConstants.class)
 public class AtlasMapEndpoint extends ResourceEndpoint {
 
     public static final String CONTENT_TYPE_JSON = "application/json";
@@ -63,14 +59,14 @@ public class AtlasMapEndpoint extends ResourceEndpoint {
     private AtlasContextFactory atlasContextFactory;
     private AtlasContext atlasContext;
 
-    @UriParam(label = "advanced")
-    private String propertiesFile;
     @UriParam
     private String sourceMapName;
     @UriParam
     private String targetMapName;
     @UriParam(defaultValue = "MAP")
     private TargetMapMode targetMapMode = TargetMapMode.MAP;
+    @UriParam(defaultValue = "false")
+    private boolean forceReload;
 
     public enum TargetMapMode {
         MAP,
@@ -80,11 +76,6 @@ public class AtlasMapEndpoint extends ResourceEndpoint {
 
     public AtlasMapEndpoint(String uri, AtlasMapComponent component, String resourceUri) {
         super(uri, component, resourceUri);
-    }
-
-    @Override
-    public boolean isSingleton() {
-        return true;
     }
 
     @Override
@@ -111,19 +102,6 @@ public class AtlasMapEndpoint extends ResourceEndpoint {
 
     public void setAtlasContext(AtlasContext atlasContext) {
         this.atlasContext = atlasContext;
-    }
-
-    /**
-     * The URI of the properties file which is used for AtlasContextFactory initialization.
-     * 
-     * @param file property file path
-     */
-    public void setPropertiesFile(String file) {
-        propertiesFile = file;
-    }
-
-    public String getPropertiesFile() {
-        return propertiesFile;
     }
 
     /**
@@ -173,6 +151,21 @@ public class AtlasMapEndpoint extends ResourceEndpoint {
 
     public TargetMapMode getTargetMapMode() {
         return this.targetMapMode;
+    }
+
+    /**
+     * Whether to enable or disable force reload mode. This is set to false by default and ADM file is loaded from a
+     * file only on a first Exchange, and AtlasContext will be reused after that until endpoint is recreated. If this is
+     * set to true, ADM file will be loaded from a file on every Exchange.
+     * 
+     * @param forceReload true to enable force reload
+     */
+    public void setForceReload(boolean forceReload) {
+        this.forceReload = forceReload;
+    }
+
+    public boolean isForceReload() {
+        return forceReload;
     }
 
     public AtlasMapEndpoint findOrCreateEndpoint(String uri, String newResourceUri) {
@@ -239,44 +232,20 @@ public class AtlasMapEndpoint extends ResourceEndpoint {
             }
             // remove the header to avoid it being propagated in the routing
             incomingMessage.removeHeader(AtlasMapConstants.ATLAS_MAPPING);
-            return getOrCreateAtlasContextFactory().createContext(JSON, is);
-        } else if (getAtlasContext() != null) {
+            return atlasContextFactory.createContext(JSON, is);
+        } else if (getAtlasContext() != null && !forceReload) {
             // no mapping specified in header, and found an existing context
             return getAtlasContext();
         }
 
-        // No mapping in header, and no existing context. Create new one from resourceUri
+        // No mapping in header, and no existing context or force reload is enabled. Create new one from resourceUri
         if (log.isDebugEnabled()) {
             log.debug("Atlas mapping content read from resourceUri: {} for endpoint {}",
                     path, getEndpointUri());
         }
-        atlasContext = getOrCreateAtlasContextFactory().createContext(
+        atlasContext = atlasContextFactory.createContext(
                 path.toLowerCase().endsWith("adm") ? ADM : JSON, getResourceAsInputStream());
         return atlasContext;
-    }
-
-    private synchronized AtlasContextFactory getOrCreateAtlasContextFactory() throws Exception {
-        if (atlasContextFactory != null) {
-            return atlasContextFactory;
-        }
-
-        atlasContextFactory = DefaultAtlasContextFactory.getInstance();
-        atlasContextFactory.addClassLoader(getCamelContext().getApplicationContextClassLoader());
-        // load the properties from property file which may overrides the default ones
-        if (ObjectHelper.isNotEmpty(getPropertiesFile())) {
-            Properties properties = new Properties();
-            InputStream reader = ResourceHelper.resolveMandatoryResourceAsInputStream(getCamelContext(),
-                    getPropertiesFile());
-            try {
-                properties.load(reader);
-                log.info("Loaded the Atlas properties file {}", getPropertiesFile());
-            } finally {
-                IOHelper.close(reader, getPropertiesFile(), log);
-            }
-            log.debug("Initializing AtlasContextFactory with properties {}", properties);
-            atlasContextFactory.setProperties(properties);
-        }
-        return atlasContextFactory;
     }
 
     private void populateSourceDocuments(Exchange exchange, AtlasSession session) {

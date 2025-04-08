@@ -20,29 +20,35 @@ public class SolrEndpointUriFactory extends org.apache.camel.support.component.E
 
     private static final Set<String> PROPERTY_NAMES;
     private static final Set<String> SECRET_PROPERTY_NAMES;
+    private static final Set<String> MULTI_VALUE_PREFIXES;
     static {
-        Set<String> props = new HashSet<>(16);
-        props.add("defaultMaxConnectionsPerHost");
-        props.add("maxTotalConnections");
-        props.add("streamingThreadCount");
+        Set<String> props = new HashSet<>(20);
+        props.add("allowCompression");
+        props.add("autoCommit");
         props.add("collection");
-        props.add("zkHost");
-        props.add("soTimeout");
-        props.add("url");
+        props.add("connectionTimeout");
+        props.add("defaultMaxConnectionsPerHost");
+        props.add("followRedirects");
+        props.add("httpClient");
         props.add("lazyStartProducer");
         props.add("maxRetries");
+        props.add("maxTotalConnections");
         props.add("password");
-        props.add("allowCompression");
         props.add("requestHandler");
-        props.add("followRedirects");
+        props.add("soTimeout");
+        props.add("solrClient");
         props.add("streamingQueueSize");
-        props.add("connectionTimeout");
+        props.add("streamingThreadCount");
+        props.add("url");
         props.add("username");
+        props.add("zkChroot");
+        props.add("zkHost");
         PROPERTY_NAMES = Collections.unmodifiableSet(props);
         Set<String> secretProps = new HashSet<>(2);
         secretProps.add("password");
         secretProps.add("username");
         SECRET_PROPERTY_NAMES = Collections.unmodifiableSet(secretProps);
+        MULTI_VALUE_PREFIXES = Collections.emptySet();
     }
 
     @Override
@@ -75,6 +81,11 @@ public class SolrEndpointUriFactory extends org.apache.camel.support.component.E
     @Override
     public Set<String> secretPropertyNames() {
         return SECRET_PROPERTY_NAMES;
+    }
+
+    @Override
+    public Set<String> multiValuePrefixes() {
+        return MULTI_VALUE_PREFIXES;
     }
 
     @Override

@@ -142,9 +142,7 @@ public class BomGeneratorMojo extends AbstractMojo {
 
             writePom(pom);
 
-        } catch (MojoFailureException ex) {
-            throw ex;
-        } catch (MojoExecutionException ex) {
+        } catch (MojoFailureException | MojoExecutionException ex) {
             throw ex;
         } catch (Exception ex) {
             throw new MojoExecutionException("Cannot generate the output BOM file", ex);
@@ -328,7 +326,7 @@ public class BomGeneratorMojo extends AbstractMojo {
             }
         }
 
-        if (errors.size() > 0) {
+        if (!errors.isEmpty()) {
             StringBuilder msg = new StringBuilder();
             msg.append("Found ").append(errors.size())
                     .append(" conflicts between the current managed dependencies and the external BOMS:\n");

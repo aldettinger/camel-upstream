@@ -17,30 +17,36 @@
 package org.apache.camel.component.activemq;
 
 import javax.jms.Connection;
+import javax.jms.JMSException;
 import javax.jms.MessageProducer;
 import javax.jms.ObjectMessage;
 import javax.jms.Session;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.camel.Exchange;
+import org.apache.camel.component.activemq.support.ActiveMQSpringTestSupport;
 import org.apache.camel.component.jms.JmsBinding;
 import org.apache.camel.component.jms.JmsMessage;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.support.ExchangeHelper;
-import org.apache.camel.test.spring.junit5.CamelSpringTestSupport;
-import org.apache.xbean.spring.context.ClassPathXmlApplicationContext;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
-import org.springframework.context.support.AbstractApplicationContext;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import static org.apache.camel.test.junit5.TestSupport.assertIsInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-public class ObjectMessageTest extends CamelSpringTestSupport {
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+public class ObjectMessageTest extends ActiveMQSpringTestSupport {
 
-    @Test
-    public void testUntrusted() throws Exception {
-        ActiveMQConnectionFactory factory = new ActiveMQConnectionFactory("vm://localhost");
+    private ActiveMQConnectionFactory factory;
+
+    @BeforeEach
+    public void setupBroker() throws JMSException {
+        factory = new ActiveMQConnectionFactory(vmUri());
         Connection conn = factory.createConnection();
         conn.start();
         Session sess = conn.createSession(false, Session.AUTO_ACKNOWLEDGE);
@@ -50,27 +56,40 @@ public class ObjectMessageTest extends CamelSpringTestSupport {
         payload.payload = "test";
         msg.setObject(payload);
         producer.send(msg);
+    }
 
-        Thread.sleep(1000);
-
+    @Order(1)
+    @Test
+    public void testUntrusted() throws Exception {
         MockEndpoint resultActiveMQ = resolveMandatoryEndpoint("mock:result-activemq", MockEndpoint.class);
         resultActiveMQ.expectedMessageCount(1);
         resultActiveMQ.assertIsNotSatisfied();
+    }
 
+    @Order(2)
+    @Test
+    public void testTrusted() throws InterruptedException {
         MockEndpoint resultTrusted = resolveMandatoryEndpoint("mock:result-trusted", MockEndpoint.class);
         resultTrusted.expectedMessageCount(1);
         resultTrusted.assertIsSatisfied();
         assertCorrectObjectReceived(resultTrusted);
+    }
 
+    @Order(3)
+    @Test
+    public void testResultCamel() throws InterruptedException {
         MockEndpoint resultCamel = resolveMandatoryEndpoint("mock:result-camel", MockEndpoint.class);
         resultCamel.expectedMessageCount(1);
         resultCamel.assertIsSatisfied();
         assertCorrectObjectReceived(resultCamel);
+    }
 
+    @Order(4)
+    @Test
+    public void testResultEmpty() throws InterruptedException {
         MockEndpoint resultEmpty = resolveMandatoryEndpoint("mock:result-empty", MockEndpoint.class);
         resultEmpty.expectedMessageCount(1);
         resultEmpty.assertIsNotSatisfied();
-
     }
 
     protected void assertCorrectObjectReceived(MockEndpoint result) {
@@ -85,10 +104,4 @@ public class ObjectMessageTest extends CamelSpringTestSupport {
         assertEquals("test", received.payload);
     }
 
-    @Override
-    protected AbstractApplicationContext createApplicationContext() {
-        AbstractApplicationContext context
-                = new ClassPathXmlApplicationContext("org/apache/camel/component/activemq/jms-object-message.xml");
-        return context;
-    }
 }

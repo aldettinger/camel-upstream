@@ -26,14 +26,11 @@ import java.util.ServiceLoader;
 
 import javax.net.ssl.SSLContext;
 
-import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.accesslog.AccessLogReceiver;
 import org.apache.camel.AsyncEndpoint;
 import org.apache.camel.Category;
 import org.apache.camel.Consumer;
 import org.apache.camel.Exchange;
-import org.apache.camel.ExchangePattern;
-import org.apache.camel.Message;
 import org.apache.camel.PollingConsumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
@@ -62,7 +59,7 @@ import org.xnio.Options;
  * Expose HTTP and WebSocket endpoints and access external HTTP/WebSocket servers.
  */
 @UriEndpoint(firstVersion = "2.16.0", scheme = "undertow", title = "Undertow", syntax = "undertow:httpURI",
-             category = { Category.HTTP, Category.WEBSOCKET }, lenientProperties = true)
+             category = { Category.HTTP, Category.WEBSOCKET }, lenientProperties = true, headersClass = UndertowConstants.class)
 public class UndertowEndpoint extends DefaultEndpoint implements AsyncEndpoint, HeaderFilterStrategyAware, DiscoverableService {
 
     private static final Logger LOG = LoggerFactory.getLogger(UndertowEndpoint.class);
@@ -95,7 +92,7 @@ public class UndertowEndpoint extends DefaultEndpoint implements AsyncEndpoint, 
     private Boolean accessLog = Boolean.FALSE;
     @UriParam(label = "producer", defaultValue = "true")
     private Boolean throwExceptionOnFailure = Boolean.TRUE;
-    @UriParam(label = "producer", defaultValue = "false")
+    @UriParam(label = "consumer", defaultValue = "false")
     private Boolean transferException = Boolean.FALSE;
     @UriParam(label = "consumer", defaultValue = "false")
     private Boolean muteException = Boolean.FALSE;
@@ -191,23 +188,6 @@ public class UndertowEndpoint extends DefaultEndpoint implements AsyncEndpoint, 
                 ServiceDefinition.SERVICE_META_PROTOCOL, httpURI.getScheme());
     }
 
-    public Exchange createExchange(HttpServerExchange httpExchange) throws Exception {
-        Exchange exchange = createExchange(ExchangePattern.InOut);
-
-        Message in = getUndertowHttpBinding().toCamelMessage(httpExchange, exchange);
-
-        //securityProvider could add its own header into result exchange
-        if (getSecurityProvider() != null) {
-            getSecurityProvider().addHeader((key, value) -> in.setHeader(key, value), httpExchange);
-        }
-
-        exchange.setProperty(Exchange.CHARSET_NAME, httpExchange.getRequestCharset());
-        in.setHeader(Exchange.HTTP_CHARACTER_ENCODING, httpExchange.getRequestCharset());
-
-        exchange.setIn(in);
-        return exchange;
-    }
-
     public SSLContext getSslContext() {
         return sslContext;
     }
@@ -297,7 +277,6 @@ public class UndertowEndpoint extends DefaultEndpoint implements AsyncEndpoint, 
      * exception will be deserialized and thrown as is instead of the HttpOperationFailedException. The caused exception
      * is required to be serialized. This is by default turned off. If you enable this then be aware that Java will
      * deserialize the incoming data from the request to Java and that can be a potential security risk.
-     *
      */
     public void setTransferException(Boolean transferException) {
         this.transferException = transferException;

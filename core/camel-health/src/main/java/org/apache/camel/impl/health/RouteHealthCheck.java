@@ -21,6 +21,7 @@ import java.util.Map;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Route;
 import org.apache.camel.ServiceStatus;
+import org.apache.camel.health.HealthCheck;
 import org.apache.camel.health.HealthCheckResultBuilder;
 
 /**
@@ -28,10 +29,14 @@ import org.apache.camel.health.HealthCheckResultBuilder;
  */
 public class RouteHealthCheck extends AbstractHealthCheck {
 
-    private final Route route;
+    final Route route;
 
     public RouteHealthCheck(Route route) {
-        super("camel", "route:" + route.getId());
+        this(route, "route:" + route.getId());
+    }
+
+    public RouteHealthCheck(Route route, String id) {
+        super("camel", id);
         this.route = route;
     }
 
@@ -49,7 +54,6 @@ public class RouteHealthCheck extends AbstractHealthCheck {
 
             builder.detail("route.id", route.getId());
             builder.detail("route.status", status.name());
-            builder.detail("route.context.name", context.getName());
 
             if (route.getRouteController() != null || route.isAutoStartup()) {
                 if (status.isStarted()) {
@@ -76,5 +80,15 @@ public class RouteHealthCheck extends AbstractHealthCheck {
                 }
             }
         }
+
+        doCallCheck(builder, options);
     }
+
+    /**
+     * Additional checks
+     */
+    protected void doCallCheck(HealthCheckResultBuilder builder, Map<String, Object> options) {
+        // noop
+    }
+
 }

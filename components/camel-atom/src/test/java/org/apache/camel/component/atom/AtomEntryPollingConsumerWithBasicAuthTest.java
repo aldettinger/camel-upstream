@@ -19,7 +19,10 @@ package org.apache.camel.component.atom;
 import org.apache.camel.builder.RouteBuilder;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
+@DisabledOnOs(OS.AIX)
 public class AtomEntryPollingConsumerWithBasicAuthTest extends AtomEntryPollingConsumerTest {
 
     @Override
@@ -34,10 +37,6 @@ public class AtomEntryPollingConsumerWithBasicAuthTest extends AtomEntryPollingC
                 from("atom:http://localhost:" + JettyTestServer.getInstance().port
                      + "/?splitEntries=true&filter=false&delay=500&username=camel&password=camelPass")
                              .to("mock:result2");
-
-                from("atom:http://localhost:" + JettyTestServer.getInstance().port
-                     + "/?splitEntries=true&filter=true&lastUpdate=#myDate&delay=500&username=camel&password=camelPass")
-                             .to("mock:result3");
             }
         };
     }

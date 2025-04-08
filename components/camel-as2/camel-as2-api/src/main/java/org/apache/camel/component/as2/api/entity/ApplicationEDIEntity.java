@@ -18,25 +18,34 @@ package org.apache.camel.component.as2.api.entity;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
-import org.apache.camel.component.as2.api.AS2Charset;
+import org.apache.camel.component.as2.api.AS2Header;
 import org.apache.camel.component.as2.api.CanonicalOutputStream;
 import org.apache.camel.component.as2.api.util.EntityUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.Header;
 import org.apache.http.HeaderIterator;
 import org.apache.http.entity.ContentType;
 import org.apache.http.util.Args;
+import org.slf4j.helpers.MessageFormatter;
 
 public abstract class ApplicationEDIEntity extends MimeEntity {
+
+    protected static final String CONTENT_DISPOSITION_PATTERN = "attachment; filename={}";
 
     private final String ediMessage;
 
     protected ApplicationEDIEntity(String ediMessage, ContentType contentType, String contentTransferEncoding,
-                                   boolean isMainBody) {
+                                   boolean isMainBody, String filename) {
         this.ediMessage = Args.notNull(ediMessage, "EDI Message");
         setContentType(Args.notNull(contentType, "Content Type").toString());
         setContentTransferEncoding(contentTransferEncoding);
         setMainBody(isMainBody);
+        if (StringUtils.isNotBlank(filename)) {
+            addHeader(AS2Header.CONTENT_DISPOSITION,
+                    MessageFormatter.format(CONTENT_DISPOSITION_PATTERN, filename).getMessage());
+        }
     }
 
     public String getEdiMessage() {
@@ -46,7 +55,7 @@ public abstract class ApplicationEDIEntity extends MimeEntity {
     @Override
     public void writeTo(OutputStream outstream) throws IOException {
         NoCloseOutputStream ncos = new NoCloseOutputStream(outstream);
-        try (CanonicalOutputStream canonicalOutstream = new CanonicalOutputStream(ncos, AS2Charset.US_ASCII);
+        try (CanonicalOutputStream canonicalOutstream = new CanonicalOutputStream(ncos, StandardCharsets.US_ASCII.name());
              OutputStream transferEncodedStream = EntityUtils.encode(canonicalOutstream, getContentTransferEncodingValue())) {
 
             // Write out mime part headers if this is not the main body of message.

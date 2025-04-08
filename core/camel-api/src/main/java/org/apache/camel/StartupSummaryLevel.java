@@ -24,7 +24,6 @@ import javax.xml.bind.annotation.XmlEnum;
 @XmlEnum
 public enum StartupSummaryLevel {
 
-    Classic,
     Verbose,
     Default,
     Brief,

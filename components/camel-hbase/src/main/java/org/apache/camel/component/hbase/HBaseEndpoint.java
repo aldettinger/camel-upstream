@@ -25,6 +25,7 @@ import org.apache.camel.Category;
 import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.component.hbase.mapping.CellMappingStrategyFactory;
 import org.apache.camel.component.hbase.model.HBaseCell;
 import org.apache.camel.component.hbase.model.HBaseRow;
@@ -42,7 +43,7 @@ import org.apache.hadoop.security.UserGroupInformation;
  * Reading and write from/to an HBase store (Hadoop database).
  */
 @UriEndpoint(firstVersion = "2.10.0", scheme = "hbase", title = "HBase", syntax = "hbase:tableName",
-             category = { Category.BIGDATA, Category.DATABASE, Category.HADOOP })
+             category = { Category.BIGDATA, Category.DATABASE, Category.HADOOP }, headersClass = HBaseConstants.class)
 public class HBaseEndpoint extends DefaultEndpoint {
 
     @UriPath(description = "The name of the table")
@@ -274,7 +275,7 @@ public class HBaseEndpoint extends DefaultEndpoint {
                     try {
                         return getComponent().getConnection().getTable(tableNameObj);
                     } catch (IOException e) {
-                        throw new RuntimeException(e);
+                        throw new RuntimeCamelException(e);
                     }
                 }
             });

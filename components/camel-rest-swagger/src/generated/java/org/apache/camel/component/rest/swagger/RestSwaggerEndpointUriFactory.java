@@ -19,19 +19,22 @@ public class RestSwaggerEndpointUriFactory extends org.apache.camel.support.comp
 
     private static final Set<String> PROPERTY_NAMES;
     private static final Set<String> SECRET_PROPERTY_NAMES;
+    private static final Set<String> MULTI_VALUE_PREFIXES;
     static {
-        Set<String> props = new HashSet<>(9);
-        props.add("lazyStartProducer");
+        Set<String> props = new HashSet<>(10);
         props.add("basePath");
-        props.add("host");
-        props.add("produces");
-        props.add("sslContextParameters");
-        props.add("operationId");
         props.add("componentName");
-        props.add("specificationUri");
         props.add("consumes");
+        props.add("host");
+        props.add("lazyStartProducer");
+        props.add("operationId");
+        props.add("produces");
+        props.add("resolveReferences");
+        props.add("specificationUri");
+        props.add("sslContextParameters");
         PROPERTY_NAMES = Collections.unmodifiableSet(props);
         SECRET_PROPERTY_NAMES = Collections.emptySet();
+        MULTI_VALUE_PREFIXES = Collections.emptySet();
     }
 
     @Override
@@ -60,6 +63,11 @@ public class RestSwaggerEndpointUriFactory extends org.apache.camel.support.comp
     @Override
     public Set<String> secretPropertyNames() {
         return SECRET_PROPERTY_NAMES;
+    }
+
+    @Override
+    public Set<String> multiValuePrefixes() {
+        return MULTI_VALUE_PREFIXES;
     }
 
     @Override

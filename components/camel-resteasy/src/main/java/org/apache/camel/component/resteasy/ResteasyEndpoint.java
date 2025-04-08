@@ -17,7 +17,6 @@
 package org.apache.camel.component.resteasy;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 
 import org.apache.camel.Category;
 import org.apache.camel.Consumer;
@@ -35,7 +34,8 @@ import org.slf4j.LoggerFactory;
  * Expose REST endpoints and access external REST servers.
  */
 @UriEndpoint(firstVersion = "3.4.0", scheme = "resteasy", extendsScheme = "http",
-             title = "Resteasy", syntax = "resteasy:httpUri", category = { Category.REST })
+             title = "Resteasy", syntax = "resteasy:httpUri", category = { Category.REST },
+             headersClass = ResteasyConstants.class)
 @Metadata(excludeProperties = "clientConnectionManager,connectionsPerRoute,connectionTimeToLive,"
                               + "httpBinding,httpClientConfigurer,httpConfiguration,httpContext,httpRegistry,maxTotalConnections,connectionRequestTimeout,"
                               + "connectTimeout,socketTimeout,cookieStore,x509HostnameVerifier,sslContextParameters,"
@@ -72,7 +72,7 @@ public class ResteasyEndpoint extends HttpEndpoint {
     @UriParam(label = "advanced")
     private HeaderFilterStrategy headerFilterStrategy;
 
-    public ResteasyEndpoint(String endPointURI, ResteasyComponent component, URI httpUri) throws URISyntaxException {
+    public ResteasyEndpoint(String endPointURI, ResteasyComponent component, URI httpUri) {
         super(endPointURI, component, httpUri, null, null, null);
     }
 
@@ -168,6 +168,7 @@ public class ResteasyEndpoint extends HttpEndpoint {
         this.resteasyMethod = resteasyMethod;
     }
 
+    @Override
     public String getProtocol() {
         return protocol;
     }
@@ -190,6 +191,7 @@ public class ResteasyEndpoint extends HttpEndpoint {
         this.host = host;
     }
 
+    @Override
     public int getPort() {
         return port;
     }

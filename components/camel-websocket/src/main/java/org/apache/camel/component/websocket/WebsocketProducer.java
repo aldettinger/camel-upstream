@@ -16,7 +16,6 @@
  */
 package org.apache.camel.component.websocket;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
@@ -160,7 +159,7 @@ public class WebsocketProducer extends DefaultProducer implements WebsocketProdu
         }
     }
 
-    Future<Void> sendMessage(DefaultWebsocket websocket, Object message) throws IOException {
+    Future<Void> sendMessage(DefaultWebsocket websocket, Object message) {
         Future<Void> future = null;
         // in case there is web socket and socket connection is open - send message
         if (websocket != null && websocket.getSession().isOpen()) {
@@ -182,8 +181,12 @@ public class WebsocketProducer extends DefaultProducer implements WebsocketProdu
 
     /**
      * Called when a sleep is interrupted; allows derived classes to handle this case differently
+     *
+     * @param e        the interrupted exception instance
+     * @param exchange the exchange being processed
      */
-    protected void handleSleepInterruptedException(InterruptedException e, Exchange exchange) throws InterruptedException {
+    protected void handleSleepInterruptedException(InterruptedException e, @SuppressWarnings("unused") Exchange exchange)
+            throws InterruptedException {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Sleep interrupted, are we stopping? {}", isStopping() || isStopped());
         }

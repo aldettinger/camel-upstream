@@ -42,7 +42,7 @@ public class SjmsComponentRestartTest extends CamelTestSupport {
     public void testRestartWithStopStart() throws Exception {
         RouteBuilder routeBuilder = new RouteBuilder(context) {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("sjms:queue:test").to("mock:test");
             }
         };
@@ -58,6 +58,9 @@ public class SjmsComponentRestartTest extends CamelTestSupport {
         context.stop();
 
         resetMocks();
+
+        // rebind as the registry is cleared on stop
+        context.getRegistry().bind("activemqCF", connectionFactory);
 
         context.start();
 
@@ -75,7 +78,7 @@ public class SjmsComponentRestartTest extends CamelTestSupport {
     public void testRestartWithSuspendResume() throws Exception {
         RouteBuilder routeBuilder = new RouteBuilder(context) {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("sjms:queue:test").to("mock:test");
             }
         };

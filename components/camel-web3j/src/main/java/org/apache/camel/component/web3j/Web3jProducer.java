@@ -101,7 +101,7 @@ public class Web3jProducer extends HeaderSelectorProducer {
     private Web3jConfiguration configuration;
 
     public Web3jProducer(Web3jEndpoint endpoint, final Web3jConfiguration configuration) {
-        super(endpoint, Web3jConstants.OPERATION, () -> configuration.getOperationOrDefault(), false);
+        super(endpoint, Web3jConstants.OPERATION, () -> configuration.getOperationOrDefault());
         web3j = endpoint.getWeb3j();
         this.configuration = configuration;
         if (web3j instanceof Quorum) {
@@ -730,7 +730,7 @@ public class Web3jProducer extends HeaderSelectorProducer {
     void ethSubmitWork(Message message) throws IOException {
         String nonce = message.getHeader(Web3jConstants.NONCE, configuration::getNonce, String.class);
         String headerPowHash = message.getHeader(Web3jConstants.HEADER_POW_HASH, configuration::getHeaderPowHash, String.class);
-        String mixDigest = message.getHeader(Web3jConstants.MIX_DIGEST, configuration::getHeaderPowHash, String.class);
+        String mixDigest = message.getHeader(Web3jConstants.MIX_DIGEST, configuration::getMixDigest, String.class);
         Request<?, EthSubmitWork> request = web3j.ethSubmitWork(nonce, headerPowHash, mixDigest);
         setRequestId(message, request);
         EthSubmitWork response = request.send();

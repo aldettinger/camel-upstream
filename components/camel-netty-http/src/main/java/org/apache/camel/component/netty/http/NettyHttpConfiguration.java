@@ -17,11 +17,10 @@
 package org.apache.camel.component.netty.http;
 
 import java.util.ArrayList;
-import java.util.List;
 
-import io.netty.channel.ChannelHandler;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.component.netty.NettyConfiguration;
+import org.apache.camel.spi.Configurer;
 import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriParams;
@@ -31,6 +30,7 @@ import org.apache.camel.spi.UriPath;
  * Extended configuration for using HTTP with Netty.
  */
 @UriParams
+@Configurer
 public class NettyHttpConfiguration extends NettyConfiguration {
 
     @UriPath(enums = "http,https")
@@ -91,10 +91,8 @@ public class NettyHttpConfiguration extends NettyConfiguration {
             // clone as NettyHttpConfiguration
             NettyHttpConfiguration answer = (NettyHttpConfiguration) clone();
             // make sure the lists is copied in its own instance
-            List<ChannelHandler> encodersCopy = new ArrayList<>(getEncoders());
-            answer.setEncoders(encodersCopy);
-            List<ChannelHandler> decodersCopy = new ArrayList<>(getDecoders());
-            answer.setDecoders(decodersCopy);
+            answer.setEncodersAsList(new ArrayList<>(getEncodersAsList()));
+            answer.setDecodersAsList(new ArrayList<>(getDecodersAsList()));
             return answer;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeCamelException(e);
@@ -255,10 +253,11 @@ public class NettyHttpConfiguration extends NettyConfiguration {
     }
 
     /**
-     * If the option is true, the producer will ignore the Exchange.HTTP_URI header, and use the endpoint's URI for
-     * request. You may also set the throwExceptionOnFailure to be false to let the producer send all the fault response
-     * back. The consumer working in the bridge mode will skip the gzip compression and WWW URL form encoding (by adding
-     * the Exchange.SKIP_GZIP_ENCODING and Exchange.SKIP_WWW_FORM_URLENCODED headers to the consumed exchange).
+     * If the option is true, the producer will ignore the NettyHttpConstants.HTTP_URI header, and use the endpoint's
+     * URI for request. You may also set the throwExceptionOnFailure to be false to let the producer send all the fault
+     * response back. The consumer working in the bridge mode will skip the gzip compression and WWW URL form encoding
+     * (by adding the Exchange.SKIP_GZIP_ENCODING and Exchange.SKIP_WWW_FORM_URLENCODED headers to the consumed
+     * exchange).
      */
     public void setBridgeEndpoint(boolean bridgeEndpoint) {
         this.bridgeEndpoint = bridgeEndpoint;

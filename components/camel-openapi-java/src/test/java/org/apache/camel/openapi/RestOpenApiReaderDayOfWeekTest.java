@@ -41,10 +41,10 @@ public class RestOpenApiReaderDayOfWeekTest extends CamelTestSupport {
     private DummyRestConsumerFactory factory = new DummyRestConsumerFactory();
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 // this user REST service is json only
                 rest("/day").tag("dude").description("Day service").consumes("application/json").produces("application/json")
 
@@ -71,7 +71,7 @@ public class RestOpenApiReaderDayOfWeekTest extends CamelTestSupport {
         config.setVersion("2.0");
         RestOpenApiReader reader = new RestOpenApiReader();
 
-        OasDocument openApi = reader.read(context, context.getRestDefinitions(), null, config, context.getName(),
+        OasDocument openApi = reader.read(context, context.getRestDefinitions(), config, context.getName(),
                 new DefaultClassResolver());
         assertNotNull(openApi);
 
@@ -107,7 +107,7 @@ public class RestOpenApiReaderDayOfWeekTest extends CamelTestSupport {
         //config.setVersion("2.0");
         RestOpenApiReader reader = new RestOpenApiReader();
 
-        OasDocument openApi = reader.read(context, context.getRestDefinitions(), null, config, context.getName(),
+        OasDocument openApi = reader.read(context, context.getRestDefinitions(), config, context.getName(),
                 new DefaultClassResolver());
         assertNotNull(openApi);
 

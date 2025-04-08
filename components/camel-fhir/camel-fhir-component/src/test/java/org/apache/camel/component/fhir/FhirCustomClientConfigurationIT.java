@@ -29,7 +29,6 @@ import ca.uhn.fhir.rest.api.RequestFormatParamStyleEnum;
 import ca.uhn.fhir.rest.api.RequestTypeEnum;
 import ca.uhn.fhir.rest.api.SummaryEnum;
 import ca.uhn.fhir.rest.client.api.Header;
-import ca.uhn.fhir.rest.client.api.IClientInterceptor;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
 import ca.uhn.fhir.rest.client.api.IHttpClient;
 import ca.uhn.fhir.rest.client.api.IRestfulClient;
@@ -79,14 +78,14 @@ public class FhirCustomClientConfigurationIT extends AbstractFhirTestSupport {
     private CustomClientFactory clientFactory = new CustomClientFactory();
 
     @Test
-    public void testConfigurationWithCustomClient() throws Exception {
+    public void testConfigurationWithCustomClient() {
         FhirEndpoint endpoint = getMandatoryEndpoint(TEST_URI_CUSTOM_CLIENT, FhirEndpoint.class);
         IGenericClient client = endpoint.getClient();
         assertTrue(client instanceof CustomClient);
     }
 
     @Test
-    public void testConfigurationWithCustomFactory() throws Exception {
+    public void testConfigurationWithCustomFactory() {
         FhirEndpoint endpoint = getMandatoryEndpoint(TEST_URI_CUSTOM_CLIENT_FACTORY, FhirEndpoint.class);
         IGenericClient client = endpoint.getClient();
         assertTrue(client instanceof CustomClient);
@@ -98,7 +97,7 @@ public class FhirCustomClientConfigurationIT extends AbstractFhirTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
             public void configure() {
@@ -297,6 +296,11 @@ public class FhirCustomClientConfigurationIT extends AbstractFhirTestSupport {
         }
 
         @Override
+        public void registerInterceptor(Object o) {
+
+        }
+
+        @Override
         public IInterceptorService getInterceptorService() {
             return null;
         }
@@ -332,11 +336,6 @@ public class FhirCustomClientConfigurationIT extends AbstractFhirTestSupport {
         }
 
         @Override
-        public void registerInterceptor(IClientInterceptor theInterceptor) {
-
-        }
-
-        @Override
         public void setEncoding(EncodingEnum theEncoding) {
 
         }
@@ -367,7 +366,7 @@ public class FhirCustomClientConfigurationIT extends AbstractFhirTestSupport {
         }
 
         @Override
-        public void unregisterInterceptor(IClientInterceptor theInterceptor) {
+        public void unregisterInterceptor(Object o) {
 
         }
 

@@ -19,27 +19,29 @@ public class JcloudsEndpointUriFactory extends org.apache.camel.support.componen
 
     private static final Set<String> PROPERTY_NAMES;
     private static final Set<String> SECRET_PROPERTY_NAMES;
+    private static final Set<String> MULTI_VALUE_PREFIXES;
     static {
         Set<String> props = new HashSet<>(17);
         props.add("blobName");
-        props.add("container");
-        props.add("imageId");
-        props.add("exchangePattern");
-        props.add("directory");
-        props.add("command");
-        props.add("lazyStartProducer");
         props.add("bridgeErrorHandler");
-        props.add("hardwareId");
-        props.add("nodeState");
-        props.add("providerId");
-        props.add("locationId");
+        props.add("command");
+        props.add("container");
+        props.add("directory");
         props.add("exceptionHandler");
-        props.add("nodeId");
-        props.add("operation");
-        props.add("user");
+        props.add("exchangePattern");
         props.add("group");
+        props.add("hardwareId");
+        props.add("imageId");
+        props.add("lazyStartProducer");
+        props.add("locationId");
+        props.add("nodeId");
+        props.add("nodeState");
+        props.add("operation");
+        props.add("providerId");
+        props.add("user");
         PROPERTY_NAMES = Collections.unmodifiableSet(props);
         SECRET_PROPERTY_NAMES = Collections.emptySet();
+        MULTI_VALUE_PREFIXES = Collections.emptySet();
     }
 
     @Override
@@ -68,6 +70,11 @@ public class JcloudsEndpointUriFactory extends org.apache.camel.support.componen
     @Override
     public Set<String> secretPropertyNames() {
         return SECRET_PROPERTY_NAMES;
+    }
+
+    @Override
+    public Set<String> multiValuePrefixes() {
+        return MULTI_VALUE_PREFIXES;
     }
 
     @Override

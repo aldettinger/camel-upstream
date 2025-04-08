@@ -23,13 +23,22 @@ import org.apache.camel.component.milo.client.MonitorFilterConfiguration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MiloClientCachingConnectionManagerTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(MiloClientCachingConnectionManagerTest.class);
 
     private MiloClientCachingConnectionManager instance;
 
     @BeforeEach
-    public void setup() {
+    public void setup(TestInfo testInfo) {
+        final var displayName = testInfo.getDisplayName();
+        LOG.info("********************************************************************************");
+        LOG.info(displayName);
+        LOG.info("********************************************************************************");
         instance = new MiloClientCachingConnectionManager();
     }
 
@@ -46,7 +55,7 @@ public class MiloClientCachingConnectionManagerTest {
     }
 
     @Test
-    public void testReleaseConnectionNotLastConsumer() throws Exception {
+    public void testReleaseConnectionNotLastConsumer() {
         final MiloClientConfiguration configuration = new MiloClientConfiguration();
         MiloClientConnection connection1 = instance.createConnection(configuration, new MonitorFilterConfiguration());
         instance.createConnection(configuration, new MonitorFilterConfiguration());
@@ -58,7 +67,7 @@ public class MiloClientCachingConnectionManagerTest {
     }
 
     @Test
-    public void testReleaseConnectionLastConsumer() throws Exception {
+    public void testReleaseConnectionLastConsumer() {
         final MiloClientConfiguration configuration = new MiloClientConfiguration();
         MiloClientConnection connection1 = instance.createConnection(configuration, new MonitorFilterConfiguration());
         MiloClientConnection connection2 = instance.createConnection(configuration, new MonitorFilterConfiguration());
@@ -67,6 +76,6 @@ public class MiloClientCachingConnectionManagerTest {
         instance.releaseConnection(connection2);
 
         MiloClientConnection connection3 = instance.createConnection(configuration, new MonitorFilterConfiguration());
-        Assertions.assertFalse(connection1 == connection3);
+        Assertions.assertNotSame(connection1, connection3);
     }
 }

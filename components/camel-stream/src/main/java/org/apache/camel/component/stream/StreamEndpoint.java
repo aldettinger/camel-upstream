@@ -21,7 +21,6 @@ import java.nio.charset.Charset;
 import org.apache.camel.Category;
 import org.apache.camel.Component;
 import org.apache.camel.Consumer;
-import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.spi.Metadata;
@@ -36,7 +35,7 @@ import org.slf4j.LoggerFactory;
  * Read from system-in and write to system-out and system-err streams.
  */
 @UriEndpoint(firstVersion = "1.3.0", scheme = "stream", title = "Stream", syntax = "stream:kind",
-             category = { Category.FILE, Category.SYSTEM })
+             category = { Category.FILE, Category.SYSTEM }, headersClass = StreamConstants.class)
 public class StreamEndpoint extends DefaultEndpoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(StreamEndpoint.class);
@@ -70,6 +69,10 @@ public class StreamEndpoint extends DefaultEndpoint {
     private long initialPromptDelay = 2000;
     @UriParam(label = "consumer")
     private int groupLines;
+    @UriParam(label = "consumer", defaultValue = "true")
+    private boolean readLine = true;
+    @UriParam(label = "producer", defaultValue = "true")
+    private boolean appendNewLine = true;
     @UriParam(label = "producer")
     private int autoCloseCount;
     @UriParam(label = "consumer")
@@ -94,14 +97,6 @@ public class StreamEndpoint extends DefaultEndpoint {
     @Override
     public Producer createProducer() throws Exception {
         return new StreamProducer(this, getEndpointUri());
-    }
-
-    protected Exchange createExchange(Object body, long index, boolean last) {
-        Exchange exchange = createExchange();
-        exchange.getIn().setBody(body);
-        exchange.getIn().setHeader(StreamConstants.STREAM_INDEX, index);
-        exchange.getIn().setHeader(StreamConstants.STREAM_COMPLETE, last);
-        return exchange;
     }
 
     // Properties
@@ -269,6 +264,18 @@ public class StreamEndpoint extends DefaultEndpoint {
         this.groupLines = groupLines;
     }
 
+    public boolean isReadLine() {
+        return readLine;
+    }
+
+    /**
+     * Whether to read the input stream in line mode (terminate by line breaks). Setting this to false, will instead
+     * read the entire stream until EOL.
+     */
+    public void setReadLine(boolean readLine) {
+        this.readLine = readLine;
+    }
+
     public int getAutoCloseCount() {
         return autoCloseCount;
     }
@@ -279,6 +286,17 @@ public class StreamEndpoint extends DefaultEndpoint {
      */
     public void setAutoCloseCount(int autoCloseCount) {
         this.autoCloseCount = autoCloseCount;
+    }
+
+    public boolean isAppendNewLine() {
+        return appendNewLine;
+    }
+
+    /**
+     * Whether to append a new line character at end of output.
+     */
+    public void setAppendNewLine(boolean appendNewLine) {
+        this.appendNewLine = appendNewLine;
     }
 
     public Charset getCharset() {

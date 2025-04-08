@@ -56,10 +56,10 @@ public class RestUndertowHttpBindingModeOffWithContractTest extends BaseUndertow
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 restConfiguration().component("undertow").host("localhost").port(getPort()).bindingMode(RestBindingMode.off);
 
                 JsonDataFormat jsondf = new JsonDataFormat();
@@ -77,8 +77,10 @@ public class RestUndertowHttpBindingModeOffWithContractTest extends BaseUndertow
                 rest("/users/")
                         // REST binding does nothing
                         .post("new")
-                        .route()
-                        // contract advice converts betweeen JSON and UserPojoEx directly
+                        .to("direct:new");
+
+                from("direct:new")
+                        // contract advice converts between JSON and UserPojoEx directly
                         .inputType(UserPojoEx.class)
                         .outputType("json")
                         .process(ex -> {

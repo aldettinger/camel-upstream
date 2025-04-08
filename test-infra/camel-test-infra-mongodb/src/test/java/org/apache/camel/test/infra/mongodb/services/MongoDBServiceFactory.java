@@ -17,28 +17,56 @@
 
 package org.apache.camel.test.infra.mongodb.services;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.camel.test.infra.common.services.SimpleTestServiceBuilder;
+import org.apache.camel.test.infra.common.services.SingletonService;
+import org.junit.jupiter.api.extension.ExtensionContext;
 
 public final class MongoDBServiceFactory {
-    private static final Logger LOG = LoggerFactory.getLogger(MongoDBServiceFactory.class);
+    static class SingletonMongoDBService extends SingletonService<MongoDBService> implements MongoDBService {
+        public SingletonMongoDBService(MongoDBService service, String name) {
+            super(service, name);
+        }
+
+        @Override
+        public void beforeAll(ExtensionContext extensionContext) {
+            addToStore(extensionContext);
+        }
+
+        @Override
+        public void afterAll(ExtensionContext extensionContext) {
+            // NO-OP
+        }
+
+        @Override
+        public String getReplicaSetUrl() {
+            return getService().getReplicaSetUrl();
+        }
+
+        @Override
+        public String getConnectionAddress() {
+            return getService().getConnectionAddress();
+        }
+    }
 
     private MongoDBServiceFactory() {
 
     }
 
+    public static SimpleTestServiceBuilder<MongoDBService> builder() {
+        return new SimpleTestServiceBuilder<>("mongodb");
+    }
+
     public static MongoDBService createService() {
-        String instanceType = System.getProperty("mongodb.instance.type");
+        return builder()
+                .addLocalMapping(MongoDBLocalContainerService::new)
+                .addRemoteMapping(MongoDBRemoteService::new)
+                .build();
+    }
 
-        if (instanceType == null || instanceType.equals("local-mongodb-container")) {
-            return new MongoDBLocalContainerService();
-        }
-
-        if (instanceType.equals("remote")) {
-            return new MongoDBRemoteService();
-        }
-
-        LOG.error("MongoDB instance must be one of 'local-mongodb-container' or 'remote");
-        throw new UnsupportedOperationException("Invalid MongoDB instance type");
+    public static MongoDBService createSingletonService() {
+        return builder()
+                .addLocalMapping(() -> new SingletonMongoDBService(new MongoDBLocalContainerService(), "mongo-db"))
+                .addRemoteMapping(MongoDBRemoteService::new)
+                .build();
     }
 }

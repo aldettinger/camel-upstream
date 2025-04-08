@@ -17,13 +17,14 @@
     limitations under the License.
 
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>catalog</artifactId>
-        <version>3.9.0-SNAPSHOT</version>
+        <version>3.18.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>camel-catalog</artifactId>
@@ -62,6 +63,25 @@
             <artifactId>camel-allcomponents</artifactId>
             <version>${project.version}</version>
             <type>pom</type>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.camel</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!--
+        Enforce the dependency with all the core artifacts to ensure that the parallel build won't build this module
+        before the core artifacts to prevent inconsistencies in the catalog
+        -->
+        <!-- disable all core -->
+        <dependency>
+            <groupId>org.apache.camel</groupId>
+            <artifactId>camel-core-all</artifactId>
+            <version>${project.version}</version>
+            <type>pom</type>
+            <scope>provided</scope>
             <exclusions>
                 <exclusion>
                     <groupId>org.apache.camel</groupId>
@@ -115,6 +135,22 @@
 
     <build>
         <plugins>
+
+            <!-- sync parent/pom.xml with camel-dependencies/pom.xml -->
+            <plugin>
+                <groupId>org.apache.camel</groupId>
+                <artifactId>sync-properties-maven-plugin</artifactId>
+                <version>${project.version}</version>
+                <executions>
+                    <execution>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>sync-properties</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- generate and include all components in the catalog -->
             <plugin>
                 <groupId>org.apache.camel</groupId>
@@ -128,8 +164,10 @@
                             <goal>prepare-assembly</goal>
                             <!-- update secrets in camel-util -->
                             <goal>update-sensitive-helper</goal>
+                            <!-- update names in camel-main -->
+                            <goal>update-main-helper</goal>
                         </goals>
-                        <phase>process-resources</phase>
+                        <phase>generate-resources</phase>
                     </execution>
                 </executions>
             </plugin>
@@ -157,25 +195,6 @@
                 </executions>
             </plugin>
 
-            <!-- sync properties -->
-            <plugin>
-                <groupId>org.apache.camel</groupId>
-                <artifactId>sync-properties-maven-plugin</artifactId>
-                <version>${project.version}</version>
-                <executions>
-                    <execution>
-                        <!-- prepare the catalog, readme files, etc. -->
-                        <goals>
-                            <goal>sync-properties</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <sourcePom>${basedir}/../../parent/pom.xml</sourcePom>
-                    <targetPom>${basedir}/../../camel-dependencies/pom.xml</targetPom>
-                    <licenseHeader>${basedir}/../../etc/apache-header.xml</licenseHeader>
-                </configuration>
-            </plugin>
         </plugins>
 
     </build>

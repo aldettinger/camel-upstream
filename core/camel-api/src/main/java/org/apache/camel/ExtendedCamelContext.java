@@ -22,6 +22,8 @@ import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 
 import org.apache.camel.catalog.RuntimeCamelCatalog;
+import org.apache.camel.console.DevConsoleResolver;
+import org.apache.camel.health.HealthCheckResolver;
 import org.apache.camel.spi.AnnotationBasedProcessorFactory;
 import org.apache.camel.spi.AsyncProcessorAwaitManager;
 import org.apache.camel.spi.BeanIntrospection;
@@ -29,6 +31,7 @@ import org.apache.camel.spi.BeanProcessorFactory;
 import org.apache.camel.spi.BeanProxyFactory;
 import org.apache.camel.spi.BootstrapCloseable;
 import org.apache.camel.spi.CamelBeanPostProcessor;
+import org.apache.camel.spi.CamelDependencyInjectionAnnotationFactory;
 import org.apache.camel.spi.ComponentNameResolver;
 import org.apache.camel.spi.ComponentResolver;
 import org.apache.camel.spi.ConfigurerResolver;
@@ -36,6 +39,8 @@ import org.apache.camel.spi.DataFormatResolver;
 import org.apache.camel.spi.DeferServiceFactory;
 import org.apache.camel.spi.EndpointStrategy;
 import org.apache.camel.spi.EndpointUriFactory;
+import org.apache.camel.spi.ExchangeFactory;
+import org.apache.camel.spi.ExchangeFactoryManager;
 import org.apache.camel.spi.FactoryFinder;
 import org.apache.camel.spi.FactoryFinderResolver;
 import org.apache.camel.spi.HeadersMapFactory;
@@ -48,13 +53,16 @@ import org.apache.camel.spi.LogListener;
 import org.apache.camel.spi.ManagementMBeanAssembler;
 import org.apache.camel.spi.ModelJAXBContextFactory;
 import org.apache.camel.spi.ModelToXMLDumper;
+import org.apache.camel.spi.ModelineFactory;
 import org.apache.camel.spi.NodeIdFactory;
 import org.apache.camel.spi.NormalizedEndpointUri;
 import org.apache.camel.spi.PackageScanClassResolver;
 import org.apache.camel.spi.PackageScanResourceResolver;
+import org.apache.camel.spi.ProcessorExchangeFactory;
 import org.apache.camel.spi.ProcessorFactory;
 import org.apache.camel.spi.ReactiveExecutor;
 import org.apache.camel.spi.Registry;
+import org.apache.camel.spi.ResourceLoader;
 import org.apache.camel.spi.RestBindingJaxbDataFormatFactory;
 import org.apache.camel.spi.RouteController;
 import org.apache.camel.spi.RouteFactory;
@@ -72,7 +80,7 @@ import org.apache.camel.spi.XMLRoutesDefinitionLoader;
 public interface ExtendedCamelContext extends CamelContext {
 
     /**
-     * Sets the name (id) of the this context.
+     * Sets the name (id) of this context.
      * <p/>
      * This operation is mostly only used by different Camel runtimes such as camel-spring, camel-cdi, camel-spring-boot
      * etc. Important: Setting the name should only be set before CamelContext is started.
@@ -100,13 +108,14 @@ public interface ExtendedCamelContext extends CamelContext {
     void setupRoutes(boolean done);
 
     /**
-     * Indicates whether current thread is setting up route(s) as part of starting Camel from spring/blueprint.
+     * Indicates whether current thread is setting up route(s) as part of starting Camel.
      * <p/>
      * This can be useful to know by {@link LifecycleStrategy} or the likes, in case they need to react differently.
      * <p/>
-     * As the startup procedure of {@link CamelContext} is slightly different when using plain Java versus Spring or
-     * Blueprint, then we need to know when Spring/Blueprint is setting up the routes, which can happen after the
-     * {@link CamelContext} itself is in started state, due the asynchronous event nature of especially Blueprint.
+     * As the startup procedure of {@link CamelContext} is slightly different when using plain Java versus
+     * camel-spring-xml or camel-blueprint, then we need to know when spring/blueprint are setting up the routes, which
+     * can happen after the {@link CamelContext} itself is in started state, due the asynchronous event nature of
+     * especially blueprint.
      *
      * @return <tt>true</tt> if current thread is setting up route(s), or <tt>false</tt> if not.
      */
@@ -214,11 +223,56 @@ public interface ExtendedCamelContext extends CamelContext {
     List<Service> getServices();
 
     /**
+     * Gets the exchange factory to use.
+     */
+    ExchangeFactory getExchangeFactory();
+
+    /**
+     * Sets a custom exchange factory to use.
+     */
+    void setExchangeFactory(ExchangeFactory exchangeFactory);
+
+    /**
+     * Gets the exchange factory manager to use.
+     */
+    ExchangeFactoryManager getExchangeFactoryManager();
+
+    /**
+     * Sets a custom exchange factory manager to use.
+     */
+    void setExchangeFactoryManager(ExchangeFactoryManager exchangeFactoryManager);
+
+    /**
+     * Gets the processor exchange factory to use.
+     */
+    ProcessorExchangeFactory getProcessorExchangeFactory();
+
+    /**
+     * Sets a custom processor exchange factory to use.
+     */
+    void setProcessorExchangeFactory(ProcessorExchangeFactory processorExchangeFactory);
+
+    /**
      * Returns the bean post processor used to do any bean customization.
      *
      * @return the bean post processor.
      */
     CamelBeanPostProcessor getBeanPostProcessor();
+
+    /**
+     * Sets a custom bean post processor to use.
+     */
+    void setBeanPostProcessor(CamelBeanPostProcessor beanPostProcessor);
+
+    /**
+     * Returns the annotation dependency injection factory.
+     */
+    CamelDependencyInjectionAnnotationFactory getDependencyInjectionAnnotationFactory();
+
+    /**
+     * Sets a custom annotation dependency injection factory.
+     */
+    void setDependencyInjectionAnnotationFactory(CamelDependencyInjectionAnnotationFactory factory);
 
     /**
      * Returns the management mbean assembler
@@ -298,6 +352,34 @@ public interface ExtendedCamelContext extends CamelContext {
      * @param dataFormatResolver the resolver
      */
     void setDataFormatResolver(DataFormatResolver dataFormatResolver);
+
+    /**
+     * Gets the current health check resolver
+     *
+     * @return the resolver
+     */
+    HealthCheckResolver getHealthCheckResolver();
+
+    /**
+     * Sets a custom health check resolver
+     *
+     * @param healthCheckResolver the resolver
+     */
+    void setHealthCheckResolver(HealthCheckResolver healthCheckResolver);
+
+    /**
+     * Gets the current dev console resolver
+     *
+     * @return the resolver
+     */
+    DevConsoleResolver getDevConsoleResolver();
+
+    /**
+     * Sets a custom dev console resolver
+     *
+     * @param devConsoleResolver the resolver
+     */
+    void setDevConsoleResolver(DevConsoleResolver devConsoleResolver);
 
     /**
      * Returns the package scanning class resolver
@@ -627,6 +709,16 @@ public interface ExtendedCamelContext extends CamelContext {
     void setRoutesLoader(RoutesLoader routesLoader);
 
     /**
+     * Gets the {@link ResourceLoader} to be used.
+     */
+    ResourceLoader getResourceLoader();
+
+    /**
+     * Sets a custom {@link ResourceLoader} to be used.
+     */
+    void setResourceLoader(ResourceLoader resourceLoader);
+
+    /**
      * Gets the {@link ModelToXMLDumper} to be used.
      */
     ModelToXMLDumper getModelToXMLDumper();
@@ -730,5 +822,48 @@ public interface ExtendedCamelContext extends CamelContext {
      * org.apache.camel.model.ModelCamelContext will return null or be a noop operation.
      */
     void disposeModel();
+
+    /**
+     * Used during unit-testing where it is possible to specify a set of routes to exclude from discovery
+     */
+    String getTestExcludeRoutes();
+
+    /**
+     * Parses the given text and resolve any property placeholders - using {{key}}.
+     * <p/>
+     * <b>Important:</b> If resolving placeholders on an endpoint uri, then you SHOULD use
+     * EndpointHelper#resolveEndpointUriPropertyPlaceholders instead.
+     *
+     * @param  text                     the text such as an endpoint uri or the likes
+     * @param  keepUnresolvedOptional   whether to keep placeholders that are optional and was unresolved
+     * @return                          the text with resolved property placeholders
+     * @throws IllegalArgumentException is thrown if property placeholders was used and there was an error resolving
+     *                                  them
+     */
+    String resolvePropertyPlaceholders(String text, boolean keepUnresolvedOptional);
+
+    /**
+     * Package name to use as base (offset) for classpath scanning of custom services, type converters, and the likes
+     *
+     * @return the base package name (can bre null if not configured)
+     */
+    String getBasePackageScan();
+
+    /**
+     * Package name to use as base (offset) for classpath scanning of custom services, type converters, and the likes
+     *
+     * @param basePackageScan the base package name
+     */
+    void setBasePackageScan(String basePackageScan);
+
+    /**
+     * Gets the {@link ModelineFactory}.
+     */
+    ModelineFactory getModelineFactory();
+
+    /**
+     * Sets a custom {@link ModelineFactory}.
+     */
+    void setModelineFactory(ModelineFactory modelineFactory);
 
 }

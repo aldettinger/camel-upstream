@@ -17,9 +17,9 @@
 package org.apache.camel.component.as2.api.util;
 
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.Security;
 
-import org.apache.camel.component.as2.api.AS2Charset;
 import org.apache.camel.component.as2.api.AS2Header;
 import org.apache.camel.component.as2.api.AS2MimeType;
 import org.apache.camel.component.as2.api.AS2TransferEncoding;
@@ -93,7 +93,8 @@ public class MicUtilsTest {
         request.addHeader(AS2Header.CONTENT_TYPE, CONTENT_TYPE_VALUE);
 
         ApplicationEDIFACTEntity edifactEntity
-                = new ApplicationEDIFACTEntity(EDI_MESSAGE, AS2Charset.US_ASCII, AS2TransferEncoding.NONE, true);
+                = new ApplicationEDIFACTEntity(
+                        EDI_MESSAGE, StandardCharsets.US_ASCII.name(), AS2TransferEncoding.NONE, true, "filename.txt");
         InputStream is = edifactEntity.getContent();
         BasicHttpEntity basicEntity = new BasicHttpEntity();
         basicEntity.setContent(is);

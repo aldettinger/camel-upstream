@@ -69,9 +69,41 @@ public class ReadinessAndLivenessTest {
         assertTrue(result.getCheck() instanceof MyLiveCheck);
     }
 
-    private static class MyReadyCheck extends AbstractHealthCheck implements CamelContextAware {
+    @Test
+    public void testAll() throws Exception {
+        CamelContext context = new DefaultCamelContext();
 
-        private CamelContext context;
+        HealthCheckRegistry registry = new DefaultHealthCheckRegistry();
+        registry.setCamelContext(context);
+
+        context.getRegistry().bind("check1", new MyAllCheck("G1", "1"));
+
+        context.start();
+        registry.start();
+
+        List<HealthCheck> checks = registry.stream().collect(Collectors.toList());
+        assertEquals(1, checks.size());
+
+        Collection<HealthCheck.Result> results = HealthCheckHelper.invokeReadiness(context);
+        assertEquals(1, results.size());
+        HealthCheck.Result result = results.iterator().next();
+        assertEquals(HealthCheck.State.DOWN, result.getState());
+        assertEquals("READINESS", result.getMessage().get());
+        assertTrue(result.getCheck().isLiveness());
+        assertTrue(result.getCheck().isReadiness());
+        assertTrue(result.getCheck() instanceof MyAllCheck);
+
+        results = HealthCheckHelper.invokeLiveness(context);
+        assertEquals(1, results.size());
+        result = results.iterator().next();
+        assertEquals(HealthCheck.State.UP, result.getState());
+        assertTrue(result.getCheck().isLiveness());
+        assertTrue(result.getCheck().isReadiness());
+        assertEquals("LIVENESS", result.getMessage().get());
+        assertTrue(result.getCheck() instanceof MyAllCheck);
+    }
+
+    private static class MyReadyCheck extends AbstractHealthCheck implements CamelContextAware {
 
         protected MyReadyCheck(String group, String id) {
             super(group, id);
@@ -87,20 +119,9 @@ public class ReadinessAndLivenessTest {
             builder.up();
         }
 
-        @Override
-        public void setCamelContext(CamelContext camelContext) {
-            this.context = camelContext;
-        }
-
-        @Override
-        public CamelContext getCamelContext() {
-            return context;
-        }
     }
 
     private static class MyLiveCheck extends AbstractHealthCheck implements CamelContextAware {
-
-        private CamelContext context;
 
         protected MyLiveCheck(String group, String id) {
             super(group, id);
@@ -116,14 +137,24 @@ public class ReadinessAndLivenessTest {
             builder.down();
         }
 
-        @Override
-        public void setCamelContext(CamelContext camelContext) {
-            this.context = camelContext;
+    }
+
+    private static class MyAllCheck extends AbstractHealthCheck implements CamelContextAware {
+
+        protected MyAllCheck(String group, String id) {
+            super(group, id);
         }
 
         @Override
-        public CamelContext getCamelContext() {
-            return context;
+        public void doCall(HealthCheckResultBuilder builder, Map<String, Object> options) {
+            String k = options.get(HealthCheck.CHECK_KIND).toString();
+            builder.message(k);
+            if ("READINESS".equals(k)) {
+                builder.down();
+            } else {
+                builder.up();
+            }
         }
+
     }
 }

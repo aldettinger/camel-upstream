@@ -26,7 +26,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -34,6 +33,7 @@ import java.util.regex.Pattern;
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelExchangeException;
 import org.apache.camel.Exchange;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.Expression;
 import org.apache.camel.ExpressionIllegalSyntaxException;
 import org.apache.camel.InvalidPayloadException;
@@ -174,14 +174,14 @@ public final class CSimpleHelper {
         if (body == null) {
             return null;
         }
-        body = StringHelper.replaceAll(body, System.lineSeparator(), "");
+        body = body.replace(System.lineSeparator(), "");
         return body;
     }
 
     public static Exception exception(Exchange exchange) {
         Exception exception = exchange.getException();
         if (exception == null) {
-            exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
+            exception = exchange.getProperty(ExchangePropertyKey.EXCEPTION_CAUGHT, Exception.class);
         }
         return exception;
     }
@@ -189,7 +189,7 @@ public final class CSimpleHelper {
     public static <T> T exceptionAs(Exchange exchange, Class<T> type) {
         Exception exception = exchange.getException();
         if (exception == null) {
-            exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
+            exception = exchange.getProperty(ExchangePropertyKey.EXCEPTION_CAUGHT, Exception.class);
         }
         if (exception != null) {
             return type.cast(exception);
@@ -233,7 +233,7 @@ public final class CSimpleHelper {
     }
 
     public static String stepId(Exchange exchange) {
-        return exchange.getProperty(Exchange.STEP_ID, String.class);
+        return exchange.getProperty(ExchangePropertyKey.STEP_ID, String.class);
     }
 
     public static String fileName(Message message) {
@@ -507,10 +507,8 @@ public final class CSimpleHelper {
 
     private static ExchangeFormatter getOrCreateExchangeFormatter(CamelContext camelContext) {
         if (exchangeFormatter == null) {
-            Set<ExchangeFormatter> formatters = camelContext.getRegistry().findByType(ExchangeFormatter.class);
-            if (formatters != null && formatters.size() == 1) {
-                exchangeFormatter = formatters.iterator().next();
-            } else {
+            exchangeFormatter = camelContext.getRegistry().findSingleByType(ExchangeFormatter.class);
+            if (exchangeFormatter == null) {
                 // setup exchange formatter to be used for message history dump
                 DefaultExchangeFormatter def = new DefaultExchangeFormatter();
                 def.setShowExchangeId(true);

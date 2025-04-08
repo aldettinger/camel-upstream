@@ -171,13 +171,6 @@ public class PollEnricher extends AsyncProcessorSupport implements IdAware, Rout
         this.aggregateOnException = aggregateOnException;
     }
 
-    /**
-     * Sets the default aggregation strategy for this poll enricher.
-     */
-    public void setDefaultAggregationStrategy() {
-        this.aggregationStrategy = defaultAggregationStrategy();
-    }
-
     public int getCacheSize() {
         return cacheSize;
     }
@@ -192,18 +185,6 @@ public class PollEnricher extends AsyncProcessorSupport implements IdAware, Rout
 
     public void setIgnoreInvalidEndpoint(boolean ignoreInvalidEndpoint) {
         this.ignoreInvalidEndpoint = ignoreInvalidEndpoint;
-    }
-
-    @Override
-    protected void doInit() throws Exception {
-        if (destination != null) {
-            Endpoint endpoint = getExistingEndpoint(camelContext, destination);
-            if (endpoint == null) {
-                endpoint = resolveEndpoint(camelContext, destination, cacheSize < 0);
-            }
-        } else if (expression != null) {
-            expression.init(camelContext);
-        }
     }
 
     /**
@@ -279,7 +260,9 @@ public class PollEnricher extends AsyncProcessorSupport implements IdAware, Rout
                 LOG.debug("Consumer receiveNoWait: {}", consumer);
                 resourceExchange = consumer.receiveNoWait();
             } else {
-                LOG.debug("Consumer receive with timeout: {} ms. {}", timeout, consumer);
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Consumer receive with timeout: {} ms. {}", timeout, consumer);
+                }
                 resourceExchange = consumer.receive(timeout);
             }
 
@@ -313,7 +296,7 @@ public class PollEnricher extends AsyncProcessorSupport implements IdAware, Rout
         }
 
         try {
-            if (!isAggregateOnException() && (resourceExchange != null && resourceExchange.isFailed())) {
+            if (!isAggregateOnException() && resourceExchange != null && resourceExchange.isFailed()) {
                 // copy resource exchange onto original exchange (preserving pattern)
                 // and preserve redelivery headers
                 copyResultsPreservePattern(exchange, resourceExchange);
@@ -428,25 +411,36 @@ public class PollEnricher extends AsyncProcessorSupport implements IdAware, Rout
         }
     }
 
-    private static AggregationStrategy defaultAggregationStrategy() {
-        return new CopyAggregationStrategy();
-    }
-
     @Override
     public String toString() {
         return id;
     }
 
     @Override
-    protected void doStart() throws Exception {
+    protected void doBuild() throws Exception {
         if (consumerCache == null) {
             // create consumer cache if we use dynamic expressions for computing the endpoints to poll
             consumerCache = new DefaultConsumerCache(this, camelContext, cacheSize);
             LOG.debug("PollEnrich {} using ConsumerCache with cacheSize={}", this, cacheSize);
         }
-        if (aggregationStrategy instanceof CamelContextAware) {
-            ((CamelContextAware) aggregationStrategy).setCamelContext(camelContext);
+        if (aggregationStrategy == null) {
+            aggregationStrategy = new CopyAggregationStrategy();
         }
+        CamelContextAware.trySetCamelContext(aggregationStrategy, camelContext);
+        ServiceHelper.buildService(consumerCache, aggregationStrategy);
+    }
+
+    @Override
+    protected void doInit() throws Exception {
+        if (expression != null) {
+            expression.init(camelContext);
+        }
+
+        ServiceHelper.initService(consumerCache, aggregationStrategy);
+    }
+
+    @Override
+    protected void doStart() throws Exception {
         ServiceHelper.startService(consumerCache, aggregationStrategy);
     }
 

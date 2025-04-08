@@ -24,16 +24,18 @@ import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.test.junit5.CamelTestSupport;
 import org.eclipse.rdf4j.model.Model;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Disabled("http://live.dbpedia.org/page/Ecuador is not online")
 public class Any23DataFormatHTTPTest extends CamelTestSupport {
 
     private final String baseURI = "http://mock.foo/bar";
 
     @Test
-    public void test() throws Exception {
+    public void test() {
         MockEndpoint resultEndpoint = resolveMandatoryEndpoint("mock:result", MockEndpoint.class);
         template.sendBody("direct:start", "bar");
         List<Exchange> list = resultEndpoint.getReceivedExchanges();

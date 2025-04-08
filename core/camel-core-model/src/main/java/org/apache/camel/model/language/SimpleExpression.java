@@ -26,12 +26,13 @@ import org.apache.camel.Expression;
 import org.apache.camel.spi.Metadata;
 
 /**
- * Evaluate Camel's built-in Simple language expression against the Camel Exchange.
+ * Evaluates a Camel simple expression.
  */
 @Metadata(firstVersion = "1.1.0", label = "language,core,java", title = "Simple")
 @XmlRootElement(name = "simple")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class SimpleExpression extends ExpressionDefinition {
+
     @XmlAttribute(name = "resultType")
     private String resultTypeName;
     @XmlTransient

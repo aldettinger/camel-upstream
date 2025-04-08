@@ -25,23 +25,26 @@ import javax.xml.bind.annotation.XmlTransient;
 import org.apache.camel.spi.Metadata;
 
 /**
- * Evaluate an XQuery expressions against an XML payload.
+ * Evaluates an XQuery expressions against an XML payload.
  */
 @Metadata(firstVersion = "1.0.0", label = "language,xml", title = "XQuery")
 @XmlRootElement(name = "xquery")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class XQueryExpression extends NamespaceAwareExpression {
-    @XmlAttribute
-    private String type;
+
     @XmlTransient
     private Class<?> resultType;
+    @XmlTransient
+    private Object configuration;
+
     @XmlAttribute
+    private String type;
+    @XmlAttribute
+    @Metadata(label = "advanced")
     private String headerName;
     @XmlAttribute
     @Metadata(label = "advanced")
     private String configurationRef;
-    @XmlTransient
-    private Object configuration;
 
     public XQueryExpression() {
     }

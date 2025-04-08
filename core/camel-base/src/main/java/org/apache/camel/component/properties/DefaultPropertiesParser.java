@@ -17,14 +17,18 @@
 package org.apache.camel.component.properties;
 
 import java.util.HashSet;
+import java.util.Properties;
 import java.util.Set;
 
+import org.apache.camel.PropertiesLookupListener;
 import org.apache.camel.spi.PropertiesFunction;
 import org.apache.camel.util.ObjectHelper;
+import org.apache.camel.util.OrderedLocationProperties;
 import org.apache.camel.util.StringHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.camel.spi.PropertiesComponent.OPTIONAL_TOKEN;
 import static org.apache.camel.spi.PropertiesComponent.PREFIX_TOKEN;
 import static org.apache.camel.spi.PropertiesComponent.SUFFIX_TOKEN;
 import static org.apache.camel.util.IOHelper.lookupEnvironmentVariable;
@@ -33,6 +37,8 @@ import static org.apache.camel.util.IOHelper.lookupEnvironmentVariable;
  * A parser to parse a string which contains property placeholders.
  */
 public class DefaultPropertiesParser implements PropertiesParser {
+    private static final String UNRESOLVED_PREFIX_TOKEN = "@@[";
+    private static final String UNRESOLVED_SUFFIX_TOKEN = "]@@";
     private static final String GET_OR_ELSE_TOKEN = ":";
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
@@ -55,10 +61,17 @@ public class DefaultPropertiesParser implements PropertiesParser {
     }
 
     @Override
-    public String parseUri(String text, PropertiesLookup properties, boolean defaultFallbackEnabled)
+    public String parseUri(
+            String text, PropertiesLookup properties, boolean defaultFallbackEnabled, boolean keepUnresolvedOptional)
             throws IllegalArgumentException {
-        ParsingContext context = new ParsingContext(properties, defaultFallbackEnabled);
-        return context.parse(text);
+        ParsingContext context = new ParsingContext(properties, defaultFallbackEnabled, keepUnresolvedOptional);
+        String answer = context.parse(text);
+        if (keepUnresolvedOptional && answer != null && answer.contains(UNRESOLVED_PREFIX_TOKEN)) {
+            // replace temporary unresolved keys back to with placeholders so they are kept as-is
+            answer = answer.replace(UNRESOLVED_PREFIX_TOKEN, PREFIX_TOKEN);
+            answer = answer.replace(UNRESOLVED_SUFFIX_TOKEN, SUFFIX_TOKEN);
+        }
+        return answer;
     }
 
     @Override
@@ -72,10 +85,12 @@ public class DefaultPropertiesParser implements PropertiesParser {
     private final class ParsingContext {
         private final PropertiesLookup properties;
         private final boolean defaultFallbackEnabled;
+        private final boolean keepUnresolvedOptional;
 
-        ParsingContext(PropertiesLookup properties, boolean defaultFallbackEnabled) {
+        ParsingContext(PropertiesLookup properties, boolean defaultFallbackEnabled, boolean keepUnresolvedOptional) {
             this.properties = properties;
             this.defaultFallbackEnabled = defaultFallbackEnabled;
+            this.keepUnresolvedOptional = keepUnresolvedOptional;
         }
 
         /**
@@ -102,10 +117,15 @@ public class DefaultPropertiesParser implements PropertiesParser {
             String answer = input;
             Property property;
             while ((property = readProperty(answer)) != null) {
-                // Check for circular references
                 if (replacedPropertyKeys.contains(property.getKey())) {
-                    throw new IllegalArgumentException(
-                            "Circular reference detected with key [" + property.getKey() + "] from text: " + input);
+                    // Check for circular references (skip optional)
+                    boolean optional = property.getKey().startsWith(OPTIONAL_TOKEN);
+                    if (optional) {
+                        break;
+                    } else {
+                        throw new IllegalArgumentException(
+                                "Circular reference detected with key [" + property.getKey() + "] from text: " + input);
+                    }
                 }
 
                 Set<String> newReplaced = new HashSet<>(replacedPropertyKeys);
@@ -113,7 +133,18 @@ public class DefaultPropertiesParser implements PropertiesParser {
 
                 String before = answer.substring(0, property.getBeginIndex());
                 String after = answer.substring(property.getEndIndex());
-                answer = before + doParse(property.getValue(), newReplaced) + after;
+                String parsed = doParse(property.getValue(), newReplaced);
+                if (parsed != null) {
+                    answer = before + parsed + after;
+                } else {
+                    if (property.getBeginIndex() == 0 && input.length() == property.getEndIndex()) {
+                        // its only a single placeholder which is parsed as null
+                        answer = null;
+                        break;
+                    } else {
+                        answer = before + after;
+                    }
+                }
             }
             return answer;
         }
@@ -192,7 +223,7 @@ public class DefaultPropertiesParser implements PropertiesParser {
             if (beforeIndex >= 0 && afterIndex < input.length()) {
                 char before = input.charAt(beforeIndex);
                 char after = input.charAt(afterIndex);
-                return (before == after) && (before == '\'' || before == '"');
+                return before == after && (before == '\'' || before == '"');
             }
             return false;
         }
@@ -208,24 +239,23 @@ public class DefaultPropertiesParser implements PropertiesParser {
 
             // the key may be a function, so lets check this first
             if (propertiesComponent != null) {
-                for (PropertiesFunction function : propertiesComponent.getFunctions().values()) {
-                    String token = function.getName() + ":";
-                    if (key.startsWith(token)) {
-                        String remainder = key.substring(token.length());
-                        log.debug("Property with key [{}] is applied by function [{}]", key, function.getName());
-                        String value = function.apply(remainder);
-                        if (value == null) {
-                            throw new IllegalArgumentException(
-                                    "Property with key [" + key + "] using function [" + function.getName() + "]"
-                                                               + " returned null value which is not allowed, from input: "
-                                                               + input);
-                        } else {
-                            if (log.isDebugEnabled()) {
-                                log.debug("Property with key [{}] applied by function [{}] -> {}", key, function.getName(),
-                                        value);
-                            }
-                            return value;
+                String prefix = StringHelper.before(key, ":");
+                PropertiesFunction function = propertiesComponent.getPropertiesFunction(prefix);
+                if (function != null) {
+                    String remainder = StringHelper.after(key, ":");
+                    log.debug("Property with key [{}] is applied by function [{}]", key, function.getName());
+                    String value = function.apply(remainder);
+                    if (value == null) {
+                        throw new IllegalArgumentException(
+                                "Property with key [" + key + "] using function [" + function.getName() + "]"
+                                                           + " returned null value which is not allowed, from input: "
+                                                           + input);
+                    } else {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Property with key [{}] applied by function [{}] -> {}", key, function.getName(),
+                                    value);
                         }
+                        return value;
                     }
                 }
             }
@@ -237,6 +267,11 @@ public class DefaultPropertiesParser implements PropertiesParser {
                 key = StringHelper.before(key, GET_OR_ELSE_TOKEN);
             }
 
+            boolean optional = key != null && key.startsWith(OPTIONAL_TOKEN);
+            if (optional) {
+                key = key.substring(OPTIONAL_TOKEN.length());
+            }
+
             String value = doGetPropertyValue(key);
             if (value == null && defaultValue != null) {
                 log.debug("Property with key [{}] not found, using default value: {}", key, defaultValue);
@@ -244,10 +279,19 @@ public class DefaultPropertiesParser implements PropertiesParser {
             }
 
             if (value == null) {
-                StringBuilder esb = new StringBuilder();
-                esb.append("Property with key [").append(key).append("] ");
-                esb.append("not found in properties from text: ").append(input);
-                throw new IllegalArgumentException(esb.toString());
+                if (!optional) {
+                    StringBuilder esb = new StringBuilder();
+                    esb.append("Property with key [").append(key).append("] ");
+                    esb.append("not found in properties from text: ").append(input);
+                    throw new IllegalArgumentException(esb.toString());
+                } else {
+                    if (keepUnresolvedOptional) {
+                        // mark the key as unresolved
+                        return UNRESOLVED_PREFIX_TOKEN + OPTIONAL_TOKEN + key + UNRESOLVED_SUFFIX_TOKEN;
+                    } else {
+                        return null;
+                    }
+                }
             }
 
             return value;
@@ -266,6 +310,17 @@ public class DefaultPropertiesParser implements PropertiesParser {
 
             String value = null;
 
+            // favour local properties if
+            Properties local = propertiesComponent != null ? propertiesComponent.getLocalProperties() : null;
+            if (local != null) {
+                value = local.getProperty(key);
+                if (value != null) {
+                    String loc = location(local, key, "LocalProperties");
+                    onLookup(key, value, loc);
+                    log.debug("Found local property: {} with value: {} to be used.", key, value);
+                }
+            }
+
             // override is the default mode for ENV
             int envMode = propertiesComponent != null
                     ? propertiesComponent.getEnvironmentVariableMode()
@@ -274,15 +329,17 @@ public class DefaultPropertiesParser implements PropertiesParser {
             int sysMode = propertiesComponent != null
                     ? propertiesComponent.getSystemPropertiesMode() : PropertiesComponent.SYSTEM_PROPERTIES_MODE_OVERRIDE;
 
-            if (envMode == PropertiesComponent.ENVIRONMENT_VARIABLES_MODE_OVERRIDE) {
+            if (value == null && envMode == PropertiesComponent.ENVIRONMENT_VARIABLES_MODE_OVERRIDE) {
                 value = lookupEnvironmentVariable(key);
                 if (value != null) {
+                    onLookup(key, value, "ENV");
                     log.debug("Found an OS environment property: {} with value: {} to be used.", key, value);
                 }
             }
             if (value == null && sysMode == PropertiesComponent.SYSTEM_PROPERTIES_MODE_OVERRIDE) {
                 value = System.getProperty(key);
                 if (value != null) {
+                    onLookup(key, value, "SYS");
                     log.debug("Found a JVM system property: {} with value: {} to be used.", key, value);
                 }
             }
@@ -297,12 +354,14 @@ public class DefaultPropertiesParser implements PropertiesParser {
             if (value == null && envMode == PropertiesComponent.ENVIRONMENT_VARIABLES_MODE_FALLBACK) {
                 value = lookupEnvironmentVariable(key);
                 if (value != null) {
+                    onLookup(key, value, "ENV");
                     log.debug("Found an OS environment property: {} with value: {} to be used.", key, value);
                 }
             }
             if (value == null && sysMode == PropertiesComponent.SYSTEM_PROPERTIES_MODE_FALLBACK) {
                 value = System.getProperty(key);
                 if (value != null) {
+                    onLookup(key, value, "SYS");
                     log.debug("Found a JVM system property: {} with value: {} to be used.", key, value);
                 }
             }
@@ -314,6 +373,27 @@ public class DefaultPropertiesParser implements PropertiesParser {
             }
             return answer;
         }
+    }
+
+    private void onLookup(String name, String value, String source) {
+        for (PropertiesLookupListener listener : propertiesComponent.getPropertiesLookupListeners()) {
+            try {
+                listener.onLookup(name, value, source);
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+    }
+
+    private static String location(Properties prop, String name, String defaultLocation) {
+        String loc = null;
+        if (prop instanceof OrderedLocationProperties) {
+            loc = ((OrderedLocationProperties) prop).getLocation(name);
+        }
+        if (loc == null) {
+            loc = defaultLocation;
+        }
+        return loc;
     }
 
     /**

@@ -21,14 +21,18 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.camel.CamelContext;
+import org.apache.camel.CamelContextAware;
 import org.apache.camel.Endpoint;
+import org.apache.camel.ErrorHandlerFactory;
 import org.apache.camel.Expression;
 import org.apache.camel.NoSuchEndpointException;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.model.language.DatasonnetExpression;
 import org.apache.camel.model.language.ExchangePropertyExpression;
 import org.apache.camel.model.language.HeaderExpression;
+import org.apache.camel.model.language.SimpleExpression;
 import org.apache.camel.model.language.XPathExpression;
+import org.apache.camel.spi.TransactedPolicy;
 import org.apache.camel.support.builder.Namespaces;
 import org.apache.camel.util.ObjectHelper;
 
@@ -36,15 +40,15 @@ import org.apache.camel.util.ObjectHelper;
  * Base class for implementation inheritance for different clauses in the
  * <a href="http://camel.apache.org/dsl.html">Java DSL</a>
  */
-public abstract class BuilderSupport {
-    private CamelContext context;
-    private ErrorHandlerBuilder errorHandlerBuilder;
+public abstract class BuilderSupport implements CamelContextAware {
+    private CamelContext camelContext;
+    private ErrorHandlerFactory errorHandlerFactory;
 
     protected BuilderSupport() {
     }
 
     protected BuilderSupport(CamelContext context) {
-        this.context = context;
+        this.camelContext = context;
     }
 
     // Builder methods
@@ -102,6 +106,20 @@ public abstract class BuilderSupport {
     }
 
     /**
+     * Returns a constant expression value builder
+     */
+    public ValueBuilder constant(Object value, boolean trim) {
+        return Builder.constant(value, trim);
+    }
+
+    /**
+     * Returns a constant expression value builder
+     */
+    public ValueBuilder constant(Object... value) {
+        return Builder.constant(value);
+    }
+
+    /**
      * Returns a JOOR expression value builder
      */
     public ValueBuilder joor(String value) {
@@ -147,65 +165,60 @@ public abstract class BuilderSupport {
     }
 
     /**
-     * Returns a Datasonnet expression value builder
+     * Returns a datasonnet expression value builder
      */
     public ValueBuilder datasonnet(String value) {
-        DatasonnetExpression exp = new DatasonnetExpression(value);
-        return new ValueBuilder(exp);
+        return datasonnet(value, null);
     }
 
     /**
-     * Returns a Datasonnet expression value builder
-     */
-    public ValueBuilder datasonnet(Expression value) {
-        DatasonnetExpression exp = new DatasonnetExpression(value);
-        return new ValueBuilder(exp);
-    }
-
-    /**
-     * Returns a Datasonnet expression value builder
+     * Returns a datasonnet expression value builder
      */
     public ValueBuilder datasonnet(String value, Class<?> resultType) {
-        DatasonnetExpression exp = new DatasonnetExpression(value);
-        exp.setResultType(resultType);
-        return new ValueBuilder(exp);
+        return datasonnet(value, resultType, null, null);
     }
 
     /**
-     * Returns a Datasonnet expression value builder
+     * Returns a datasonnet expression value builder
      */
-    public ValueBuilder datasonnet(Expression value, Class<?> resultType) {
+    public ValueBuilder datasonnet(String value, Class<?> resultType, String bodyMediaType, String outputMediaType) {
         DatasonnetExpression exp = new DatasonnetExpression(value);
         exp.setResultType(resultType);
+        exp.setBodyMediaType(bodyMediaType);
+        exp.setOutputMediaType(outputMediaType);
         return new ValueBuilder(exp);
     }
 
     /**
      * Returns a simple expression value builder
      */
-    public SimpleBuilder simple(String value) {
-        return SimpleBuilder.simple(value);
+    public ValueBuilder simple(String value) {
+        return simple(value, null);
     }
 
     /**
      * Returns a simple expression value builder
      */
-    public SimpleBuilder simple(String value, Class<?> resultType) {
-        return SimpleBuilder.simple(value, resultType);
+    public ValueBuilder simple(String value, Class<?> resultType) {
+        SimpleExpression exp = new SimpleExpression(value);
+        exp.setResultType(resultType);
+        return new ValueBuilder(exp);
     }
 
     /**
      * Returns a simple expression value builder, using String.format style
      */
-    public SimpleBuilder simpleF(String format, Object... values) {
-        return SimpleBuilder.simpleF(format, values);
+    public ValueBuilder simpleF(String format, Object... values) {
+        String exp = String.format(format, values);
+        return simple(exp);
     }
 
     /**
      * Returns a simple expression value builder, using String.format style
      */
-    public SimpleBuilder simpleF(String format, Class<?> resultType, Object... values) {
-        return SimpleBuilder.simpleF(format, resultType, values);
+    public ValueBuilder simpleF(String format, Class<?> resultType, Object... values) {
+        String exp = String.format(format, values);
+        return simple(exp, resultType);
     }
 
     /**
@@ -336,10 +349,12 @@ public abstract class BuilderSupport {
     /**
      * Resolves the given URI to an endpoint
      *
-     * @param  uri                     the uri to resolve
-     * @throws NoSuchEndpointException if the endpoint URI could not be resolved
-     * @return                         the endpoint
+     * @param      uri                     the uri to resolve
+     * @throws     NoSuchEndpointException if the endpoint URI could not be resolved
+     * @return                             the endpoint
+     * @deprecated                         use {@link CamelContext#getEndpoint(String)} instead
      */
+    @Deprecated
     public Endpoint endpoint(String uri) throws NoSuchEndpointException {
         ObjectHelper.notNull(uri, "uri");
         Endpoint endpoint = getContext().getEndpoint(uri);
@@ -352,11 +367,13 @@ public abstract class BuilderSupport {
     /**
      * Resolves the given URI to an endpoint of the specified type
      *
-     * @param  uri                     the uri to resolve
-     * @param  type                    the excepted type of the endpoint
-     * @throws NoSuchEndpointException if the endpoint URI could not be resolved
-     * @return                         the endpoint
+     * @param      uri                     the uri to resolve
+     * @param      type                    the excepted type of the endpoint
+     * @throws     NoSuchEndpointException if the endpoint URI could not be resolved
+     * @return                             the endpoint
+     * @deprecated                         use {@link CamelContext#getEndpoint(String, Class)} instead
      */
+    @Deprecated
     public <T extends Endpoint> T endpoint(String uri, Class<T> type) throws NoSuchEndpointException {
         ObjectHelper.notNull(uri, "uri");
         T endpoint = getContext().getEndpoint(uri, type);
@@ -369,10 +386,12 @@ public abstract class BuilderSupport {
     /**
      * Resolves the list of URIs into a list of {@link Endpoint} instances
      *
-     * @param  uris                    list of endpoints to resolve
-     * @throws NoSuchEndpointException if an endpoint URI could not be resolved
-     * @return                         list of endpoints
+     * @param      uris                    list of endpoints to resolve
+     * @throws     NoSuchEndpointException if an endpoint URI could not be resolved
+     * @return                             list of endpoints
+     * @deprecated                         use {@link CamelContext#getEndpoint(String)} instead
      */
+    @Deprecated
     public List<Endpoint> endpoints(String... uris) throws NoSuchEndpointException {
         List<Endpoint> endpoints = new ArrayList<>();
         for (String uri : uris) {
@@ -387,6 +406,7 @@ public abstract class BuilderSupport {
      * @param  endpoints endpoints
      * @return           list of the given endpoints
      */
+    @Deprecated
     public List<Endpoint> endpoints(Endpoint... endpoints) {
         List<Endpoint> answer = new ArrayList<>();
         answer.addAll(Arrays.asList(endpoints));
@@ -420,7 +440,9 @@ public abstract class BuilderSupport {
      * @return               the builder
      */
     public DeadLetterChannelBuilder deadLetterChannel(String deadLetterUri) {
-        return deadLetterChannel(endpoint(deadLetterUri));
+        DeadLetterChannelBuilder answer = new DeadLetterChannelBuilder();
+        answer.setDeadLetterUri(deadLetterUri);
+        return answer;
     }
 
     /**
@@ -431,37 +453,115 @@ public abstract class BuilderSupport {
      * @return                    the builder
      */
     public DeadLetterChannelBuilder deadLetterChannel(Endpoint deadLetterEndpoint) {
-        return new DeadLetterChannelBuilder(deadLetterEndpoint);
+        return deadLetterChannel(deadLetterEndpoint.getEndpointUri());
+    }
+
+    /**
+     * Error handler using JTA transactions (requires camel-jta).
+     *
+     * @return the builder
+     */
+    public JtaTransactionErrorHandlerBuilder jtaTransactionErrorHandler() {
+        return new JtaTransactionErrorHandlerBuilder();
+    }
+
+    /**
+     * Error handler using JTA transactions (requires camel-jta).
+     *
+     * @param  policy the transaction policy
+     * @return        the builder
+     */
+    public JtaTransactionErrorHandlerBuilder jtaTransactionErrorHandler(TransactedPolicy policy) {
+        JtaTransactionErrorHandlerBuilder answer = new JtaTransactionErrorHandlerBuilder();
+        answer.setTransactedPolicy(policy);
+        return answer;
+    }
+
+    /**
+     * Error handler using JTA transactions (requires camel-jta).
+     *
+     * @param  policyRef references to the transaction policy
+     * @return           the builder
+     */
+    public JtaTransactionErrorHandlerBuilder jtaTransactionErrorHandler(String policyRef) {
+        JtaTransactionErrorHandlerBuilder answer = new JtaTransactionErrorHandlerBuilder();
+        answer.setTransactedPolicyRef(policyRef);
+        return answer;
+    }
+
+    /**
+     * Error handler using Spring transactions (requires camel-spring).
+     *
+     * @return the builder
+     */
+    public SpringTransactionErrorHandlerBuilder springTransactionErrorHandler() {
+        return new SpringTransactionErrorHandlerBuilder();
+    }
+
+    /**
+     * Error handler using Spring transactions (requires camel-spring).
+     *
+     * @param  policy the transaction policy
+     * @return        the builder
+     */
+    public SpringTransactionErrorHandlerBuilder springTransactionErrorHandler(TransactedPolicy policy) {
+        SpringTransactionErrorHandlerBuilder answer = new SpringTransactionErrorHandlerBuilder();
+        answer.setTransactedPolicy(policy);
+        return answer;
+    }
+
+    /**
+     * Error handler using Spring transactions (requires camel-spring).
+     *
+     * @param  policyRef references to the transaction policy
+     * @return           the builder
+     */
+    public SpringTransactionErrorHandlerBuilder springTransactionErrorHandler(String policyRef) {
+        SpringTransactionErrorHandlerBuilder answer = new SpringTransactionErrorHandlerBuilder();
+        answer.setTransactedPolicyRef(policyRef);
+        return answer;
     }
 
     // Properties
     // -------------------------------------------------------------------------
 
-    public CamelContext getContext() {
-        return context;
+    @Override
+    public CamelContext getCamelContext() {
+        return camelContext;
     }
 
-    public void setContext(CamelContext context) {
-        ObjectHelper.notNull(context, "CamelContext", this);
-        this.context = context;
-    }
-
-    public ErrorHandlerBuilder getErrorHandlerBuilder() {
-        if (errorHandlerBuilder == null) {
-            errorHandlerBuilder = createErrorHandlerBuilder();
+    @Override
+    public void setCamelContext(CamelContext camelContext) {
+        if (camelContext != null) {
+            this.camelContext = camelContext;
         }
-        return errorHandlerBuilder;
     }
 
-    protected ErrorHandlerBuilder createErrorHandlerBuilder() {
+    /**
+     * Get the {@link CamelContext}
+     *
+     * @return camelContext the Camel context
+     */
+    public CamelContext getContext() {
+        return getCamelContext();
+    }
+
+    public ErrorHandlerFactory getErrorHandlerFactory() {
+        if (errorHandlerFactory == null) {
+            errorHandlerFactory = createErrorHandlerBuilder();
+        }
+        return errorHandlerFactory;
+    }
+
+    protected ErrorHandlerFactory createErrorHandlerBuilder() {
         return new DefaultErrorHandlerBuilder();
     }
 
     /**
      * Sets the error handler to use with processors created by this builder
      */
-    public void setErrorHandlerBuilder(ErrorHandlerBuilder errorHandlerBuilder) {
-        this.errorHandlerBuilder = errorHandlerBuilder;
+    public void setErrorHandlerFactory(ErrorHandlerFactory errorHandlerFactory) {
+        this.errorHandlerFactory = errorHandlerFactory;
     }
 
 }

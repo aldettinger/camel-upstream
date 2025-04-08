@@ -55,8 +55,8 @@ import static org.apache.camel.component.couchbase.CouchbaseConstants.DEFAULT_VI
 /**
  * Query Couchbase Views with a poll strategy and/or perform various operations against Couchbase databases.
  */
-@UriEndpoint(firstVersion = "2.19.0", scheme = "couchbase", title = "Couchbase", syntax = "couchbase:protocol:hostname:port",
-             category = { Category.DATABASE, Category.NOSQL })
+@UriEndpoint(firstVersion = "2.19.0", scheme = "couchbase", title = "Couchbase", syntax = "couchbase:protocol://hostname:port",
+             category = { Category.DATABASE, Category.NOSQL }, headersClass = CouchbaseConstants.class)
 public class CouchbaseEndpoint extends ScheduledPollEndpoint {
 
     @UriPath
@@ -138,7 +138,7 @@ public class CouchbaseEndpoint extends ScheduledPollEndpoint {
     private long queryTimeout = DEFAULT_QUERY_TIMEOUT;
 
     // Connection fine tuning parameters
-    @UriParam(label = "advanced", defaultValue = "2500", javaType = "java.time.Duration")
+    @UriParam(label = "advanced", defaultValue = "30000", javaType = "java.time.Duration")
     private long connectTimeout = DEFAULT_CONNECT_TIMEOUT;
 
     public CouchbaseEndpoint() {
@@ -550,5 +550,15 @@ public class CouchbaseEndpoint extends ScheduledPollEndpoint {
                 .environment(env));
 
         return cluster.bucket(bucket);
+    }
+
+    /**
+     * Compares retry strategy with query timeout and gets the higher value : for write operations with retry
+     *
+     * @return
+     */
+    public long getWriteQueryTimeout() {
+        long retryTimeout = producerRetryAttempts * (long) producerRetryPause;
+        return retryTimeout > queryTimeout ? retryTimeout : queryTimeout;
     }
 }

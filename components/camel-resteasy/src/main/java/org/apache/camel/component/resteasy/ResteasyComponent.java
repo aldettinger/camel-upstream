@@ -37,7 +37,6 @@ import org.apache.camel.spi.annotations.Component;
 import org.apache.camel.util.FileUtil;
 import org.apache.camel.util.URISupport;
 import org.apache.camel.util.UnsafeUriCharactersEncoder;
-import org.jboss.resteasy.plugins.server.servlet.HttpServletDispatcher;
 
 @Component("resteasy")
 @Metadata(excludeProperties = "clientConnectionManager,connectionsPerRoute,connectionTimeToLive,"
@@ -52,11 +51,7 @@ public class ResteasyComponent extends HttpComponent implements RestConsumerFact
     private String proxyConsumersClasses;
 
     public ResteasyComponent() {
-        super(ResteasyEndpoint.class);
-    }
-
-    public ResteasyComponent(HttpServletDispatcher dispatcher) {
-        super(ResteasyEndpoint.class);
+        super();
     }
 
     @Override
@@ -205,8 +200,7 @@ public class ResteasyComponent extends HttpComponent implements RestConsumerFact
         // get the endpoint
         url = String.format(url, path, restrict);
 
-        ResteasyEndpoint endpoint = camelContext.getEndpoint(url, ResteasyEndpoint.class);
-        setProperties(endpoint, parameters);
+        ResteasyEndpoint endpoint = (ResteasyEndpoint) camelContext.getEndpoint(url, parameters);
 
         Consumer consumer = endpoint.createConsumer(processor);
         if (config.getConsumerProperties() != null && !config.getConsumerProperties().isEmpty()) {

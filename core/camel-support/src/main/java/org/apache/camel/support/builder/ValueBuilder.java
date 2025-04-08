@@ -42,12 +42,24 @@ public class ValueBuilder implements Expression, Predicate {
     }
 
     @Override
+    public void initPredicate(CamelContext context) {
+        if (expression instanceof Predicate) {
+            ((Predicate) expression).initPredicate(context);
+        } else {
+            expression.init(context);
+        }
+    }
+
+    @Override
     public <T> T evaluate(Exchange exchange, Class<T> type) {
         return expression.evaluate(exchange, type);
     }
 
     @Override
     public boolean matches(Exchange exchange) {
+        if (expression instanceof Predicate) {
+            return ((Predicate) expression).matches(exchange);
+        }
         return PredicateBuilder.toPredicate(getExpression()).matches(exchange);
     }
 
@@ -262,6 +274,17 @@ public class ValueBuilder implements Expression, Predicate {
      */
     public ValueBuilder sort(Comparator<?> comparator) {
         Expression newExp = ExpressionBuilder.sortExpression(expression, comparator);
+        return onNewValueBuilder(newExp);
+    }
+
+    /**
+     * Invokes the method with the given name (supports OGNL syntax).
+     *
+     * @param  methodName name of method to invoke.
+     * @return            the current builder
+     */
+    public ValueBuilder method(String methodName) {
+        Expression newExp = ExpressionBuilder.beanExpression(expression, methodName);
         return onNewValueBuilder(newExp);
     }
 

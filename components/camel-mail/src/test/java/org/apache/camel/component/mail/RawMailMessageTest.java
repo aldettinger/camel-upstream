@@ -97,7 +97,8 @@ public class RawMailMessageTest extends CamelTestSupport {
 
         MockEndpoint mock = getMockEndpoint("mock://rawMessage" + type);
         mock.expectedMessageCount(1);
-        mock.expectedBodyReceived().body().isNotNull();
+        mock.message(0).body().isNotNull();
+
         assertMockEndpointsSatisfied();
 
         Message mailMessage = mock.getExchanges().get(0).getIn().getBody(Message.class);
@@ -125,7 +126,8 @@ public class RawMailMessageTest extends CamelTestSupport {
 
         MockEndpoint mock = getMockEndpoint("mock://normalMessage" + type);
         mock.expectedMessageCount(1);
-        mock.expectedBodyReceived().body().isNotNull();
+        mock.message(0).body().isNotNull();
+
         assertMockEndpointsSatisfied();
 
         String body = mock.getExchanges().get(0).getIn().getBody(String.class);
@@ -157,9 +159,9 @@ public class RawMailMessageTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
-            public void configure() throws Exception {
+            public void configure() {
                 from("pop3://davsclaus@apache.org").to("mock:mail");
 
                 from("pop3://jonesRawPop3@localhost?password=secret&initialDelay=100&delay=100&delete=true&mapMailMessage=false")

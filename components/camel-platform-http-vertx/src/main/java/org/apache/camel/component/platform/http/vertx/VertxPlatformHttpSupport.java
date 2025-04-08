@@ -16,6 +16,7 @@
  */
 package org.apache.camel.component.platform.http.vertx;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -47,7 +48,9 @@ public final class VertxPlatformHttpSupport {
     private VertxPlatformHttpSupport() {
     }
 
-    static Object toHttpResponse(HttpServerResponse response, Message message, HeaderFilterStrategy headerFilterStrategy) {
+    static Object toHttpResponse(
+            HttpServerResponse response, Message message, HeaderFilterStrategy headerFilterStrategy,
+            boolean muteExceptions) {
         final Exchange exchange = message.getExchange();
         final TypeConverter tc = exchange.getContext().getTypeConverter();
 
@@ -92,22 +95,28 @@ public final class VertxPlatformHttpSupport {
         final Exception exception = exchange.getException();
 
         if (exception != null) {
-            // we failed due an exception so print it as plain text
-            final StringWriter sw = new StringWriter();
-            final PrintWriter pw = new PrintWriter(sw);
-            exception.printStackTrace(pw);
+            if (muteExceptions) {
+                body = ""; // do not include stacktrace in body
+                // force content type to be text/plain as that is what the stacktrace is
+                message.setHeader(Exchange.CONTENT_TYPE, "text/plain; charset=utf-8");
+            } else {
+                // we failed due an exception so print it as plain text
+                final StringWriter sw = new StringWriter();
+                final PrintWriter pw = new PrintWriter(sw);
+                exception.printStackTrace(pw);
 
-            // the body should then be the stacktrace
-            body = ByteBuffer.wrap(sw.toString().getBytes(StandardCharsets.UTF_8));
-            // force content type to be text/plain as that is what the stacktrace is
-            message.setHeader(Exchange.CONTENT_TYPE, "text/plain; charset=utf-8");
+                // the body should then be the stacktrace
+                body = ByteBuffer.wrap(sw.toString().getBytes(StandardCharsets.UTF_8));
+                // force content type to be text/plain as that is what the stacktrace is
+                message.setHeader(Exchange.CONTENT_TYPE, "text/plain; charset=utf-8");
+            }
 
             // and mark the exception as failure handled, as we handled it by returning it as the response
             ExchangeHelper.setFailureHandled(exchange);
         }
 
         // set the content-length if it can be determined, or chunked encoding
-        final Integer length = determineContentLength(exchange, body);
+        final Integer length = determineContentLength(body);
         if (length != null) {
             response.putHeader("Content-Length", String.valueOf(length));
         } else {
@@ -123,7 +132,7 @@ public final class VertxPlatformHttpSupport {
         return body;
     }
 
-    static Integer determineContentLength(Exchange camelExchange, Object body) {
+    static Integer determineContentLength(Object body) {
         if (body instanceof byte[]) {
             return ((byte[]) body).length;
         } else if (body instanceof ByteBuffer) {
@@ -146,7 +155,7 @@ public final class VertxPlatformHttpSupport {
         int codeToUse = currentCode == null ? defaultCode : currentCode;
 
         if (codeToUse != 500) {
-            if ((body == null) || (body instanceof String && ((String) body).trim().isEmpty())) {
+            if (body == null || body instanceof String && ((String) body).trim().isEmpty()) {
                 // no content
                 codeToUse = currentCode == null ? 204 : currentCode;
             }
@@ -155,9 +164,10 @@ public final class VertxPlatformHttpSupport {
         return codeToUse;
     }
 
-    static void writeResponse(RoutingContext ctx, Exchange camelExchange, HeaderFilterStrategy headerFilterStrategy)
+    static void writeResponse(
+            RoutingContext ctx, Exchange camelExchange, HeaderFilterStrategy headerFilterStrategy, boolean muteExceptions)
             throws Exception {
-        final Object body = toHttpResponse(ctx.response(), camelExchange.getMessage(), headerFilterStrategy);
+        final Object body = toHttpResponse(ctx.response(), camelExchange.getMessage(), headerFilterStrategy, muteExceptions);
         final HttpServerResponse response = ctx.response();
 
         if (body == null) {
@@ -166,25 +176,36 @@ public final class VertxPlatformHttpSupport {
         } else if (body instanceof String) {
             response.end((String) body);
         } else if (body instanceof InputStream) {
-            final byte[] bytes = new byte[4096];
-            try (InputStream in = (InputStream) body) {
-                int len;
-                while ((len = in.read(bytes)) >= 0) {
-                    final Buffer b = Buffer.buffer(len);
-                    b.appendBytes(bytes, 0, len);
-                    response.write(b);
-                }
-            }
-            response.end();
+            writeResponseAs(response, (InputStream) body);
+        } else if (body instanceof Buffer) {
+            response.end((Buffer) body);
         } else {
             final TypeConverter tc = camelExchange.getContext().getTypeConverter();
-            final ByteBuffer bb = tc.mandatoryConvertTo(ByteBuffer.class, body);
-            final Buffer b = Buffer.buffer(bb.capacity());
-
-            b.setBytes(0, bb);
-            response.end(b);
+            // Try to convert to ByteBuffer for performance reason
+            final ByteBuffer bb = tc.tryConvertTo(ByteBuffer.class, camelExchange, body);
+            if (bb != null) {
+                final Buffer b = Buffer.buffer(bb.capacity());
+                b.setBytes(0, bb);
+                response.end(b);
+            } else {
+                // Otherwise fallback to most generic InputStream conversion
+                final InputStream is = tc.mandatoryConvertTo(InputStream.class, camelExchange, body);
+                writeResponseAs(response, is);
+            }
         }
+    }
 
+    private static void writeResponseAs(HttpServerResponse response, InputStream is) throws IOException {
+        final byte[] bytes = new byte[4096];
+        try (InputStream in = is) {
+            int len;
+            while ((len = in.read(bytes)) >= 0) {
+                final Buffer b = Buffer.buffer(len);
+                b.appendBytes(bytes, 0, len);
+                response.write(b);
+            }
+        }
+        response.end();
     }
 
     static void populateCamelHeaders(

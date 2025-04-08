@@ -27,6 +27,7 @@ import org.apache.camel.converter.crypto.HMACAccumulator.CircularBuffer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class HMACAccumulatorTest {
@@ -140,7 +141,7 @@ public class HMACAccumulatorTest {
     }
 
     @Test
-    void testBufferAdd() throws Exception {
+    void testBufferAdd() {
         CircularBuffer buffer = new CircularBuffer(payload.length * 2);
         buffer.write(payload, 0, payload.length);
         assertEquals(payload.length, buffer.availableForWrite());
@@ -151,7 +152,7 @@ public class HMACAccumulatorTest {
     }
 
     @Test
-    void testBufferDrain() throws Exception {
+    void testBufferDrain() {
         CircularBuffer buffer = new CircularBuffer(payload.length * 2);
         buffer.write(payload, 0, payload.length);
 
@@ -162,7 +163,11 @@ public class HMACAccumulatorTest {
     }
 
     @Test
-    void testBufferCompare() throws Exception {
+    void testBufferCompare() {
+        assertDoesNotThrow(() -> doBufferCompare());
+    }
+
+    private void doBufferCompare() {
         CircularBuffer buffer = new CircularBuffer(payload.length * 2);
         buffer.write(new byte[payload.length >> 1], 0, payload.length >> 1);
         buffer.write(payload, 0, payload.length);

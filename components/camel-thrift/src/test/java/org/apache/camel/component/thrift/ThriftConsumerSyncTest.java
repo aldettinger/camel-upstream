@@ -16,8 +16,6 @@
  */
 package org.apache.camel.component.thrift;
 
-import java.io.IOException;
-
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.component.thrift.generated.Calculator;
@@ -27,10 +25,10 @@ import org.apache.camel.test.AvailablePortFinder;
 import org.apache.camel.test.junit5.CamelTestSupport;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
+import org.apache.thrift.transport.layered.TFramedTransport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,7 +50,7 @@ public class ThriftConsumerSyncTest extends CamelTestSupport {
     private TTransport transport;
 
     @BeforeEach
-    public void startThriftClient() throws IOException, TTransportException {
+    public void startThriftClient() throws TTransportException {
         if (transport == null) {
             LOG.info("Connecting to the Thrift server on port: {}", THRIFT_TEST_PORT);
             transport = new TSocket("localhost", THRIFT_TEST_PORT);
@@ -63,7 +61,7 @@ public class ThriftConsumerSyncTest extends CamelTestSupport {
     }
 
     @AfterEach
-    public void stopThriftClient() throws Exception {
+    public void stopThriftClient() {
         if (transport != null) {
             transport.close();
             transport = null;
@@ -101,7 +99,7 @@ public class ThriftConsumerSyncTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
             public void configure() {

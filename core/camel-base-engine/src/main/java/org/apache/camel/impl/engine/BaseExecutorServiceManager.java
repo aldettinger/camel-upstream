@@ -137,7 +137,11 @@ public class BaseExecutorServiceManager extends ServiceSupport implements Execut
     @Override
     public void setThreadNamePattern(String threadNamePattern) {
         // must set camel id here in the pattern and let the other placeholders be resolved on demand
-        this.threadNamePattern = StringHelper.replaceAll(threadNamePattern, "#camelId#", this.camelContext.getName());
+        if (threadNamePattern != null) {
+            this.threadNamePattern = threadNamePattern.replace("#camelId#", this.camelContext.getName());
+        } else {
+            this.threadNamePattern = threadNamePattern;
+        }
     }
 
     @Override
@@ -334,11 +338,11 @@ public class BaseExecutorServiceManager extends ServiceSupport implements Execut
             if (warned) {
                 LOG.info("Shutdown of ExecutorService: {} is shutdown: {} and terminated: {} took: {}.",
                         executorService, executorService.isShutdown(), executorService.isTerminated(),
-                        TimeUtils.printDuration(watch.taken()));
+                        TimeUtils.printDuration(watch.taken(), true));
             } else if (LOG.isDebugEnabled()) {
                 LOG.debug("Shutdown of ExecutorService: {} is shutdown: {} and terminated: {} took: {}.",
                         executorService, executorService.isShutdown(), executorService.isTerminated(),
-                        TimeUtils.printDuration(watch.taken()));
+                        TimeUtils.printDuration(watch.taken(), true));
             }
         }
 
@@ -418,7 +422,7 @@ public class BaseExecutorServiceManager extends ServiceSupport implements Execut
             if (executorService.awaitTermination(interval, TimeUnit.MILLISECONDS)) {
                 done = true;
             } else {
-                LOG.info("Waited {} for ExecutorService: {} to terminate...", TimeUtils.printDuration(watch.taken()),
+                LOG.info("Waited {} for ExecutorService: {} to terminate...", TimeUtils.printDuration(watch.taken(), true),
                         executorService);
                 // recalculate interval
                 interval = Math.min(2000, shutdownAwaitTermination - watch.taken());
@@ -455,9 +459,7 @@ public class BaseExecutorServiceManager extends ServiceSupport implements Execut
                     ThreadPoolFactory.class)
                     .orElseGet(DefaultThreadPoolFactory::new);
         }
-        if (threadPoolFactory instanceof CamelContextAware) {
-            ((CamelContextAware) threadPoolFactory).setCamelContext(camelContext);
-        }
+        CamelContextAware.trySetCamelContext(threadPoolFactory, camelContext);
         ServiceHelper.initService(threadPoolFactory);
     }
 

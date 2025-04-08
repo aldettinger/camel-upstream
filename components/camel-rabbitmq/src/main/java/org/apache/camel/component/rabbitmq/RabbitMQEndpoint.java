@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
 
 import javax.net.ssl.TrustManager;
@@ -56,7 +57,7 @@ import static org.apache.camel.component.rabbitmq.RabbitMQComponent.QUEUE_ARG_PR
  * Send and receive messages from <a href="http://www.rabbitmq.com/">RabbitMQ</a> instances.
  */
 @UriEndpoint(firstVersion = "2.12.0", scheme = "rabbitmq", title = "RabbitMQ", syntax = "rabbitmq:exchangeName",
-             category = { Category.MESSAGING })
+             category = { Category.MESSAGING }, headersClass = RabbitMQConstants.class)
 public class RabbitMQEndpoint extends DefaultEndpoint implements AsyncEndpoint {
     // header to indicate that the message body needs to be de-serialized
     public static final String SERIALIZE_HEADER = "CamelSerialize";
@@ -186,6 +187,8 @@ public class RabbitMQEndpoint extends DefaultEndpoint implements AsyncEndpoint {
     private boolean allowMessageBodySerialization;
     @UriParam(label = "consumer")
     private boolean reQueue;
+    @UriParam(label = "consumer", defaultValue = "true")
+    private boolean recoverFromDeclareException = true;
     // camel-jms supports this setting but it is not currently configurable in
     // camel-rabbitmq
     private boolean useMessageIDAsCorrelationID = true;
@@ -272,6 +275,14 @@ public class RabbitMQEndpoint extends DefaultEndpoint implements AsyncEndpoint {
                     URISupport.sanitizeUri(getEndpointUri()), getThreadPoolSize());
         } else {
             return Executors.newFixedThreadPool(getThreadPoolSize());
+        }
+    }
+
+    protected ScheduledExecutorService createScheduledExecutor(String name) {
+        if (getCamelContext() != null) {
+            return getCamelContext().getExecutorServiceManager().newSingleThreadScheduledExecutor(this, name);
+        } else {
+            return Executors.newSingleThreadScheduledExecutor(tf -> new Thread(name));
         }
     }
 
@@ -702,6 +713,20 @@ public class RabbitMQEndpoint extends DefaultEndpoint implements AsyncEndpoint {
 
     public boolean isDeclare() {
         return declare;
+    }
+
+    /**
+     * Decides whether an exception during declaration of exchanges or queues is recoverable or not. If the option is
+     * false, camel will throw an exception when starting the consumer, which will interrupt application startup (e.g.
+     * in the case when the exchange / queue is already declared in RabbitMQ and has incompatible configuration). If set
+     * to true, the consumer will try to reconnect periodically.
+     */
+    public boolean isRecoverFromDeclareException() {
+        return recoverFromDeclareException;
+    }
+
+    public void setRecoverFromDeclareException(boolean recoverFromDeclareException) {
+        this.recoverFromDeclareException = recoverFromDeclareException;
     }
 
     /**

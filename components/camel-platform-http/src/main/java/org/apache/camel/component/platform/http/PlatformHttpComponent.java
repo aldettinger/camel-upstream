@@ -16,7 +16,10 @@
  */
 package org.apache.camel.component.platform.http;
 
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelContextAware;
@@ -45,14 +48,16 @@ import org.slf4j.LoggerFactory;
  */
 @Component("platform-http")
 public class PlatformHttpComponent extends DefaultComponent implements RestConsumerFactory, RestApiConsumerFactory {
-    private static final Logger LOGGER = LoggerFactory.getLogger(PlatformHttpComponent.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PlatformHttpComponent.class);
 
     @Metadata(label = "advanced", description = "An HTTP Server engine implementation to serve the requests")
     private volatile PlatformHttpEngine engine;
 
+    private final Set<HttpEndpointModel> httpEndpoints = new TreeSet<>();
+
     private volatile boolean localEngine;
 
-    private final Object lock;
+    private final Object lock = new Object();
 
     public PlatformHttpComponent() {
         this(null);
@@ -60,15 +65,13 @@ public class PlatformHttpComponent extends DefaultComponent implements RestConsu
 
     public PlatformHttpComponent(CamelContext context) {
         super(context);
-
-        this.lock = new Object();
     }
 
     @Override
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
         PlatformHttpEndpoint endpoint = new PlatformHttpEndpoint(uri, remaining, this);
         endpoint.setPlatformHttpEngine(engine);
-
+        setProperties(endpoint, parameters);
         return endpoint;
     }
 
@@ -77,8 +80,12 @@ public class PlatformHttpComponent extends DefaultComponent implements RestConsu
             CamelContext camelContext, Processor processor, String contextPath,
             RestConfiguration configuration, Map<String, Object> parameters)
             throws Exception {
+
         // reuse the createConsumer method we already have. The api need to use GET and match on uri prefix
-        return doCreateConsumer(camelContext, processor, "GET", contextPath, null, null, null, configuration, parameters, true);
+        Consumer consumer = doCreateConsumer(camelContext, processor, "GET", contextPath, null, null, null, configuration,
+                parameters, true);
+        addHttpEndpoint(contextPath, "GET");
+        return consumer;
     }
 
     @Override
@@ -87,8 +94,46 @@ public class PlatformHttpComponent extends DefaultComponent implements RestConsu
             String uriTemplate,
             String consumes, String produces, RestConfiguration configuration, Map<String, Object> parameters)
             throws Exception {
-        return doCreateConsumer(camelContext, processor, verb, basePath, uriTemplate, consumes, produces, configuration,
-                parameters, false);
+        Consumer consumer
+                = doCreateConsumer(camelContext, processor, verb, basePath, uriTemplate, consumes, produces, configuration,
+                        parameters, false);
+        if (uriTemplate != null) {
+            if (uriTemplate.startsWith("/")) {
+                addHttpEndpoint(basePath + uriTemplate, verb);
+            } else {
+                addHttpEndpoint(basePath + "/" + uriTemplate, verb);
+            }
+        } else {
+            addHttpEndpoint(basePath, verb);
+        }
+        return consumer;
+    }
+
+    /**
+     * Adds a known http endpoint managed by this component.
+     */
+    public void addHttpEndpoint(String uri, String verbs) {
+        HttpEndpointModel model = httpEndpoints.stream().filter(e -> e.getUri().equals(uri)).findFirst().orElse(null);
+        if (model == null) {
+            model = new HttpEndpointModel(uri, verbs);
+            httpEndpoints.add(model);
+        } else {
+            model.addVerb(verbs);
+        }
+    }
+
+    /**
+     * Removes a known http endpoint managed by this component.
+     */
+    public void removeHttpEndpoint(String uri) {
+        httpEndpoints.stream().filter(e -> e.getUri().equals(uri)).findFirst().ifPresent(httpEndpoints::remove);
+    }
+
+    /**
+     * Lists the known http endpoints managed by this component. The endpoints are without host:port/[context-path]
+     */
+    public Set<HttpEndpointModel> getHttpEndpoints() {
+        return Collections.unmodifiableSet(httpEndpoints);
     }
 
     @Override
@@ -165,8 +210,7 @@ public class PlatformHttpComponent extends DefaultComponent implements RestConsu
 
         String url = RestComponentHelper.createRestConsumerUrl("platform-http", path, map);
 
-        PlatformHttpEndpoint endpoint = camelContext.getEndpoint(url, PlatformHttpEndpoint.class);
-        setProperties(endpoint, parameters);
+        PlatformHttpEndpoint endpoint = (PlatformHttpEndpoint) camelContext.getEndpoint(url, parameters);
         endpoint.setConsumes(consumes);
         endpoint.setProduces(produces);
 
@@ -183,13 +227,13 @@ public class PlatformHttpComponent extends DefaultComponent implements RestConsu
         if (engine == null) {
             synchronized (lock) {
                 if (engine == null) {
-                    LOGGER.debug("Lookup platform http engine from registry");
+                    LOG.debug("Lookup platform http engine from registry");
 
                     engine = getCamelContext().getRegistry()
                             .lookupByNameAndType(PlatformHttpConstants.PLATFORM_HTTP_ENGINE_NAME, PlatformHttpEngine.class);
 
                     if (engine == null) {
-                        LOGGER.debug("Lookup platform http engine from factory");
+                        LOG.debug("Lookup platform http engine from factory");
 
                         engine = getCamelContext()
                                 .adapt(ExtendedCamelContext.class)
@@ -209,4 +253,23 @@ public class PlatformHttpComponent extends DefaultComponent implements RestConsu
 
         return engine;
     }
+
+    @Override
+    protected void doInit() throws Exception {
+        super.doInit();
+
+        try {
+            RestConfiguration config = CamelContextHelper.getRestConfiguration(getCamelContext(), "platform-http");
+
+            // configure additional options on configuration
+            if (config.getComponentProperties() != null && !config.getComponentProperties().isEmpty()) {
+                setProperties(this, config.getComponentProperties());
+            }
+        } catch (IllegalArgumentException e) {
+            // if there's a mismatch between the component and the rest-configuration,
+            // then getRestConfiguration throws IllegalArgumentException which can be
+            // safely ignored as it means there's no special conf for this component.
+        }
+    }
+
 }

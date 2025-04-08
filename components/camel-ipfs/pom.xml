@@ -23,13 +23,13 @@
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>components</artifactId>
-        <version>3.9.0-SNAPSHOT</version>
+        <version>3.18.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>camel-ipfs</artifactId>
     <packaging>jar</packaging>
 
-    <name>Camel :: IPFS</name>
+    <name>Camel :: IPFS (deprecated)</name>
     <description>Camel IPFS support</description>
 
     <properties>

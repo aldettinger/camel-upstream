@@ -24,6 +24,7 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -52,9 +53,6 @@ import org.slf4j.LoggerFactory;
 public final class ObjectHelper {
 
     private static final Logger LOG = LoggerFactory.getLogger(ObjectHelper.class);
-
-    private static final Float FLOAT_NAN = Float.NaN;
-    private static final Double DOUBLE_NAN = Double.NaN;
 
     /**
      * Utility classes should not have a public constructor.
@@ -126,6 +124,12 @@ public final class ObjectHelper {
         if (value instanceof Boolean) {
             return (Boolean) value;
         }
+        if (value instanceof byte[]) {
+            String str = new String((byte[]) value);
+            if ("true".equalsIgnoreCase(str) || "false".equalsIgnoreCase(str)) {
+                return Boolean.valueOf(str);
+            }
+        }
         if (value instanceof String) {
             // we only want to accept true or false as accepted values
             String str = (String) value;
@@ -176,20 +180,50 @@ public final class ObjectHelper {
     }
 
     /**
-     * Tests whether the value is <tt>null</tt> or an empty string.
+     * Tests whether the value is <tt>null</tt> or an empty string or an empty collection/map.
      *
      * @param  value the value, if its a String it will be tested for text length as well
      * @return       true if empty
      */
-    public static boolean isEmpty(Object value) {
+    public static boolean isEmpty(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    /**
+     * Tests whether the value is <tt>null</tt> or an an empty collection
+     *
+     * @param  value the value to test
+     * @return       true if empty
+     */
+    public static boolean isEmpty(Collection<?> value) {
+        return value == null || value.isEmpty();
+    }
+
+    /**
+     * Tests whether the value is <tt>null</tt> or an an empty map
+     *
+     * @param  value the value to test
+     * @return       true if empty
+     */
+    public static boolean isEmpty(Map<?, ?> value) {
+        return value == null || value.isEmpty();
+    }
+
+    /**
+     * Tests whether the value is <tt>null</tt>, an empty string or an empty collection/map.
+     *
+     * @param  value the value, if its a String it will be tested for text length as well
+     * @return       true if empty
+     */
+    public static <T> boolean isEmpty(T value) {
         if (value == null) {
             return true;
         } else if (value instanceof String) {
-            return ((String) value).trim().isEmpty();
+            return isEmpty((String) value);
         } else if (value instanceof Collection) {
-            return ((Collection<?>) value).isEmpty();
+            return isEmpty((Collection<?>) value);
         } else if (value instanceof Map) {
-            return ((Map<?, ?>) value).isEmpty();
+            return isEmpty((Map<?, ?>) value);
         } else {
             return false;
         }
@@ -201,18 +235,38 @@ public final class ObjectHelper {
      * @param  value the value, if its a String it will be tested for text length as well
      * @return       true if <b>not</b> empty
      */
-    public static boolean isNotEmpty(Object value) {
-        if (value == null) {
-            return false;
-        } else if (value instanceof String) {
-            return !((String) value).trim().isEmpty();
-        } else if (value instanceof Collection) {
-            return !((Collection<?>) value).isEmpty();
-        } else if (value instanceof Map) {
-            return !((Map<?, ?>) value).isEmpty();
-        } else {
-            return true;
-        }
+    public static <T> boolean isNotEmpty(T value) {
+        return !isEmpty(value);
+    }
+
+    /**
+     * Tests whether the value is <b>not</b> <tt>null</tt> or an empty string
+     *
+     * @param  value the value, if its a String it will be tested for text length as well
+     * @return       true if <b>not</b> empty
+     */
+    public static boolean isNotEmpty(String value) {
+        return !isEmpty(value);
+    }
+
+    /**
+     * Tests whether the value is <tt>null</tt> or an an empty collection
+     *
+     * @param  value the value to test
+     * @return       true if empty
+     */
+    public static boolean isNotEmpty(Collection<?> value) {
+        return !isEmpty(value);
+    }
+
+    /**
+     * Tests whether the value is <tt>null</tt> or an an empty map
+     *
+     * @param  value the value to test
+     * @return       true if empty
+     */
+    public static boolean isNotEmpty(Map<?, ?> value) {
+        return !isEmpty(value);
     }
 
     /**
@@ -891,6 +945,38 @@ public final class ObjectHelper {
         return false;
     }
 
+    /**
+     * Checks if the given class has a subclass (extends or implements)
+     * 
+     * @param clazz    the class
+     * @param subClass the subclass (class or interface)
+     */
+    public static boolean isSubclass(Class<?> clazz, Class<?> subClass) {
+        if (clazz == subClass) {
+            return true;
+        }
+        if (clazz == null || subClass == null) {
+            return false;
+        }
+        for (Class<?> aClass = clazz; aClass != null; aClass = aClass.getSuperclass()) {
+            if (aClass == subClass) {
+                return true;
+            }
+            if (subClass.isInterface()) {
+                Class<?>[] interfaces = aClass.getInterfaces();
+                for (Class<?> anInterface : interfaces) {
+                    if (isSubclass(anInterface, subClass)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Used by camel-bean
+     */
     public static int arrayLength(Object[] pojo) {
         return pojo.length;
     }
@@ -918,6 +1004,31 @@ public final class ObjectHelper {
             } else if (type == char.class) {
                 rc = Character.class;
             }
+        }
+        return rc;
+    }
+
+    /**
+     * Converts wrapper type like {@link Integer} to its primitive type, i.e. int.
+     */
+    public static Class<?> convertWrapperTypeToPrimitiveType(Class<?> type) {
+        Class<?> rc = type;
+        if (type == Integer.class) {
+            rc = int.class;
+        } else if (type == Long.class) {
+            rc = long.class;
+        } else if (type == Double.class) {
+            rc = double.class;
+        } else if (type == Float.class) {
+            rc = float.class;
+        } else if (type == Short.class) {
+            rc = short.class;
+        } else if (type == Byte.class) {
+            rc = byte.class;
+        } else if (type == Boolean.class) {
+            rc = boolean.class;
+        } else if (type == Character.class) {
+            rc = char.class;
         }
         return rc;
     }
@@ -993,6 +1104,21 @@ public final class ObjectHelper {
         // getConstructors() returns only public constructors
         for (Constructor<?> ctr : type.getConstructors()) {
             if (ctr.getParameterCount() == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Does the given class have a default no-arg constructor (public or inherited).
+     */
+    public static boolean hasDefaultNoArgConstructor(Class<?> type) {
+        if (hasDefaultPublicNoArgConstructor(type)) {
+            return true;
+        }
+        for (Constructor<?> ctr : type.getDeclaredConstructors()) {
+            if (!Modifier.isPrivate(ctr.getModifiers()) && ctr.getParameterCount() == 0) {
                 return true;
             }
         }
@@ -1148,8 +1274,8 @@ public final class ObjectHelper {
      * @return       <tt>true</tt> if its a {@link Float#NaN} or {@link Double#NaN}.
      */
     public static boolean isNaN(Object value) {
-        return (value instanceof Number)
-                && (FLOAT_NAN.equals(value) || DOUBLE_NAN.equals(value));
+        return value instanceof Float && ((Float) value).isNaN()
+                || value instanceof Double && ((Double) value).isNaN();
     }
 
     /**

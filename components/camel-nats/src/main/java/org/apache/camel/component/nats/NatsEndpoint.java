@@ -28,8 +28,11 @@ import io.nats.client.Options;
 import io.nats.client.Options.Builder;
 import org.apache.camel.Category;
 import org.apache.camel.Consumer;
+import org.apache.camel.MultipleConsumersSupport;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
+import org.apache.camel.spi.HeaderFilterStrategy;
+import org.apache.camel.spi.HeaderFilterStrategyAware;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.support.DefaultEndpoint;
@@ -37,8 +40,9 @@ import org.apache.camel.support.DefaultEndpoint;
 /**
  * Send and receive messages from <a href="http://nats.io/">NATS</a> messaging system.
  */
-@UriEndpoint(firstVersion = "2.17.0", scheme = "nats", title = "Nats", syntax = "nats:topic", category = { Category.MESSAGING })
-public class NatsEndpoint extends DefaultEndpoint {
+@UriEndpoint(firstVersion = "2.17.0", scheme = "nats", title = "Nats", syntax = "nats:topic", category = { Category.MESSAGING },
+             headersClass = NatsConstants.class)
+public class NatsEndpoint extends DefaultEndpoint implements MultipleConsumersSupport, HeaderFilterStrategyAware {
 
     @UriParam
     private NatsConfiguration configuration;
@@ -60,6 +64,11 @@ public class NatsEndpoint extends DefaultEndpoint {
         return consumer;
     }
 
+    @Override
+    public boolean isMultipleConsumersSupported() {
+        return true;
+    }
+
     public ExecutorService createExecutor() {
         return getCamelContext().getExecutorServiceManager().newFixedThreadPool(this,
                 "NatsTopic[" + configuration.getTopic() + "]", configuration.getPoolSize());
@@ -78,5 +87,15 @@ public class NatsEndpoint extends DefaultEndpoint {
         }
         Options options = builder.build();
         return Nats.connect(options);
+    }
+
+    @Override
+    public HeaderFilterStrategy getHeaderFilterStrategy() {
+        return getConfiguration().getHeaderFilterStrategy();
+    }
+
+    @Override
+    public void setHeaderFilterStrategy(HeaderFilterStrategy strategy) {
+        this.getConfiguration().setHeaderFilterStrategy(strategy);
     }
 }

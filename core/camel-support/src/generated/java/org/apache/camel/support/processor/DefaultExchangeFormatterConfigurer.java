@@ -25,8 +25,12 @@ public class DefaultExchangeFormatterConfigurer extends org.apache.camel.support
         case "MaxChars": target.setMaxChars(property(camelContext, int.class, value)); return true;
         case "multiline":
         case "Multiline": target.setMultiline(property(camelContext, boolean.class, value)); return true;
+        case "plain":
+        case "Plain": target.setPlain(property(camelContext, boolean.class, value)); return true;
         case "showall":
         case "ShowAll": target.setShowAll(property(camelContext, boolean.class, value)); return true;
+        case "showallproperties":
+        case "ShowAllProperties": target.setShowAllProperties(property(camelContext, boolean.class, value)); return true;
         case "showbody":
         case "ShowBody": target.setShowBody(property(camelContext, boolean.class, value)); return true;
         case "showbodytype":
@@ -66,8 +70,12 @@ public class DefaultExchangeFormatterConfigurer extends org.apache.camel.support
         case "MaxChars": return int.class;
         case "multiline":
         case "Multiline": return boolean.class;
+        case "plain":
+        case "Plain": return boolean.class;
         case "showall":
         case "ShowAll": return boolean.class;
+        case "showallproperties":
+        case "ShowAllProperties": return boolean.class;
         case "showbody":
         case "ShowBody": return boolean.class;
         case "showbodytype":
@@ -108,8 +116,12 @@ public class DefaultExchangeFormatterConfigurer extends org.apache.camel.support
         case "MaxChars": return target.getMaxChars();
         case "multiline":
         case "Multiline": return target.isMultiline();
+        case "plain":
+        case "Plain": return target.isPlain();
         case "showall":
         case "ShowAll": return target.isShowAll();
+        case "showallproperties":
+        case "ShowAllProperties": return target.isShowAllProperties();
         case "showbody":
         case "ShowBody": return target.isShowBody();
         case "showbodytype":

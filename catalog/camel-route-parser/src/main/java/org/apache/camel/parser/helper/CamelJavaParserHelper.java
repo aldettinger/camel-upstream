@@ -121,8 +121,8 @@ public final class CamelJavaParserHelper {
         Block block = md.getBody();
         if (block != null) {
             List statements = block.statements();
-            for (int i = 0; i < statements.size(); i++) {
-                Statement stmt = (Statement) statements.get(i);
+            for (Object statement : statements) {
+                Statement stmt = (Statement) statement;
                 Expression exp = null;
                 if (stmt instanceof ReturnStatement) {
                     ReturnStatement rs = (ReturnStatement) stmt;
@@ -149,8 +149,7 @@ public final class CamelJavaParserHelper {
                     }
                     if (isRouteBuilder && cic.getAnonymousClassDeclaration() != null) {
                         List body = cic.getAnonymousClassDeclaration().bodyDeclarations();
-                        for (int j = 0; j < body.size(); j++) {
-                            Object line = body.get(j);
+                        for (Object line : body) {
                             if (line instanceof MethodDeclaration) {
                                 MethodDeclaration amd = (MethodDeclaration) line;
                                 if ("configure".equals(amd.getName().toString())) {
@@ -238,7 +237,7 @@ public final class CamelJavaParserHelper {
                 List args = mi.arguments();
                 if (args != null) {
                     for (Object arg : args) {
-                        if (isValidArgument(name, arg)) {
+                        if (isValidArgument(arg)) {
                             String routeId = getLiteralValue(clazz, block, (Expression) arg);
                             if (!Strings.isNullOrEmpty(routeId)) {
                                 int position = ((Expression) arg).getStartPosition();
@@ -258,7 +257,7 @@ public final class CamelJavaParserHelper {
                 List args = mi.arguments();
                 if (args != null) {
                     for (Object arg : args) {
-                        if (isValidArgument(name, arg)) {
+                        if (isValidArgument(arg)) {
                             extractEndpointUriFromArgument(name, clazz, block, uris, arg, strings, fields);
                         }
                     }
@@ -269,7 +268,7 @@ public final class CamelJavaParserHelper {
                 // the first argument is where the uri is
                 if (args != null && !args.isEmpty()) {
                     Object arg = args.get(0);
-                    if (isValidArgument(name, arg)) {
+                    if (isValidArgument(arg)) {
                         extractEndpointUriFromArgument(name, clazz, block, uris, arg, strings, fields);
                     }
                 }
@@ -279,7 +278,7 @@ public final class CamelJavaParserHelper {
                 // the first argument is where the uri is
                 if (args != null && !args.isEmpty()) {
                     Object arg = args.get(0);
-                    if (isValidArgument(name, arg)) {
+                    if (isValidArgument(arg)) {
                         extractEndpointUriFromArgument(name, clazz, block, uris, arg, strings, fields);
                     }
                 }
@@ -289,7 +288,7 @@ public final class CamelJavaParserHelper {
                 // the first argument is where the uri is
                 if (args != null && !args.isEmpty()) {
                     Object arg = args.get(0);
-                    if (isValidArgument(name, arg)) {
+                    if (isValidArgument(arg)) {
                         extractEndpointUriFromArgument(name, clazz, block, uris, arg, strings, fields);
                     }
                 }
@@ -302,7 +301,7 @@ public final class CamelJavaParserHelper {
                 if (args != null) {
                     for (Object arg : args) {
                         // skip if the arg is a boolean, ExchangePattern or Iterateable, type
-                        if (isValidArgument(name, arg)) {
+                        if (isValidArgument(arg)) {
                             extractEndpointUriFromArgument(name, clazz, block, uris, arg, strings, fields);
                         }
                     }
@@ -313,7 +312,7 @@ public final class CamelJavaParserHelper {
                 // the first argument is where the uri is
                 if (args != null && !args.isEmpty()) {
                     Object arg = args.get(0);
-                    if (isValidArgument(name, arg)) {
+                    if (isValidArgument(arg)) {
                         extractEndpointUriFromArgument(name, clazz, block, uris, arg, strings, fields);
                     }
                 }
@@ -323,7 +322,7 @@ public final class CamelJavaParserHelper {
                 // the first argument is where the uri is
                 if (args != null && !args.isEmpty()) {
                     Object arg = args.get(0);
-                    if (isValidArgument(name, arg)) {
+                    if (isValidArgument(arg)) {
                         extractEndpointUriFromArgument(name, clazz, block, uris, arg, strings, fields);
                     }
                 }
@@ -331,7 +330,7 @@ public final class CamelJavaParserHelper {
         }
     }
 
-    private static boolean isValidArgument(String node, Object arg) {
+    private static boolean isValidArgument(Object arg) {
         // skip boolean argument, as toD can accept a boolean value
         if (arg instanceof BooleanLiteral) {
             return false;
@@ -658,7 +657,7 @@ public final class CamelJavaParserHelper {
                     if (expression instanceof MethodInvocation) {
                         MethodInvocation mi = (MethodInvocation) expression;
                         List args = mi.arguments();
-                        if (args != null && args.size() > 0) {
+                        if (args != null && !args.isEmpty()) {
                             // the first argument has the endpoint uri
                             expression = (Expression) args.get(0);
                             return getLiteralValue(clazz, block, expression);
@@ -704,16 +703,18 @@ public final class CamelJavaParserHelper {
                     // include extended when we concat on 2 or more lines
                     List extended = ie.extendedOperands();
                     if (extended != null) {
+                        StringBuilder answerBuilder = new StringBuilder(answer);
                         for (Object ext : extended) {
                             String val3 = getLiteralValue(clazz, block, (Expression) ext);
                             if (numeric) {
                                 long num3 = val3 != null ? Long.parseLong(val3) : 0;
-                                long num = Long.parseLong(answer);
-                                answer = Long.toString(num + num3);
+                                long num = Long.parseLong(answerBuilder.toString());
+                                answerBuilder = new StringBuilder(Long.toString(num + num3));
                             } else {
-                                answer += val3 != null ? val3 : "";
+                                answerBuilder.append(val3 != null ? val3 : "");
                             }
                         }
+                        answer = answerBuilder.toString();
                     }
                 }
             }

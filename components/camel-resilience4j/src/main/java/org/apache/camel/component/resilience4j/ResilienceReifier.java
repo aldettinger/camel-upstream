@@ -67,8 +67,8 @@ public class ResilienceReifier extends ProcessorReifier<CircuitBreakerDefinition
         ResilienceProcessor answer = new ResilienceProcessor(cbConfig, bhConfig, tlConfig, processor, fallback);
         configureTimeoutExecutorService(answer, config);
         // using any existing circuit breakers?
-        if (config.getCircuitBreakerRef() != null) {
-            CircuitBreaker cb = mandatoryLookup(parseString(config.getCircuitBreakerRef()), CircuitBreaker.class);
+        if (config.getCircuitBreaker() != null) {
+            CircuitBreaker cb = mandatoryLookup(parseString(config.getCircuitBreaker()), CircuitBreaker.class);
             answer.setCircuitBreaker(cb);
         }
         return answer;
@@ -120,7 +120,12 @@ public class ResilienceReifier extends ProcessorReifier<CircuitBreakerDefinition
             builder.maxConcurrentCalls(parseInt(config.getBulkheadMaxConcurrentCalls()));
         }
         if (config.getBulkheadMaxWaitDuration() != null) {
-            builder.maxWaitDuration(Duration.ofMillis(parseLong(config.getBulkheadMaxWaitDuration())));
+            long duration = parseLong(config.getBulkheadMaxWaitDuration());
+            if (duration <= 0) {
+                builder.maxWaitDuration(Duration.ZERO);
+            } else {
+                builder.maxWaitDuration(Duration.ofMillis(duration));
+            }
         }
         return builder.build();
     }
@@ -145,10 +150,10 @@ public class ResilienceReifier extends ProcessorReifier<CircuitBreakerDefinition
             return;
         }
 
-        if (config.getTimeoutExecutorServiceRef() != null) {
-            String ref = config.getTimeoutExecutorServiceRef();
+        if (config.getTimeoutExecutorService() != null) {
+            String ref = config.getTimeoutExecutorService();
             boolean shutdownThreadPool = false;
-            ExecutorService executorService = lookup(ref, ExecutorService.class);
+            ExecutorService executorService = lookupByNameAndType(ref, ExecutorService.class);
             if (executorService == null) {
                 executorService = lookupExecutorServiceRef("CircuitBreaker", definition, ref);
                 shutdownThreadPool = true;
@@ -173,14 +178,14 @@ public class ResilienceReifier extends ProcessorReifier<CircuitBreakerDefinition
         // camel context takes the precedence over those in the registry
         loadProperties(properties, Suppliers.firstNotNull(
                 () -> camelContext.getExtension(Model.class).getResilience4jConfiguration(null),
-                () -> lookup(ResilienceConstants.DEFAULT_RESILIENCE_CONFIGURATION_ID,
+                () -> lookupByNameAndType(ResilienceConstants.DEFAULT_RESILIENCE_CONFIGURATION_ID,
                         Resilience4jConfigurationDefinition.class)),
                 configurer);
 
         // Extract properties from referenced configuration, the one configured
         // on camel context takes the precedence over those in the registry
-        if (definition.getConfigurationRef() != null) {
-            final String ref = parseString(definition.getConfigurationRef());
+        if (definition.getConfiguration() != null) {
+            final String ref = parseString(definition.getConfiguration());
 
             loadProperties(properties, Suppliers.firstNotNull(
                     () -> camelContext.getExtension(Model.class).getResilience4jConfiguration(ref),

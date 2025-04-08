@@ -32,10 +32,10 @@ import org.apache.camel.component.salesforce.SalesforceEndpoint;
 import org.apache.camel.component.salesforce.api.SalesforceException;
 import org.apache.camel.component.salesforce.api.TypeReferences;
 import org.apache.camel.component.salesforce.api.dto.AbstractDTOBase;
+import org.apache.camel.component.salesforce.api.dto.AbstractQueryRecordsBase;
 import org.apache.camel.component.salesforce.api.dto.CreateSObjectResult;
 import org.apache.camel.component.salesforce.api.dto.GlobalObjects;
 import org.apache.camel.component.salesforce.api.dto.Limits;
-import org.apache.camel.component.salesforce.api.dto.RestResources;
 import org.apache.camel.component.salesforce.api.dto.SObjectBasicInfo;
 import org.apache.camel.component.salesforce.api.dto.SObjectDescription;
 import org.apache.camel.component.salesforce.api.dto.SearchResult2;
@@ -46,7 +46,7 @@ import org.apache.camel.component.salesforce.api.utils.JsonUtils;
 
 public class JsonRestProcessor extends AbstractRestProcessor {
 
-    private static final String RESPONSE_TYPE = JsonRestProcessor.class.getName() + ".responseType";
+    public static final String HEADER_SALESFORCE_QUERY_RESULT_TOTAL_SIZE = "CamelSalesforceQueryResultTotalSize";
 
     // it is ok to use a single thread safe ObjectMapper
     private final ObjectMapper objectMapper;
@@ -72,7 +72,8 @@ public class JsonRestProcessor extends AbstractRestProcessor {
 
             case GET_RESOURCES:
                 // handle in built response types
-                exchange.setProperty(RESPONSE_CLASS, RestResources.class);
+                exchange.setProperty(RESPONSE_TYPE, new TypeReference<Map<String, String>>() {
+                });
                 break;
 
             case GET_GLOBAL_OBJECTS:
@@ -181,13 +182,15 @@ public class JsonRestProcessor extends AbstractRestProcessor {
         try {
             final Message out = exchange.getOut();
             final Message in = exchange.getIn();
-            out.copyFromWithNewBody(in, null);
+            out.copyFrom(in);
             out.getHeaders().putAll(headers);
 
             if (ex != null) {
-                // if an exception is reported we should not loose it
+                // if an exception is reported we should not lose it
                 if (shouldReport(ex)) {
                     exchange.setException(ex);
+                } else {
+                    out.setBody(null);
                 }
             } else if (responseEntity != null) {
                 // do we need to un-marshal a response
@@ -226,5 +229,53 @@ public class JsonRestProcessor extends AbstractRestProcessor {
             callback.done(false);
         }
 
+    }
+
+    @Override
+    protected void processStreamResultResponse(
+            Exchange exchange, InputStream responseEntity, Map<String, String> headers, SalesforceException ex,
+            AsyncCallback callback) {
+        // process JSON response for TypeReference
+        try {
+            final Message out = exchange.getOut();
+            final Message in = exchange.getIn();
+            out.copyFrom(in);
+            out.getHeaders().putAll(headers);
+
+            if (ex != null) {
+                // if an exception is reported we should not lose it
+                if (shouldReport(ex)) {
+                    exchange.setException(ex);
+                } else {
+                    out.setBody(null);
+                }
+            } else if (responseEntity != null) {
+                // do we need to un-marshal a response
+                final AbstractQueryRecordsBase<?> response;
+                Class<?> responseClass = exchange.getProperty(RESPONSE_CLASS, Class.class);
+                response = (AbstractQueryRecordsBase<?>) objectMapper.readValue(responseEntity, responseClass);
+                out.setHeader(HEADER_SALESFORCE_QUERY_RESULT_TOTAL_SIZE, response.getTotalSize());
+                QueryResultIterator iterator
+                        = new QueryResultIterator(
+                                objectMapper, responseClass, restClient, determineHeaders(exchange), response);
+                out.setBody(iterator);
+            }
+        } catch (IOException e) {
+            String msg = "Error parsing JSON response: " + e.getMessage();
+            exchange.setException(new SalesforceException(msg, e));
+        } finally {
+            exchange.removeProperty(RESPONSE_CLASS);
+            exchange.removeProperty(RESPONSE_TYPE);
+
+            try {
+                if (responseEntity != null) {
+                    responseEntity.close();
+                }
+            } catch (IOException ignored) {
+            }
+
+            // notify callback that exchange is done
+            callback.done(false);
+        }
     }
 }

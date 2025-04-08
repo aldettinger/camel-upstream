@@ -23,6 +23,7 @@ import java.util.TreeMap;
 import java.util.concurrent.Future;
 
 import org.apache.camel.Exchange;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.Message;
 import org.apache.camel.spi.Configurer;
 import org.apache.camel.spi.ExchangeFormatter;
@@ -30,7 +31,6 @@ import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriParams;
 import org.apache.camel.support.MessageHelper;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.camel.util.StringHelper;
 
 /**
  * Default {@link ExchangeFormatter} that have fine grained options to configure what to include in the output.
@@ -53,8 +53,10 @@ public class DefaultExchangeFormatter implements ExchangeFormatter {
     @UriParam(label = "formatting", defaultValue = "true",
               description = "Shows the Message Exchange Pattern (or MEP for short).")
     private boolean showExchangePattern = true;
-    @UriParam(label = "formatting", description = "Show the exchange properties.")
+    @UriParam(label = "formatting", description = "Show the exchange properties (only custom).")
     private boolean showProperties;
+    @UriParam(label = "formatting", description = "Show all the exchange properties (both internal and custom).")
+    private boolean showAllProperties;
     @UriParam(label = "formatting", description = "Show the message headers.")
     private boolean showHeaders;
     @UriParam(label = "formatting", defaultValue = "true",
@@ -94,6 +96,8 @@ public class DefaultExchangeFormatter implements ExchangeFormatter {
     @UriParam(label = "formatting", enums = "Default,Tab,Fixed", defaultValue = "Default",
               description = "Sets the outputs style to use.")
     private OutputStyle style = OutputStyle.Default;
+    @UriParam(defaultValue = "false", description = "If enabled only the body will be printed out")
+    private boolean plain;
 
     private StringBuilder style(StringBuilder sb, String label) {
         if (style == OutputStyle.Default) {
@@ -116,6 +120,11 @@ public class DefaultExchangeFormatter implements ExchangeFormatter {
         Message in = exchange.getIn();
 
         StringBuilder sb = new StringBuilder();
+
+        if (plain) {
+            return getBodyAsString(in);
+        }
+
         if (showAll || showExchangeId) {
             if (multiline) {
                 sb.append(SEPARATOR);
@@ -129,7 +138,12 @@ public class DefaultExchangeFormatter implements ExchangeFormatter {
             style(sb, "ExchangePattern").append(exchange.getPattern());
         }
 
-        if (showAll || showProperties) {
+        if (showAll || showAllProperties) {
+            if (multiline) {
+                sb.append(SEPARATOR);
+            }
+            style(sb, "Properties").append(sortMap(filterHeaderAndProperties(exchange.getAllProperties())));
+        } else if (showProperties) {
             if (multiline) {
                 sb.append(SEPARATOR);
             }
@@ -152,8 +166,8 @@ public class DefaultExchangeFormatter implements ExchangeFormatter {
                 sb.append(SEPARATOR);
             }
             String body = getBodyAsString(in);
-            if (skipBodyLineSeparator) {
-                body = StringHelper.replaceAll(body, LS, "");
+            if (skipBodyLineSeparator && body != null) {
+                body = body.replace(LS, "");
             }
             style(sb, "Body").append(body);
         }
@@ -165,7 +179,7 @@ public class DefaultExchangeFormatter implements ExchangeFormatter {
             boolean caught = false;
             if ((showAll || showCaughtException) && exception == null) {
                 // fallback to caught exception
-                exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
+                exception = exchange.getProperty(ExchangePropertyKey.EXCEPTION_CAUGHT, Exception.class);
                 caught = true;
             }
 
@@ -189,7 +203,7 @@ public class DefaultExchangeFormatter implements ExchangeFormatter {
         }
 
         // only cut if we hit max-chars limit (or are using multiline
-        if (multiline || (maxChars > 0 && sb.length() > maxChars)) {
+        if (multiline || maxChars > 0 && sb.length() > maxChars) {
             StringBuilder answer = new StringBuilder();
             for (String s : sb.toString().split(SEPARATOR)) {
                 if (s != null) {
@@ -248,10 +262,21 @@ public class DefaultExchangeFormatter implements ExchangeFormatter {
     }
 
     /**
-     * Show the exchange properties.
+     * Show the exchange properties (only custom). Use showAllProperties to show both internal and custom properties.
      */
     public void setShowProperties(boolean showProperties) {
         this.showProperties = showProperties;
+    }
+
+    public boolean isShowAllProperties() {
+        return showAllProperties;
+    }
+
+    /**
+     * Show all of the exchange properties (both internal and custom).
+     */
+    public void setShowAllProperties(boolean showAllProperties) {
+        this.showAllProperties = showAllProperties;
     }
 
     public boolean isShowHeaders() {
@@ -423,6 +448,17 @@ public class DefaultExchangeFormatter implements ExchangeFormatter {
      */
     public void setStyle(OutputStyle style) {
         this.style = style;
+    }
+
+    public boolean isPlain() {
+        return plain;
+    }
+
+    /**
+     * If enabled only the body will be printed out
+     */
+    public void setPlain(boolean plain) {
+        this.plain = plain;
     }
 
     // Implementation methods

@@ -34,7 +34,8 @@ import org.slf4j.LoggerFactory;
  * Communicate with Salesforce using Java DTOs.
  */
 @UriEndpoint(firstVersion = "2.12.0", scheme = "salesforce", title = "Salesforce",
-             syntax = "salesforce:operationName:topicName", category = { Category.CLOUD, Category.API, Category.CRM })
+             syntax = "salesforce:operationName:topicName", category = { Category.CLOUD, Category.API, Category.CRM },
+             headersClass = SalesforceConstants.class)
 public class SalesforceEndpoint extends DefaultEndpoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(SalesforceEndpoint.class);
@@ -48,10 +49,14 @@ public class SalesforceEndpoint extends DefaultEndpoint {
             + "createBatchQuery,getQueryResultIds,getQueryResult,getRecentReports,"
             + "getReportDescription,executeSyncReport,executeAsyncReport,getReportInstances,"
             + "getReportResults,limits,approval,approvals,composite-tree,composite-batch,composite,"
+            + "compositeRetrieveSObjectCollections,compositeCreateSObjectCollections,"
+            + "compositeUpdateSObjectCollections,compositeUpsertSObjectCollections,"
+            + "compositeDeleteSObjectCollections,"
             + "bulk2GetAllJobs,bulk2CreateJob,bulk2GetJob,bulk2CreateBatch,bulk2CloseJob,"
             + "bulk2AbortJob,bulk2DeleteJob,bulk2GetSuccessfulResults,bulk2GetFailedResults,"
             + "bulk2GetUnprocessedRecords,bulk2CreateQueryJob,bulk2GetQueryJob,"
-            + "bulk2GetAllQueryJobs,bulk2GetQueryJobResults,bulk2AbortQueryJob,bulk2DeleteQueryJob")
+            + "bulk2GetAllQueryJobs,bulk2GetQueryJobResults,bulk2AbortQueryJob,bulk2DeleteQueryJob,"
+            + "raw")
     private final OperationName operationName;
     //CHECKSTYLE:ON
     @UriPath(label = "consumer", description = "The name of the topic/channel to use")

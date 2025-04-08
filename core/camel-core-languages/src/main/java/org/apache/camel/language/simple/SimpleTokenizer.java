@@ -33,12 +33,14 @@ public final class SimpleTokenizer {
 
     // optimise to be able to quick check for start functions
     private static final String[] FUNCTION_START = new String[] { "${", "$simple{" };
+    // optimise to be able to quick check for end function
+    private static final String FUNCTION_END = "}";
 
     static {
         // add known tokens
-        KNOWN_TOKENS[0] = new SimpleTokenType(TokenType.functionStart, "${");
-        KNOWN_TOKENS[1] = new SimpleTokenType(TokenType.functionStart, "$simple{");
-        KNOWN_TOKENS[2] = new SimpleTokenType(TokenType.functionEnd, "}");
+        KNOWN_TOKENS[0] = new SimpleTokenType(TokenType.functionStart, FUNCTION_START[0]);
+        KNOWN_TOKENS[1] = new SimpleTokenType(TokenType.functionStart, FUNCTION_START[1]);
+        KNOWN_TOKENS[2] = new SimpleTokenType(TokenType.functionEnd, FUNCTION_END);
         KNOWN_TOKENS[3] = new SimpleTokenType(TokenType.whiteSpace, " ");
         KNOWN_TOKENS[4] = new SimpleTokenType(TokenType.whiteSpace, "\t");
         KNOWN_TOKENS[5] = new SimpleTokenType(TokenType.whiteSpace, "\n");
@@ -108,6 +110,20 @@ public final class SimpleTokenizer {
     public static boolean hasFunctionStartToken(String expression) {
         if (expression != null) {
             return expression.contains(FUNCTION_START[0]) || expression.contains(FUNCTION_START[1]);
+        }
+        return false;
+    }
+
+    /**
+     * Does the expression include an escape tokens.
+     *
+     * @param  expression the expression
+     * @return            <tt>true</tt> if one or more escape tokens is included in the expression
+     */
+    public static boolean hasEscapeToken(String expression) {
+        if (expression != null) {
+            return expression.contains("\\n") || expression.contains("\\t") || expression.contains("\\r")
+                    || expression.contains("\\}");
         }
         return false;
     }

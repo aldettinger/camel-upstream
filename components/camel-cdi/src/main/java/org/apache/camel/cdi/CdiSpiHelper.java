@@ -34,6 +34,8 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import javax.enterprise.inject.Any;
+import javax.enterprise.inject.Default;
 import javax.enterprise.inject.spi.Annotated;
 import javax.enterprise.inject.spi.AnnotatedConstructor;
 import javax.enterprise.inject.spi.AnnotatedField;
@@ -45,6 +47,7 @@ import javax.enterprise.inject.spi.BeanManager;
 import javax.enterprise.util.Nonbinding;
 
 import org.apache.camel.CamelContext;
+import org.apache.camel.RuntimeCamelException;
 
 import static java.security.AccessController.doPrivileged;
 import static java.util.Comparator.comparing;
@@ -52,8 +55,6 @@ import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.collectingAndThen;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toSet;
-import static org.apache.camel.cdi.AnyLiteral.ANY;
-import static org.apache.camel.cdi.DefaultLiteral.DEFAULT;
 
 @Vetoed
 final class CdiSpiHelper {
@@ -131,9 +132,9 @@ final class CdiSpiHelper {
                 .collect(collectingAndThen(toSet(),
                         qualifiers -> {
                             if (qualifiers.isEmpty()) {
-                                qualifiers.add(DEFAULT);
+                                qualifiers.add(Default.Literal.INSTANCE);
                             }
-                            qualifiers.add(ANY);
+                            qualifiers.add(Any.Literal.INSTANCE);
                             return qualifiers;
                         }));
     }
@@ -216,9 +217,10 @@ final class CdiSpiHelper {
                                 joiner.add(method.getName() + "=" + method.invoke(annotation).toString());
                             } catch (NullPointerException | IllegalArgumentException | IllegalAccessException
                                      | InvocationTargetException cause) {
-                                throw new RuntimeException(
+                                throw new RuntimeCamelException(
                                         "Error while accessing member [" + method.getName() + "]"
-                                                           + " of annotation [" + annotation.annotationType().getName() + "]",
+                                                                + " of annotation [" + annotation.annotationType().getName()
+                                                                + "]",
                                         cause);
                             }
                         },

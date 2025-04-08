@@ -26,7 +26,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 import org.apache.camel.Exchange;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.RuntimeExchangeException;
+import org.apache.camel.component.ahc.AhcConstants;
 import org.apache.camel.component.ahc.AhcEndpoint;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.URISupport;
@@ -81,7 +83,7 @@ public final class AhcHelper {
 
     public static void setCharsetFromContentType(String contentType, Exchange exchange) {
         if (contentType != null) {
-            exchange.setProperty(Exchange.CHARSET_NAME, IOHelper.getCharsetNameFromContentType(contentType));
+            exchange.setProperty(ExchangePropertyKey.CHARSET_NAME, IOHelper.getCharsetNameFromContentType(contentType));
         }
     }
 
@@ -103,35 +105,24 @@ public final class AhcHelper {
     private static String doCreateURL(Exchange exchange, AhcEndpoint endpoint) {
         String uri = null;
         if (!(endpoint.isBridgeEndpoint())) {
-            uri = exchange.getIn().getHeader(Exchange.HTTP_URI, String.class);
+            uri = exchange.getIn().getHeader(AhcConstants.HTTP_URI, String.class);
         }
         if (uri == null) {
             uri = endpoint.getHttpUri().toASCIIString();
         }
 
         // resolve placeholders in uri
-        try {
-            uri = exchange.getContext().resolvePropertyPlaceholders(uri);
-        } catch (Exception e) {
-            throw new RuntimeExchangeException("Cannot resolve property placeholders with uri: " + uri, exchange, e);
-        }
+        uri = resolvePlaceholdersInURI(exchange, uri);
 
         // append HTTP_PATH to HTTP_URI if it is provided in the header
-        String path = exchange.getIn().getHeader(Exchange.HTTP_PATH, String.class);
+        String path = exchange.getIn().getHeader(AhcConstants.HTTP_PATH, String.class);
         if (path != null) {
             if (path.startsWith("/")) {
                 URI baseURI;
-                String baseURIString = exchange.getIn().getHeader(Exchange.HTTP_BASE_URI, String.class);
+
                 try {
-                    if (baseURIString == null) {
-                        if (exchange.getFromEndpoint() != null) {
-                            baseURIString = exchange.getFromEndpoint().getEndpointUri();
-                        } else {
-                            // will set a default one for it
-                            baseURIString = "/";
-                        }
-                    }
-                    baseURI = new URI(baseURIString);
+                    baseURI = getBaseURI(exchange);
+
                     String basePath = baseURI.getPath();
                     if (path.startsWith(basePath)) {
                         path = path.substring(basePath.length());
@@ -164,6 +155,30 @@ public final class AhcHelper {
         return uri;
     }
 
+    private static URI getBaseURI(Exchange exchange) throws URISyntaxException {
+        URI baseURI;
+        String baseURIString = exchange.getIn().getHeader(AhcConstants.HTTP_BASE_URI, String.class);
+        if (baseURIString == null) {
+            if (exchange.getFromEndpoint() != null) {
+                baseURIString = exchange.getFromEndpoint().getEndpointUri();
+            } else {
+                // will set a default one for it
+                baseURIString = "/";
+            }
+        }
+        baseURI = new URI(baseURIString);
+        return baseURI;
+    }
+
+    private static String resolvePlaceholdersInURI(Exchange exchange, String uri) {
+        try {
+            uri = exchange.getContext().resolvePropertyPlaceholders(uri);
+        } catch (Exception e) {
+            throw new RuntimeExchangeException("Cannot resolve property placeholders with uri: " + uri, exchange, e);
+        }
+        return uri;
+    }
+
     /**
      * Creates the URI to invoke.
      *
@@ -175,7 +190,7 @@ public final class AhcHelper {
     public static URI createURI(Exchange exchange, String url, AhcEndpoint endpoint) throws URISyntaxException {
         URI uri = new URI(url);
         // is a query string provided in the endpoint URI or in a header (header overrules endpoint)
-        String queryString = exchange.getIn().getHeader(Exchange.HTTP_QUERY, String.class);
+        String queryString = exchange.getIn().getHeader(AhcConstants.HTTP_QUERY, String.class);
         if (queryString == null) {
             queryString = endpoint.getHttpUri().getRawQuery();
         }

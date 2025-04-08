@@ -75,21 +75,21 @@ public class ZipFileSplitAndDeleteTest extends CamelTestSupport {
     }
 
     @Override
-    protected RoutesBuilder createRouteBuilder() throws Exception {
+    protected RoutesBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 ZipFileDataFormat dataFormat = new ZipFileDataFormat();
                 dataFormat.setUsingIterator(true);
 
-                from("file://target/testDeleteZipFileWhenUnmarshalWithDataFormat?delete=true")
+                from("file://target/testDeleteZipFileWhenUnmarshalWithDataFormat?delay=10&delete=true")
                         .unmarshal(dataFormat)
                         .split(bodyAs(Iterator.class)).streaming()
                         .convertBodyTo(String.class)
                         .to("mock:end")
                         .end();
 
-                from("file://target/testDeleteZipFileWhenUnmarshalWithSplitter?delete=true")
+                from("file://target/testDeleteZipFileWhenUnmarshalWithSplitter?delay=10&delete=true")
                         .split(new ZipSplitter()).streaming()
                         .convertBodyTo(String.class)
                         .to("mock:end")

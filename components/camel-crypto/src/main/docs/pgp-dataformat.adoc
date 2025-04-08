@@ -1,11 +1,12 @@
-[[pgp-dataformat]]
 = PGP DataFormat
-:docTitle: PGP
-:artifactId: camel-crypto
+:doctitle: PGP
+:shortname: pgp
+:artifactid: camel-crypto
 :description: Encrypt and decrypt messages using Java Cryptographic Extension (JCE) and PGP.
 :since: 2.9
-:supportLevel: Stable
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/dataformats/pgp.adoc[opts=optional]
+:supportlevel: Stable
+//Manually maintained attributes
+:camel-spring-boot-name: crypto
 
 *Since Camel {since}*
 
@@ -20,28 +21,7 @@ the original plaintext. This data format implements only symmetric
 == PGPDataFormat Options
 
 // dataformat options: START
-The PGP dataformat supports 14 options, which are listed below.
-
-
-
-[width="100%",cols="2s,1m,1m,6",options="header"]
-|===
-| Name | Default | Java Type | Description
-| keyUserid |  | String | The user ID of the key in the PGP keyring used during encryption. Can also be only a part of a user ID. For example, if the user ID is Test User then you can use the part Test User or to address the user ID.
-| signatureKeyUserid |  | String | User ID of the key in the PGP keyring used for signing (during encryption) or signature verification (during decryption). During the signature verification process the specified User ID restricts the public keys from the public keyring which can be used for the verification. If no User ID is specified for the signature verficiation then any public key in the public keyring can be used for the verification. Can also be only a part of a user ID. For example, if the user ID is Test User then you can use the part Test User or to address the User ID.
-| password |  | String | Password used when opening the private key (not used for encryption).
-| signaturePassword |  | String | Password used when opening the private key used for signing (during encryption).
-| keyFileName |  | String | Filename of the keyring; must be accessible as a classpath resource (but you can specify a location in the file system by using the file: prefix).
-| signatureKeyFileName |  | String | Filename of the keyring to use for signing (during encryption) or for signature verification (during decryption); must be accessible as a classpath resource (but you can specify a location in the file system by using the file: prefix).
-| signatureKeyRing |  | String | Keyring used for signing/verifying as byte array. You can not set the signatureKeyFileName and signatureKeyRing at the same time.
-| armored | false | Boolean | This option will cause PGP to base64 encode the encrypted text, making it available for copy/paste, etc.
-| integrity | true | Boolean | Adds an integrity check/sign into the encryption file. The default value is true.
-| provider |  | String | Java Cryptography Extension (JCE) provider, default is Bouncy Castle (BC). Alternatively you can use, for example, the IAIK JCE provider; in this case the provider must be registered beforehand and the Bouncy Castle provider must not be registered beforehand. The Sun JCE provider does not work.
-| algorithm |  | Integer | Symmetric key encryption algorithm; possible values are defined in org.bouncycastle.bcpg.SymmetricKeyAlgorithmTags; for example 2 (= TRIPLE DES), 3 (= CAST5), 4 (= BLOWFISH), 6 (= DES), 7 (= AES_128). Only relevant for encrypting.
-| compressionAlgorithm |  | Integer | Compression algorithm; possible values are defined in org.bouncycastle.bcpg.CompressionAlgorithmTags; for example 0 (= UNCOMPRESSED), 1 (= ZIP), 2 (= ZLIB), 3 (= BZIP2). Only relevant for encrypting.
-| hashAlgorithm |  | Integer | Signature hash algorithm; possible values are defined in org.bouncycastle.bcpg.HashAlgorithmTags; for example 2 (= SHA1), 8 (= SHA256), 9 (= SHA384), 10 (= SHA512), 11 (=SHA224). Only relevant for signing.
-| signatureVerificationOption |  | String | Controls the behavior for verifying the signature during unmarshaling. There are 4 values possible: optional: The PGP message may or may not contain signatures; if it does contain signatures, then a signature verification is executed. required: The PGP message must contain at least one signature; if this is not the case an exception (PGPException) is thrown. A signature verification is executed. ignore: Contained signatures in the PGP message are ignored; no signature verification is executed. no_signature_allowed: The PGP message must not contain a signature; otherwise an exception (PGPException) is thrown.
-|===
+include::partial$dataformat-options.adoc[]
 // dataformat options: END
 
 == PGPDataFormat Message Headers
@@ -129,25 +109,25 @@ if you would prefer to do it that way.
 
 Install the command line utilities on linux
 
-[source,java]
+[source,bash]
 ---------------------
 apt-get install gnupg
 ---------------------
 Create your keyring, entering a secure password
 
-[source,java]
+[source,bash]
 -------------
 gpg --gen-key
 -------------
 If you need to import someone elses public key so that you can encrypt a file for them.
 
-[source,java]
+[source,bash]
 --------------------------
 gpg --import <filename.key
 --------------------------
 The following files should now exist and can be used to run the example
 
-[source,java]
+[source,bash]
 -----------------------------------------------
 ls -l ~/.gnupg/pubring.gpg ~/.gnupg/secring.gpg
 -----------------------------------------------
@@ -261,7 +241,7 @@ from("direct:start")
 
 == Support of Sub-Keys and Key Flags in PGP Data Format Marshaler
 
-*An https://tools.ietf.org/html/rfc4880#section-12.1[OpenPGP V4 key] can
+An https://tools.ietf.org/html/rfc4880#section-12.1[OpenPGP V4 key] can
 have a primary key and sub-keys. The usage of the keys is indicated by
 the so called https://tools.ietf.org/html/rfc4880#section-5.2.3.21[Key
 Flags]. For example, you can have a primary key with two sub-keys; the
@@ -275,20 +255,20 @@ primary key and its sub-keys have the same User IDs.
 
 == Support of Custom Key Accessors
 
-*You can implement custom key accessors for encryption/signing. The
+You can implement custom key accessors for encryption/signing. The
 above PGPDataFormat class selects in a certain predefined way the keys
 which should be used for signing/encryption or verifying/decryption. If
 you have special requirements how your keys should be selected you
 should use the
-https://github.com/apache/camel/blob/master/components/camel-crypto/src/main/java/org/apache/camel/converter/crypto/PGPKeyAccessDataFormat.java[PGPKeyAccessDataFormat]
+https://github.com/apache/camel/blob/main/components/camel-crypto/src/main/java/org/apache/camel/converter/crypto/PGPKeyAccessDataFormat.java[PGPKeyAccessDataFormat]
 class instead and implement the interfaces
-https://github.com/apache/camel/blob/master/components/camel-crypto/src/main/java/org/apache/camel/converter/crypto/PGPPublicKeyAccessor.java[PGPPublicKeyAccessor]
+https://github.com/apache/camel/blob/main/components/camel-crypto/src/main/java/org/apache/camel/converter/crypto/PGPPublicKeyAccessor.java[PGPPublicKeyAccessor]
 and
-https://github.com/apache/camel/blob/master/components/camel-crypto/src/main/java/org/apache/camel/converter/crypto/PGPSecretKeyAccessor.java[PGPSecretKeyAccessor]
+https://github.com/apache/camel/blob/main/components/camel-crypto/src/main/java/org/apache/camel/converter/crypto/PGPSecretKeyAccessor.java[PGPSecretKeyAccessor]
 as beans. There are default implementations
-https://github.com/apache/camel/blob/master/components/camel-crypto/src/main/java/org/apache/camel/converter/crypto/DefaultPGPPublicKeyAccessor.java[DefaultPGPPublicKeyAccessor]
+https://github.com/apache/camel/blob/main/components/camel-crypto/src/main/java/org/apache/camel/converter/crypto/DefaultPGPPublicKeyAccessor.java[DefaultPGPPublicKeyAccessor]
 and
-https://github.com/apache/camel/blob/master/components/camel-crypto/src/main/java/org/apache/camel/converter/crypto/DefaultPGPSecretKeyAccessor.java[DefaultPGPSecretKeyAccessor]
+https://github.com/apache/camel/blob/main/components/camel-crypto/src/main/java/org/apache/camel/converter/crypto/DefaultPGPSecretKeyAccessor.java[DefaultPGPSecretKeyAccessor]
 which cache the keys, so that not every time the keyring is parsed when
 the processor is called.
 
@@ -312,4 +292,5 @@ need to add the following dependency to your pom.
 ----------------------------------------------------------
 
 
-include::camel-spring-boot::page$crypto-starter.adoc[]
+
+include::spring-boot:partial$starter.adoc[]

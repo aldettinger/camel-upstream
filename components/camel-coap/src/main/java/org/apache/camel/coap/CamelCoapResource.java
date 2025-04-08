@@ -29,8 +29,13 @@ import org.eclipse.californium.core.coap.OptionSet;
 import org.eclipse.californium.core.network.Exchange;
 import org.eclipse.californium.core.server.resources.CoapExchange;
 import org.eclipse.californium.core.server.resources.Resource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 final class CamelCoapResource extends CoapResource {
+
+    private static final Logger LOG = LoggerFactory.getLogger(CamelCoapResource.class);
+
     private final Map<String, CoAPConsumer> consumers = new ConcurrentHashMap<>();
     private final List<CamelCoapResource> possibles;
 
@@ -91,7 +96,7 @@ final class CamelCoapResource extends CoapResource {
                 return;
             }
 
-            camelExchange = consumer.getEndpoint().createExchange();
+            camelExchange = consumer.createExchange(false);
             consumer.createUoW(camelExchange);
 
             OptionSet options = exchange.getRequest().getOptions();
@@ -106,7 +111,7 @@ final class CamelCoapResource extends CoapResource {
 
             if (options.hasContentFormat()) {
                 String mt = MediaTypeRegistry.toString(options.getContentFormat());
-                camelExchange.getIn().setHeader(org.apache.camel.Exchange.CONTENT_TYPE, mt);
+                camelExchange.getIn().setHeader(CoAPConstants.CONTENT_TYPE, mt);
             }
 
             List<String> path = exchange.getRequest().getOptions().getUriPath();
@@ -135,14 +140,20 @@ final class CamelCoapResource extends CoapResource {
             consumer.getProcessor().process(camelExchange);
             Message target = camelExchange.getMessage();
 
-            int format = MediaTypeRegistry.parse(target.getHeader(org.apache.camel.Exchange.CONTENT_TYPE, String.class));
+            int format = MediaTypeRegistry.parse(target.getHeader(CoAPConstants.CONTENT_TYPE, String.class));
             cexchange.respond(ResponseCode.CONTENT, target.getBody(byte[].class), format);
 
         } catch (Exception e) {
             cexchange.respond(ResponseCode.INTERNAL_SERVER_ERROR, e.getMessage());
         } finally {
-            if (camelExchange != null) {
-                consumer.doneUoW(camelExchange);
+            if (consumer != null) {
+                if (camelExchange != null) {
+                    consumer.doneUoW(camelExchange);
+                }
+                consumer.releaseExchange(camelExchange, false);
+            } else {
+                LOG.warn(
+                        "Skipping releasing the consumer exchange because the consumer is null. It may haven't been properly created earlier - exception was thrown");
             }
         }
     }

@@ -35,39 +35,45 @@ import org.apache.camel.spi.Metadata;
 @XmlRootElement(name = "yaml")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class YAMLDataFormat extends DataFormatDefinition {
-    @XmlAttribute
-    @Metadata(defaultValue = "SnakeYAML")
-    private YAMLLibrary library = YAMLLibrary.SnakeYAML;
+
     @XmlTransient
     private ClassLoader classLoader;
     @XmlTransient
     private Class<?> unmarshalType;
+
     @XmlAttribute
+    @Metadata(defaultValue = "SnakeYAML")
+    private YAMLLibrary library = YAMLLibrary.SnakeYAML;
+    @XmlAttribute(name = "unmarshalType")
     private String unmarshalTypeName;
     @XmlAttribute
+    @Metadata(label = "advanced")
     private String constructor;
     @XmlAttribute
+    @Metadata(label = "advanced")
     private String representer;
     @XmlAttribute
+    @Metadata(label = "advanced")
     private String dumperOptions;
     @XmlAttribute
+    @Metadata(label = "advanced")
     private String resolver;
     @XmlAttribute
     @Metadata(javaType = "java.lang.Boolean", defaultValue = "true")
-    private String useApplicationContextClassLoader = Boolean.toString(true);
+    private String useApplicationContextClassLoader;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean", defaultValue = "false")
-    private String prettyFlow = Boolean.toString(false);
+    @Metadata(javaType = "java.lang.Boolean")
+    private String prettyFlow;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean", defaultValue = "false")
-    private String allowAnyType = Boolean.toString(false);
+    @Metadata(javaType = "java.lang.Boolean")
+    private String allowAnyType;
     @XmlElement(name = "typeFilter")
     private List<YAMLTypeFilterDefinition> typeFilters;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Integer", defaultValue = "50")
-    private String maxAliasesForCollections = "50";
+    @Metadata(label = "advanced", javaType = "java.lang.Integer", defaultValue = "50")
+    private String maxAliasesForCollections;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String allowRecursiveKeys;
 
     public YAMLDataFormat() {
@@ -75,14 +81,20 @@ public class YAMLDataFormat extends DataFormatDefinition {
     }
 
     public YAMLDataFormat(YAMLLibrary library) {
-        super("yaml-" + library.name().toLowerCase());
+        super(library.getDataFormatName());
         this.library = library;
     }
 
     public YAMLDataFormat(YAMLLibrary library, Class<?> unmarshalType) {
-        super("yaml-" + library.name().toLowerCase());
+        super(library.getDataFormatName());
         this.library = library;
         this.unmarshalType = unmarshalType;
+    }
+
+    @Override
+    public String getDataFormatName() {
+        // yaml data format is special as the name can be from different bundles
+        return this.library != null ? this.library.getDataFormatName() : "snakeYaml";
     }
 
     public YAMLLibrary getLibrary() {

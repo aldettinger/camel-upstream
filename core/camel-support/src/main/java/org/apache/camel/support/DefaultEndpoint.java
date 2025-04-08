@@ -58,15 +58,18 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
     @Metadata(label = "advanced", defaultValue = "true",
               description = "Whether autowiring is enabled. This is used for automatic autowiring options (the option must be marked as autowired)"
                             + " by looking up in the registry to find if there is a single instance of matching type, which then gets configured on the component."
-                            + " This can be used for automatic configuring JDBC data sources, JMS connection factories, AWS Clients, etc.")
+                            + " This can be used for automatic configuring JDBC data sources, JMS connection factories, AWS Clients, etc."
+                            + " Important: If a component has the same option defined on both component and endpoint level, then disabling"
+                            + " autowiring on endpoint level would not affect that the component will still be autowired, and therefore the endpoint"
+                            + " will be configured with option from the component level. In other words turning off autowiring would then require to turn it off on the component level.")
     private boolean autowiredEnabled = true;
-    @UriParam(label = "producer",
+    @UriParam(label = "producer,advanced",
               description = "Whether the producer should be started lazy (on the first message). By starting lazy you can use this to allow CamelContext and routes to startup"
                             + " in situations where a producer may otherwise fail during starting and cause the route to fail being started. By deferring this startup to be lazy then"
                             + " the startup failure can be handled during routing messages via Camel's routing error handlers. Beware that when the first message is processed"
                             + " then creating and starting the producer may take a little time and prolong the total processing time of the processing.")
     private boolean lazyStartProducer;
-    @UriParam(label = "consumer",
+    @UriParam(label = "consumer,advanced",
               description = "Allows for bridging the consumer to the Camel routing Error Handler, which mean any exceptions occurred while"
                             + " the consumer is trying to pickup incoming messages, or the likes, will now be processed as a message and handled by the routing Error Handler."
                             + " By default the consumer will use the org.apache.camel.spi.ExceptionHandler to deal with exceptions, that will be logged at WARN or ERROR level and ignored.")
@@ -85,6 +88,7 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
     private int pollingConsumerQueueSize = 1000;
     private boolean pollingConsumerBlockWhenFull = true;
     private long pollingConsumerBlockTimeout;
+    private boolean pollingConsumerCopy;
 
     /**
      * Constructs a fully-initialized DefaultEndpoint instance. This is the preferred method of constructing an object
@@ -94,9 +98,11 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
      * @param component   the component that created this endpoint
      */
     protected DefaultEndpoint(String endpointUri, Component component) {
-        this.camelContext = component == null ? null : component.getCamelContext();
         this.component = component;
         this.setEndpointUri(endpointUri);
+        if (component != null) {
+            this.camelContext = component.getCamelContext();
+        }
     }
 
     /**
@@ -215,28 +221,35 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
     public PollingConsumer createPollingConsumer() throws Exception {
         // should not call configurePollingConsumer when its EventDrivenPollingConsumer
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Creating EventDrivenPollingConsumer with queueSize: {} blockWhenFull: {} blockTimeout: {}",
-                    getPollingConsumerQueueSize(), isPollingConsumerBlockWhenFull(), getPollingConsumerBlockTimeout());
+            LOG.debug("Creating EventDrivenPollingConsumer with queueSize: {} blockWhenFull: {} blockTimeout: {} copy: {}",
+                    getPollingConsumerQueueSize(), isPollingConsumerBlockWhenFull(), getPollingConsumerBlockTimeout(),
+                    isPollingConsumerCopy());
         }
         EventDrivenPollingConsumer consumer = new EventDrivenPollingConsumer(this, getPollingConsumerQueueSize());
         consumer.setBlockWhenFull(isPollingConsumerBlockWhenFull());
         consumer.setBlockTimeout(getPollingConsumerBlockTimeout());
+        consumer.setCopy(isPollingConsumerCopy());
         return consumer;
     }
 
     @Override
     public Exchange createExchange() {
-        return new DefaultExchange(this, getExchangePattern());
+        return createExchange(exchangePattern);
     }
 
     @Override
     public Exchange createExchange(ExchangePattern pattern) {
-        return new DefaultExchange(this, pattern);
+        Exchange answer = new DefaultExchange(this, pattern);
+        configureExchange(answer);
+        return answer;
     }
 
-    /**
-     * Returns the default exchange pattern to use when creating an exchange.
-     */
+    @Override
+    public void configureExchange(Exchange exchange) {
+        // noop
+    }
+
+    @Override
     public ExchangePattern getExchangePattern() {
         return exchangePattern;
     }
@@ -256,7 +269,10 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
      * Whether autowiring is enabled. This is used for automatic autowiring options (the option must be marked as
      * autowired) by looking up in the registry to find if there is a single instance of matching type, which then gets
      * configured on the component. This can be used for automatic configuring JDBC data sources, JMS connection
-     * factories, AWS Clients, etc.
+     * factories, AWS Clients, etc. Important: If a component has the same option defined on both component and endpoint
+     * level, then disabling autowiring on endpoint level would not affect that the component will still be autowired,
+     * and therefore the endpoint will be configured with option from the component level. In other words turning off
+     * autowiring would then require to turn it off on the component level.
      */
     public void setAutowiredEnabled(boolean autowiredEnabled) {
         this.autowiredEnabled = autowiredEnabled;
@@ -307,13 +323,6 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
         this.exceptionHandler = exceptionHandler;
     }
 
-    /**
-     * Gets the {@link org.apache.camel.PollingConsumer} queue size, when {@link EventDrivenPollingConsumer} is being
-     * used. Notice some Camel components may have their own implementation of {@link org.apache.camel.PollingConsumer}
-     * and therefore not using the default {@link EventDrivenPollingConsumer} implementation.
-     * <p/>
-     * The default value is <tt>1000</tt>
-     */
     public int getPollingConsumerQueueSize() {
         return pollingConsumerQueueSize;
     }
@@ -329,16 +338,6 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
         this.pollingConsumerQueueSize = pollingConsumerQueueSize;
     }
 
-    /**
-     * Whether to block when adding to the internal queue off when {@link EventDrivenPollingConsumer} is being used.
-     * Notice some Camel components may have their own implementation of {@link org.apache.camel.PollingConsumer} and
-     * therefore not using the default {@link EventDrivenPollingConsumer} implementation.
-     * <p/>
-     * Setting this option to <tt>false</tt>, will result in an {@link java.lang.IllegalStateException} being thrown
-     * when trying to add to the queue, and its full.
-     * <p/>
-     * The default value is <tt>true</tt> which will block the producer queue until the queue has space.
-     */
     public boolean isPollingConsumerBlockWhenFull() {
         return pollingConsumerBlockWhenFull;
     }
@@ -349,7 +348,7 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
      * therefore not using the default {@link EventDrivenPollingConsumer} implementation.
      * <p/>
      * Setting this option to <tt>false</tt>, will result in an {@link java.lang.IllegalStateException} being thrown
-     * when trying to add to the queue, and its full.
+     * when trying to add to the queue, and it is full.
      * <p/>
      * The default value is <tt>true</tt> which will block the producer queue until the queue has space.
      */
@@ -357,12 +356,6 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
         this.pollingConsumerBlockWhenFull = pollingConsumerBlockWhenFull;
     }
 
-    /**
-     * Sets the timeout in millis to use when adding to the internal queue off when {@link EventDrivenPollingConsumer}
-     * is being used.
-     *
-     * @see #setPollingConsumerBlockWhenFull(boolean)
-     */
     public long getPollingConsumerBlockTimeout() {
         return pollingConsumerBlockTimeout;
     }
@@ -375,6 +368,25 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
      */
     public void setPollingConsumerBlockTimeout(long pollingConsumerBlockTimeout) {
         this.pollingConsumerBlockTimeout = pollingConsumerBlockTimeout;
+    }
+
+    public boolean isPollingConsumerCopy() {
+        return pollingConsumerCopy;
+    }
+
+    /**
+     * Sets whether to copy the exchange when adding to the internal queue off when {@link EventDrivenPollingConsumer}
+     * is being used.
+     *
+     * <b>Important:</b> When copy is enabled then the unit of work is handed over from the current exchange to the
+     * copied exchange instance. And therefore its the responsible of the {@link PollingConsumer} to done the unit of
+     * work on the received exchanges. When the polled exchange is no longer needed then MUST call
+     * {@link org.apache.camel.spi.UnitOfWork#done(Exchange)}.
+     *
+     * Default is false to not copy.
+     */
+    public void setPollingConsumerCopy(boolean pollingConsumerCopy) {
+        this.pollingConsumerCopy = pollingConsumerCopy;
     }
 
     @Override
@@ -404,7 +416,10 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
             configurer = ((PropertyConfigurerAware) bean).getPropertyConfigurer(bean);
         }
         // use configurer and ignore case as end users may type an option name with mixed case
-        PropertyBindingSupport.build().withConfigurer(configurer).withIgnoreCase(true).bind(camelContext, bean, parameters);
+        PropertyBindingSupport.build().withConfigurer(configurer).withIgnoreCase(true)
+                // if the endpoint is lenient then use optional
+                .withOptional(isLenientProperties())
+                .bind(camelContext, bean, parameters);
     }
 
     /**
@@ -449,9 +464,7 @@ public abstract class DefaultEndpoint extends ServiceSupport implements Endpoint
 
     protected void configureConsumer(Consumer consumer) throws Exception {
         // inject CamelContext
-        if (consumer instanceof CamelContextAware) {
-            ((CamelContextAware) consumer).setCamelContext(getCamelContext());
-        }
+        CamelContextAware.trySetCamelContext(consumer, camelContext);
 
         if (bridgeErrorHandler) {
             if (consumer instanceof DefaultConsumer) {

@@ -33,6 +33,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 
+import org.apache.camel.xml.io.util.XmlStreamReader;
+
 //TODO best handling of interning issues
 //   have isAllNewStringInterned ???
 
@@ -46,7 +48,6 @@ import java.io.Reader;
  * @author <a href="http://www.extreme.indiana.edu/~aslom/">Aleksander
  *         Slominski</a>
  */
-
 public class MXParser implements XmlPullParser {
     // NOTE: no interning of those strings --> by Java lang spec they MUST be
     // already interned
@@ -92,6 +93,7 @@ public class MXParser implements XmlPullParser {
 
     // global parser state
     protected String location;
+    protected int startLineNumber;
     protected int lineNumber;
     protected int columnNumber;
     protected boolean seenRoot;
@@ -398,6 +400,7 @@ public class MXParser implements XmlPullParser {
     protected void reset() {
         // System.out.println("reset() called");
         location = null;
+        startLineNumber = 1;
         lineNumber = 1;
         columnNumber = 0;
         seenRoot = false;
@@ -688,6 +691,10 @@ public class MXParser implements XmlPullParser {
         // +(fragment != null ? " seen "+printable(fragment)+"..." : "");
         return " " + TYPES[eventType] + (fragment != null ? " seen " + printable(fragment) + "..." : "") + " " + (location != null ? location : "") + "@" + getLineNumber() + ":"
                + getColumnNumber();
+    }
+
+    public int getStartLineNumber() {
+        return startLineNumber;
     }
 
     public int getLineNumber() {
@@ -1646,6 +1653,9 @@ public class MXParser implements XmlPullParser {
     }
 
     public int parseStartTag() throws XmlPullParserException, IOException {
+        // remember starting line number
+        startLineNumber = lineNumber;
+
         // ASSUMPTION ch is past <T
         // [40] STag ::= '<' Name (S Attribute)* S? '>'
         // [44] EmptyElemTag ::= '<' Name (S Attribute)* S? '/>'
@@ -1685,24 +1695,20 @@ public class MXParser implements XmlPullParser {
         elRawNameEnd[depth] = elLen;
         elRawNameLine[depth] = lineNumber;
 
-        String name = null;
-
         // work on prefixes and namespace URI
         String prefix = null;
         if (processNamespaces) {
             if (colonPos != -1) {
                 prefix = elPrefix[depth] = newString(buf, nameStart - bufAbsoluteStart, colonPos - nameStart);
-                name = elName[depth] = newString(buf, colonPos + 1 - bufAbsoluteStart,
+                elName[depth] = newString(buf, colonPos + 1 - bufAbsoluteStart,
                                                  // (pos -1) - (colonPos + 1));
                                                  pos - 2 - (colonPos - bufAbsoluteStart));
             } else {
                 prefix = elPrefix[depth] = null;
-                name = elName[depth] = newString(buf, nameStart - bufAbsoluteStart, elLen);
+                elName[depth] = newString(buf, nameStart - bufAbsoluteStart, elLen);
             }
         } else {
-
-            name = elName[depth] = newString(buf, nameStart - bufAbsoluteStart, elLen);
-
+            elName[depth] = newString(buf, nameStart - bufAbsoluteStart, elLen);
         }
 
         while (true) {

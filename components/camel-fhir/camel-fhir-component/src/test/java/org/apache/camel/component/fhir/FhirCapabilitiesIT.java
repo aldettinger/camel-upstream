@@ -23,8 +23,8 @@ import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.fhir.api.ExtraParameters;
 import org.apache.camel.component.fhir.internal.FhirApiCollection;
 import org.apache.camel.component.fhir.internal.FhirCapabilitiesApiMethod;
-import org.hl7.fhir.dstu3.model.CapabilityStatement;
-import org.hl7.fhir.dstu3.model.Enumerations;
+import org.hl7.fhir.r4.model.CapabilityStatement;
+import org.hl7.fhir.r4.model.Enumerations;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +43,7 @@ public class FhirCapabilitiesIT extends AbstractFhirTestSupport {
             = FhirApiCollection.getCollection().getApiName(FhirCapabilitiesApiMethod.class).getName();
 
     @Test
-    public void testOfType() throws Exception {
+    public void testOfType() {
         org.hl7.fhir.instance.model.api.IBaseConformance result = requestBody("direct://OF_TYPE", CapabilityStatement.class);
 
         LOG.debug("ofType: " + result);
@@ -52,7 +52,7 @@ public class FhirCapabilitiesIT extends AbstractFhirTestSupport {
     }
 
     @Test
-    public void testEncodeJSON() throws Exception {
+    public void testEncodeJSON() {
         Map<String, Object> headers = new HashMap<>();
         headers.put(ExtraParameters.ENCODE_JSON.getHeaderName(), Boolean.TRUE);
 
@@ -65,7 +65,7 @@ public class FhirCapabilitiesIT extends AbstractFhirTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             public void configure() {
                 // test route for ofType

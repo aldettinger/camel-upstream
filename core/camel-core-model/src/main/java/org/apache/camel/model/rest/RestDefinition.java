@@ -16,7 +16,6 @@
  */
 package org.apache.camel.model.rest;
 
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -37,10 +36,8 @@ import org.apache.camel.CamelContext;
 import org.apache.camel.ExtendedCamelContext;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.model.OptionalIdentifiedDefinition;
-import org.apache.camel.model.ProcessorDefinition;
 import org.apache.camel.model.RouteDefinition;
 import org.apache.camel.model.ToDefinition;
-import org.apache.camel.model.ToDynamicDefinition;
 import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.RestConfiguration;
 import org.apache.camel.util.FileUtil;
@@ -58,35 +55,34 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
 
     @XmlAttribute
     private String path;
-
-    @XmlAttribute
-    private String tag;
-
     @XmlAttribute
     private String consumes;
-
     @XmlAttribute
     private String produces;
-
     @XmlAttribute
-    @Metadata(defaultValue = "auto")
+    @Metadata(defaultValue = "off", enums = "off,auto,json,xml,json_xml")
     private String bindingMode;
-
     @XmlAttribute
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean", defaultValue = "false")
     private String skipBindingOnErrorCode;
-
     @XmlAttribute
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean", defaultValue = "false")
     private String clientRequestValidation;
-
     @XmlAttribute
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean", defaultValue = "false")
     private String enableCORS;
-
     @XmlAttribute
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean", defaultValue = "true")
     private String apiDocs;
-
-    @XmlElement(name = "securityDefinitions") // use the name swagger uses
+    @XmlAttribute
+    @Metadata(label = "advanced")
+    private String tag;
+    @XmlElement(name = "securityDefinitions") // use the name Swagger/OpenAPI uses
+    @Metadata(label = "security")
     private RestSecuritiesDefinition securityDefinitions;
-
+    @XmlElement
+    @Metadata(label = "security")
+    private List<SecurityDefinition> securityRequirements = new ArrayList<>();
     @XmlElementRef
     private List<VerbDefinition> verbs = new ArrayList<>();
 
@@ -174,6 +170,17 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
         this.securityDefinitions = securityDefinitions;
     }
 
+    public List<SecurityDefinition> getSecurityRequirements() {
+        return securityRequirements;
+    }
+
+    /**
+     * Sets the security requirement(s) for all endpoints.
+     */
+    public void setSecurityRequirements(List<SecurityDefinition> securityRequirements) {
+        this.securityRequirements = securityRequirements;
+    }
+
     /**
      * The HTTP verbs this REST service accepts and uses
      */
@@ -199,13 +206,12 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
     }
 
     /**
-     * Whether to enable validation of the client request to check whether the Content-Type and Accept headers from the
-     * client is supported by the Rest-DSL configuration of its consumes/produces settings.
-     * <p/>
-     * This can be turned on, to enable this check. In case of validation error, then HTTP Status codes 415 or 406 is
-     * returned.
-     * <p/>
-     * The default value is false.
+     * Whether to enable validation of the client request to check:
+     *
+     * 1) Content-Type header matches what the Rest DSL consumes; returns HTTP Status 415 if validation error. 2) Accept
+     * header matches what the Rest DSL produces; returns HTTP Status 406 if validation error. 3) Missing required data
+     * (query parameters, HTTP headers, body); returns HTTP Status 400 if validation error. 4) Parsing error of the
+     * message body (JSon, XML or Auto binding mode must be enabled); returns HTTP Status 400 if validation error.
      */
     public void setClientRequestValidation(String clientRequestValidation) {
         this.clientRequestValidation = clientRequestValidation;
@@ -230,8 +236,8 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
     }
 
     /**
-     * Whether to include or exclude the VerbDefinition in API documentation. This option will override what may be
-     * configured on a parent level
+     * Whether to include or exclude this rest operation in API documentation. This option will override what may be
+     * configured on a parent level.
      * <p/>
      * The default value is true.
      */
@@ -327,6 +333,15 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
         return this;
     }
 
+    public RestDefinition deprecated() {
+        if (!getVerbs().isEmpty()) {
+            VerbDefinition verb = getVerbs().get(getVerbs().size() - 1);
+            verb.deprecated();
+        }
+
+        return this;
+    }
+
     @Override
     public RestDefinition description(String text) {
         if (getVerbs().isEmpty()) {
@@ -365,7 +380,7 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
         return this;
     }
 
-    public RestOperationParamDefinition param() {
+    public ParamDefinition param() {
         if (getVerbs().isEmpty()) {
             throw new IllegalArgumentException("Must add verb first, such as get/post/delete");
         }
@@ -373,7 +388,7 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
         return param(verb);
     }
 
-    public RestDefinition param(RestOperationParamDefinition param) {
+    public RestDefinition param(ParamDefinition param) {
         if (getVerbs().isEmpty()) {
             throw new IllegalArgumentException("Must add verb first, such as get/post/delete");
         }
@@ -382,7 +397,7 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
         return this;
     }
 
-    public RestDefinition params(List<RestOperationParamDefinition> params) {
+    public RestDefinition params(List<ParamDefinition> params) {
         if (getVerbs().isEmpty()) {
             throw new IllegalArgumentException("Must add verb first, such as get/post/delete");
         }
@@ -391,11 +406,11 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
         return this;
     }
 
-    public RestOperationParamDefinition param(VerbDefinition verb) {
-        return new RestOperationParamDefinition(verb);
+    public ParamDefinition param(VerbDefinition verb) {
+        return new ParamDefinition(verb);
     }
 
-    public RestDefinition responseMessage(RestOperationResponseMsgDefinition msg) {
+    public RestDefinition responseMessage(ResponseMessageDefinition msg) {
         if (getVerbs().isEmpty()) {
             throw new IllegalArgumentException("Must add verb first, such as get/post/delete");
         }
@@ -404,7 +419,7 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
         return this;
     }
 
-    public RestOperationResponseMsgDefinition responseMessage() {
+    public ResponseMessageDefinition responseMessage() {
         if (getVerbs().isEmpty()) {
             throw new IllegalArgumentException("Must add verb first, such as get/post/delete");
         }
@@ -412,16 +427,39 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
         return responseMessage(verb);
     }
 
-    public RestOperationResponseMsgDefinition responseMessage(VerbDefinition verb) {
-        return new RestOperationResponseMsgDefinition(verb);
+    public ResponseMessageDefinition responseMessage(VerbDefinition verb) {
+        return new ResponseMessageDefinition(verb);
     }
 
-    public RestDefinition responseMessages(List<RestOperationResponseMsgDefinition> msgs) {
+    public RestDefinition responseMessages(List<ResponseMessageDefinition> msgs) {
         if (getVerbs().isEmpty()) {
             throw new IllegalArgumentException("Must add verb first, such as get/post/delete");
         }
         VerbDefinition verb = getVerbs().get(getVerbs().size() - 1);
         verb.getResponseMsgs().addAll(msgs);
+        return this;
+    }
+
+    public RestDefinition responseMessage(int code, String message) {
+        if (getVerbs().isEmpty()) {
+            throw new IllegalArgumentException("Must add verb first, such as get/post/delete");
+        }
+        VerbDefinition verb = getVerbs().get(getVerbs().size() - 1);
+        ResponseMessageDefinition msg = responseMessage(verb);
+        msg.setCode(String.valueOf(code));
+        msg.setMessage(message);
+        return this;
+    }
+
+    public RestDefinition responseMessage(String code, String message) {
+        if (getVerbs().isEmpty()) {
+            throw new IllegalArgumentException("Must add verb first, such as get/post/delete");
+        }
+        VerbDefinition verb = getVerbs().get(getVerbs().size() - 1);
+        ResponseMessageDefinition response = responseMessage(verb);
+        response.setCode(code);
+        response.setMessage(message);
+        verb.getResponseMsgs().add(response);
         return this;
     }
 
@@ -553,21 +591,28 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
     public RestDefinition security(String key, String scopes) {
         // add to last verb
         if (getVerbs().isEmpty()) {
-            throw new IllegalArgumentException("Must add verb first, such as get/post/delete");
+            SecurityDefinition requirement = securityRequirements
+                    .stream().filter(r -> key.equals(r.getKey())).findFirst().orElse(null);
+            if (requirement == null) {
+                requirement = new SecurityDefinition();
+                securityRequirements.add(requirement);
+                requirement.setKey(key);
+            }
+            requirement.setScopes(scopes);
+        } else {
+            VerbDefinition verb = getVerbs().get(getVerbs().size() - 1);
+            SecurityDefinition sd = new SecurityDefinition();
+            sd.setKey(key);
+            sd.setScopes(scopes);
+            verb.getSecurity().add(sd);
         }
 
-        VerbDefinition verb = getVerbs().get(getVerbs().size() - 1);
-        SecurityDefinition sd = new SecurityDefinition();
-        sd.setKey(key);
-        sd.setScopes(scopes);
-        verb.getSecurity().add(sd);
         return this;
     }
 
     /**
-     * Routes directly to the given static endpoint.
-     * <p/>
-     * If you need additional routing capabilities, then use {@link #route()} instead.
+     * The Camel endpoint this REST service will call, such as a direct endpoint to link to an existing route that
+     * handles this REST call.
      *
      * @param  uri the uri of the endpoint
      * @return     this builder
@@ -586,41 +631,6 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
     }
 
     /**
-     * Routes directly to the given dynamic endpoint.
-     * <p/>
-     * If you need additional routing capabilities, then use {@link #route()} instead.
-     *
-     * @param  uri the uri of the endpoint
-     * @return     this builder
-     */
-    public RestDefinition toD(String uri) {
-        // add to last verb
-        if (getVerbs().isEmpty()) {
-            throw new IllegalArgumentException("Must add verb first, such as get/post/delete");
-        }
-
-        ToDynamicDefinition to = new ToDynamicDefinition(uri);
-
-        VerbDefinition verb = getVerbs().get(getVerbs().size() - 1);
-        verb.setToD(to);
-        return this;
-    }
-
-    public RouteDefinition route() {
-        // add to last verb
-        if (getVerbs().isEmpty()) {
-            throw new IllegalArgumentException("Must add verb first, such as get/post/delete");
-        }
-
-        // link them together so we can navigate using Java DSL
-        RouteDefinition route = new RouteDefinition();
-        route.setRestDefinition(this);
-        VerbDefinition verb = getVerbs().get(getVerbs().size() - 1);
-        verb.setRoute(route);
-        return route;
-    }
-
-    /**
      * Build the from endpoint uri for the verb
      */
     public String buildFromUri(VerbDefinition verb) {
@@ -634,24 +644,23 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
         VerbDefinition answer;
 
         if ("get".equals(verb)) {
-            answer = new GetVerbDefinition();
+            answer = new GetDefinition();
         } else if ("post".equals(verb)) {
-            answer = new PostVerbDefinition();
+            answer = new PostDefinition();
         } else if ("delete".equals(verb)) {
-            answer = new DeleteVerbDefinition();
+            answer = new DeleteDefinition();
         } else if ("head".equals(verb)) {
-            answer = new HeadVerbDefinition();
+            answer = new HeadDefinition();
         } else if ("put".equals(verb)) {
-            answer = new PutVerbDefinition();
+            answer = new PutDefinition();
         } else if ("patch".equals(verb)) {
-            answer = new PatchVerbDefinition();
+            answer = new PatchDefinition();
         } else {
-            answer = new VerbDefinition();
-            answer.setMethod(verb);
+            throw new IllegalArgumentException("Verb " + verb + " not supported");
         }
         getVerbs().add(answer);
         answer.setRest(this);
-        answer.setUri(uri);
+        answer.setPath(uri);
         return this;
     }
 
@@ -681,8 +690,8 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
         Set<String> paths = new HashSet<>();
         for (VerbDefinition verb : verbs) {
             String path = verb.asVerb();
-            if (verb.getUri() != null) {
-                path += ":" + verb.getUri();
+            if (verb.getPath() != null) {
+                path += ":" + verb.getPath();
             }
             if (!paths.add(path)) {
                 throw new IllegalArgumentException("Duplicate verb detected in rest-dsl: " + path);
@@ -726,33 +735,19 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
 
         // create the from endpoint uri which is using the rest-api component
         String from = "rest-api:" + configuration.getApiContextPath();
+        String routeId = answer.idOrCreate(camelContext.adapt(ExtendedCamelContext.class).getNodeIdFactory());
 
         // append options
         Map<String, Object> options = new HashMap<>();
-
-        String routeId = configuration.getApiContextRouteId();
-        if (routeId == null) {
-            routeId = answer.idOrCreate(camelContext.adapt(ExtendedCamelContext.class).getNodeIdFactory());
-        }
-        options.put("routeId", routeId);
         if (configuration.getComponent() != null && !configuration.getComponent().isEmpty()) {
             options.put("consumerComponentName", configuration.getComponent());
         }
-        if (configuration.getComponent() != null && !configuration.getComponent().isEmpty()) {
-            options.put("producerComponentName", configuration.getProducerComponent());
-        }
-        if (configuration.getApiContextIdPattern() != null) {
-            options.put("contextIdPattern", configuration.getApiContextIdPattern());
-        }
-
         if (!options.isEmpty()) {
-            String query;
             try {
-                query = URISupport.createQueryString(options);
-            } catch (URISyntaxException e) {
+                from = URISupport.appendParametersToURI(from, options);
+            } catch (Exception e) {
                 throw RuntimeCamelException.wrapRuntimeCamelException(e);
             }
-            from = from + "?" + query;
         }
 
         // we use the same uri as the producer (so we have a little route for
@@ -769,15 +764,12 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
     private void addRouteDefinition(
             CamelContext camelContext, List<RouteDefinition> answer, String component, String producerComponent) {
         for (VerbDefinition verb : getVerbs()) {
-            // either the verb has a singular to or a embedded route
-            RouteDefinition route = verb.getRoute();
-            if (route == null) {
-                // it was a singular to, so add a new route and add the singular
-                // to as output to this route
-                route = new RouteDefinition();
-                ProcessorDefinition def = verb.getTo() != null ? verb.getTo() : verb.getToD();
-                route.getOutputs().add(def);
+            // use a route as facade for this REST service
+            RouteDefinition route = new RouteDefinition();
+            if (verb.getTo() == null) {
+                throw new IllegalArgumentException("Rest service: " + verb + " must have to endpoint configured.");
             }
+            route.getOutputs().add(verb.getTo());
 
             // add the binding
             RestBindingDefinition binding = new RestBindingDefinition();
@@ -817,7 +809,7 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
             } else {
                 binding.setEnableCORS(getEnableCORS());
             }
-            for (RestOperationParamDefinition param : verb.getParams()) {
+            for (ParamDefinition param : verb.getParams()) {
                 // register all the default values for the query and header parameters
                 RestParamType type = param.getType();
                 if ((RestParamType.query == type || RestParamType.header == type)
@@ -838,9 +830,6 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
             }
 
             route.setRestBindingDefinition(binding);
-
-            // create the from endpoint uri which is using the rest component
-            String from = buildFromUri(verb);
 
             // append options
             Map<String, Object> options = new HashMap<>();
@@ -888,65 +877,30 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
                 options.put("description", description);
             }
 
-            if (!options.isEmpty()) {
-                String query;
-                try {
-                    query = URISupport.createQueryString(options);
-                } catch (URISyntaxException e) {
-                    throw RuntimeCamelException.wrapRuntimeCamelException(e);
-                }
-                from = from + "?" + query;
-            }
-
             String path = getPath();
             String s1 = FileUtil.stripTrailingSeparator(path);
-            String s2 = FileUtil.stripLeadingSeparator(verb.getUri());
+            String s2 = FileUtil.stripLeadingSeparator(verb.getPath());
             String allPath;
             if (s1 != null && s2 != null) {
                 allPath = s1 + "/" + s2;
             } else if (path != null) {
                 allPath = path;
             } else {
-                allPath = verb.getUri();
+                allPath = verb.getPath();
             }
 
             // each {} is a parameter (url templating)
-            if (allPath != null) {
-                String[] arr = allPath.split("\\/");
-                for (String a : arr) {
-                    // need to resolve property placeholders first
-                    try {
-                        a = camelContext.resolvePropertyPlaceholders(a);
-                    } catch (Exception e) {
-                        throw RuntimeCamelException.wrapRuntimeCamelException(e);
-                    }
-
-                    Matcher m = Pattern.compile("\\{(.*?)\\}").matcher(a);
-                    while (m.find()) {
-                        String key = m.group(1);
-                        //  merge if exists
-                        boolean found = false;
-                        for (RestOperationParamDefinition param : verb.getParams()) {
-                            // name is mandatory
-                            String name = param.getName();
-                            StringHelper.notEmpty(name, "parameter name");
-                            // need to resolve property placeholders first
-                            try {
-                                name = camelContext.resolvePropertyPlaceholders(name);
-                            } catch (Exception e) {
-                                throw RuntimeCamelException.wrapRuntimeCamelException(e);
-                            }
-                            if (name.equalsIgnoreCase(key)) {
-                                param.type(RestParamType.path);
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) {
-                            param(verb).name(key).type(RestParamType.path).endParam();
-                        }
-                    }
-                }
+            Set<String> toRemove = null;
+            if (allPath != null && allPath.contains("?")) {
+                // special when having query parameters
+                String path1 = StringHelper.before(allPath, "?");
+                uriTemplating(camelContext, verb, path1, false);
+                String path2 = StringHelper.after(allPath, "?");
+                // there may be some query parameters that are templates which we then must remove
+                toRemove = uriTemplating(camelContext, verb, path2, true);
+            } else {
+                // no query parameters
+                uriTemplating(camelContext, verb, allPath, false);
             }
 
             if (verb.getType() != null) {
@@ -954,13 +908,43 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
                 if (bodyType.endsWith("[]")) {
                     bodyType = "List[" + bodyType.substring(0, bodyType.length() - 2) + "]";
                 }
-                RestOperationParamDefinition param = findParam(verb, RestParamType.body.name());
+                ParamDefinition param = findParam(verb, RestParamType.body.name());
                 if (param == null) {
                     // must be body type and set the model class as data type
                     param(verb).name(RestParamType.body.name()).type(RestParamType.body).dataType(bodyType).endParam();
                 } else {
                     // must be body type and set the model class as data type
                     param.type(RestParamType.body).dataType(bodyType);
+                }
+            }
+
+            // create the from endpoint uri which is using the rest component
+            String from = buildFromUri(verb);
+
+            // rebuild uri without these query parameters
+            if (toRemove != null && !toRemove.isEmpty()) {
+                try {
+                    Map<String, Object> query = URISupport.parseQuery(URISupport.extractQuery(from));
+                    // remove if the value matches, eg: auth={myAuth}
+                    toRemove.forEach(v -> {
+                        query.values().removeIf(qv -> qv.toString().equals(v));
+                    });
+                    from = URISupport.stripQuery(from);
+                    if (!query.isEmpty()) {
+                        String q = URISupport.createQueryString(query);
+                        from = URISupport.stripQuery(from) + "?" + q;
+                    }
+                } catch (Exception e) {
+                    throw RuntimeCamelException.wrapRuntimeCamelException(e);
+                }
+            }
+
+            // append additional options
+            if (!options.isEmpty()) {
+                try {
+                    from = URISupport.appendParametersToURI(from, options);
+                } catch (Exception e) {
+                    throw RuntimeCamelException.wrapRuntimeCamelException(e);
                 }
             }
 
@@ -971,20 +955,68 @@ public class RestDefinition extends OptionalIdentifiedDefinition<RestDefinition>
         }
     }
 
+    private Set<String> uriTemplating(
+            CamelContext camelContext, VerbDefinition verb,
+            String path, boolean query) {
+
+        if (path == null) {
+            return null;
+        }
+
+        Set<String> params = new HashSet<>();
+        String[] arr = path.split("\\/");
+        for (String a : arr) {
+            // need to resolve property placeholders first
+            try {
+                a = camelContext.resolvePropertyPlaceholders(a);
+            } catch (Exception e) {
+                throw RuntimeCamelException.wrapRuntimeCamelException(e);
+            }
+
+            Matcher m = Pattern.compile("\\{(.*?)\\}").matcher(a);
+            while (m.find()) {
+                String key = m.group(1);
+                params.add("{" + key + "}");
+                //  merge if exists
+                boolean found = false;
+                for (ParamDefinition param : verb.getParams()) {
+                    // name is mandatory
+                    String name = param.getName();
+                    StringHelper.notEmpty(name, "parameter name");
+                    // need to resolve property placeholders first
+                    try {
+                        name = camelContext.resolvePropertyPlaceholders(name);
+                    } catch (Exception e) {
+                        throw RuntimeCamelException.wrapRuntimeCamelException(e);
+                    }
+                    if (name.equalsIgnoreCase(key)) {
+                        param.type(query ? RestParamType.query : RestParamType.path);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    param(verb).name(key).type(query ? RestParamType.query : RestParamType.path).endParam();
+                }
+            }
+        }
+        return params;
+    }
+
     private String buildUri(VerbDefinition verb) {
-        if (path != null && verb.getUri() != null) {
-            return path + ":" + verb.getUri();
+        if (path != null && verb.getPath() != null) {
+            return path + ":" + verb.getPath();
         } else if (path != null) {
             return path;
-        } else if (verb.getUri() != null) {
-            return verb.getUri();
+        } else if (verb.getPath() != null) {
+            return verb.getPath();
         } else {
             return "";
         }
     }
 
-    private RestOperationParamDefinition findParam(VerbDefinition verb, String name) {
-        for (RestOperationParamDefinition param : verb.getParams()) {
+    private ParamDefinition findParam(VerbDefinition verb, String name) {
+        for (ParamDefinition param : verb.getParams()) {
             if (name.equals(param.getName())) {
                 return param;
             }

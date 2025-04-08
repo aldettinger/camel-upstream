@@ -16,76 +16,81 @@
  */
 package org.apache.camel.spi;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
 /**
  * Describe a resource, such as a file or class path resource.
  */
 public interface Resource {
+
+    /**
+     * The scheme of the resource such as file, classpath, http
+     */
+    String getScheme();
+
     /**
      * The location of the resource.
      */
     String getLocation();
 
     /**
-     * Returns an input stream that reads from the underlying resource.
+     * Whether this resource exists.
+     */
+    boolean exists();
+
+    /**
+     * The {@link URI} of the resource.
+     * </p>
+     * The default implementation creates a {@code URI} object from resource location.
+     */
+    default URI getURI() {
+        return URI.create(getLocation());
+    }
+
+    /**
+     * The {@link URL} for the resource or <code>null</code> if the URL can not be computed.
+     * </p>
+     * The default implementation creates a {@code URI} object from resource location.
+     */
+    default URL getURL() throws MalformedURLException {
+        URI uri = getURI();
+        return uri != null ? uri.toURL() : null;
+    }
+
+    /**
+     * Returns an {@link InputStream} that reads from the underlying resource.
      * </p>
      * Each invocation must return a new {@link InputStream} instance.
      */
     InputStream getInputStream() throws IOException;
 
     /**
-     * Finds a resource with a given name.
+     * Returns a {@link Reader} that reads from the underlying resource using UTF-8 as charset.
+     * </p>
+     * Each invocation must return a new {@link Reader}.
      *
-     * @see Class#getResourceAsStream(String)
+     * @see #getInputStream()
      */
-    static Resource fromClasspath(String location) {
-        return fromClasspath(Resource.class, location);
+    default Reader getReader() throws Exception {
+        return getReader(StandardCharsets.UTF_8);
     }
 
     /**
-     * Finds a resource with a given name.
+     * Returns a {@link Reader} that reads from the underlying resource using the given {@link Charset}
+     * </p>
+     * Each invocation must return a new {@link Reader}.
      *
-     * @see Class#getResourceAsStream(String)
+     * @see #getInputStream()
      */
-    static Resource fromClasspath(Class<?> type, String location) {
-        return new Resource() {
-            @Override
-            public String getLocation() {
-                return location;
-            }
-
-            @Override
-            public InputStream getInputStream() throws IOException {
-                return type.getResourceAsStream(location);
-            }
-        };
-    }
-
-    /**
-     * Create a resource from bytes.
-     */
-    static Resource fromBytes(String location, byte[] content) {
-        return new Resource() {
-            @Override
-            public String getLocation() {
-                return location;
-            }
-
-            @Override
-            public InputStream getInputStream() throws IOException {
-                return new ByteArrayInputStream(content);
-            }
-        };
-    }
-
-    /**
-     * Create a resource from a string.
-     */
-    static Resource fromString(String location, String content) {
-        return fromBytes(location, content.getBytes(StandardCharsets.UTF_8));
+    default Reader getReader(Charset charset) throws Exception {
+        return new InputStreamReader(getInputStream(), charset);
     }
 }

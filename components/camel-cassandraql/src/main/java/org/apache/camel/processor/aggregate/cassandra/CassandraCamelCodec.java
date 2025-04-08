@@ -26,31 +26,33 @@ import java.nio.ByteBuffer;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.ExtendedExchange;
 import org.apache.camel.support.DefaultExchange;
 import org.apache.camel.support.DefaultExchangeHolder;
+import org.apache.camel.util.ClassLoadingAwareObjectInputStream;
 
 /**
  * Marshall/unmarshall Exchange to/from a ByteBuffer. Inspired from JdbcCamelCodec.
  */
 public class CassandraCamelCodec {
 
-    public ByteBuffer marshallExchange(CamelContext camelContext, Exchange exchange, boolean allowSerializedHeaders)
+    public ByteBuffer marshallExchange(Exchange exchange, boolean allowSerializedHeaders)
             throws IOException {
         // use DefaultExchangeHolder to marshal to a serialized object
         DefaultExchangeHolder pe = DefaultExchangeHolder.marshal(exchange, false, allowSerializedHeaders);
         // add the aggregated size and timeout property as the only properties
         // we want to retain
         DefaultExchangeHolder.addProperty(pe, Exchange.AGGREGATED_SIZE,
-                exchange.getProperty(Exchange.AGGREGATED_SIZE, Integer.class));
+                exchange.getProperty(ExchangePropertyKey.AGGREGATED_SIZE, Integer.class));
         DefaultExchangeHolder.addProperty(pe, Exchange.AGGREGATED_TIMEOUT,
-                exchange.getProperty(Exchange.AGGREGATED_TIMEOUT, Long.class));
+                exchange.getProperty(ExchangePropertyKey.AGGREGATED_TIMEOUT, Long.class));
         // add the aggregated completed by property to retain
         DefaultExchangeHolder.addProperty(pe, Exchange.AGGREGATED_COMPLETED_BY,
-                exchange.getProperty(Exchange.AGGREGATED_COMPLETED_BY, String.class));
+                exchange.getProperty(ExchangePropertyKey.AGGREGATED_COMPLETED_BY, String.class));
         // add the aggregated correlation key property to retain
         DefaultExchangeHolder.addProperty(pe, Exchange.AGGREGATED_CORRELATION_KEY,
-                exchange.getProperty(Exchange.AGGREGATED_CORRELATION_KEY, String.class));
+                exchange.getProperty(ExchangePropertyKey.AGGREGATED_CORRELATION_KEY, String.class));
         // and a guard property if using the flexible toolbox aggregator
         DefaultExchangeHolder.addProperty(pe, Exchange.AGGREGATED_COLLECTION_GUARD,
                 exchange.getProperty(Exchange.AGGREGATED_COLLECTION_GUARD, String.class));
@@ -63,7 +65,7 @@ public class CassandraCamelCodec {
 
     public Exchange unmarshallExchange(CamelContext camelContext, ByteBuffer buffer)
             throws IOException, ClassNotFoundException {
-        DefaultExchangeHolder pe = (DefaultExchangeHolder) deserialize(new ByteBufferInputStream(buffer));
+        DefaultExchangeHolder pe = (DefaultExchangeHolder) deserialize(camelContext, new ByteBufferInputStream(buffer));
         Exchange answer = new DefaultExchange(camelContext);
         DefaultExchangeHolder.unmarshal(answer, pe);
         // restore the from endpoint
@@ -85,8 +87,9 @@ public class CassandraCamelCodec {
         return bytesOut.toByteArray();
     }
 
-    private Object deserialize(InputStream bytes) throws IOException, ClassNotFoundException {
-        ObjectInputStream objectIn = new ObjectInputStream(bytes);
+    private Object deserialize(CamelContext camelContext, InputStream bytes) throws IOException, ClassNotFoundException {
+        ClassLoader classLoader = camelContext.getApplicationContextClassLoader();
+        ObjectInputStream objectIn = new ClassLoadingAwareObjectInputStream(classLoader, bytes);
         Object object = objectIn.readObject();
         objectIn.close();
         return object;

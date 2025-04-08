@@ -55,7 +55,7 @@
 
     <!-- START SNIPPET: e2 -->
     <!-- the transactional error handler -->
-    <bean id="errorHandler" class="org.apache.camel.spring.spi.TransactionErrorHandlerBuilder">
+    <bean id="errorHandler" class="org.apache.camel.spring.spi.LegacyTransactionErrorHandlerBuilder">
         <property name="springTransactionPolicy" ref="PROPAGATION_REQUIRED"/>
     </bean>
 
@@ -66,7 +66,9 @@
     </bean>
 
     <bean id="jmsConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
-        <property name="brokerURL" value="vm://localhost?broker.persistent=false&amp;broker.useJmx=false"/>
+        <property name="brokerURL">
+            <bean class="org.apache.camel.component.jms.CamelJmsTestHelper" factory-method="createBrokerUrl"/>
+        </property>
     </bean>
 
     <!-- jms transaction manager -->

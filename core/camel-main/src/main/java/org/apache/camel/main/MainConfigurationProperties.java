@@ -19,6 +19,7 @@ package org.apache.camel.main;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.camel.CamelConfiguration;
 import org.apache.camel.RoutesBuilder;
 import org.apache.camel.builder.LambdaRouteBuilder;
 import org.apache.camel.builder.RouteBuilder;
@@ -26,7 +27,7 @@ import org.apache.camel.spi.BootstrapCloseable;
 import org.apache.camel.spi.Configurer;
 
 /**
- * Global configuration for Camel Main to setup context name, stream caching and other global configurations.
+ * Global configuration for Camel Main to configure context name, stream caching and other global configurations.
  */
 @Configurer(bootstrap = true)
 public class MainConfigurationProperties extends DefaultConfigurationProperties<MainConfigurationProperties>
@@ -38,22 +39,26 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
     private boolean autoConfigurationFailFast = true;
     private boolean autoConfigurationLogSummary = true;
     private int durationHitExitCode;
-    private String packageScanRouteBuilders;
+    private int extraShutdownTimeout = 15;
+    private String basePackageScan;
+    private boolean basePackageScanEnabled = true;
+    private String routesCompileDirectory;
+    private boolean routesCompileLoadFirst;
 
     private String routesBuilderClasses;
     private String configurationClasses;
 
     private List<RoutesBuilder> routesBuilders = new ArrayList<>();
-    private List<Object> configurations = new ArrayList<>();
+    private List<CamelConfiguration> configurations = new ArrayList<>();
 
     // extended configuration
     private HealthConfigurationProperties healthConfigurationProperties;
     private LraConfigurationProperties lraConfigurationProperties;
     private ThreadPoolConfigurationProperties threadPoolProperties;
-    private HystrixConfigurationProperties hystrixConfigurationProperties;
     private Resilience4jConfigurationProperties resilience4jConfigurationProperties;
     private FaultToleranceConfigurationProperties faultToleranceConfigurationProperties;
     private RestConfigurationProperties restConfigurationProperties;
+    private VaultConfigurationProperties vaultConfigurationProperties;
 
     @Override
     public void close() {
@@ -69,10 +74,6 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
             threadPoolProperties.close();
             threadPoolProperties = null;
         }
-        if (hystrixConfigurationProperties != null) {
-            hystrixConfigurationProperties.close();
-            hystrixConfigurationProperties = null;
-        }
         if (resilience4jConfigurationProperties != null) {
             resilience4jConfigurationProperties.close();
             resilience4jConfigurationProperties = null;
@@ -85,10 +86,18 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
             restConfigurationProperties.close();
             restConfigurationProperties = null;
         }
-        routesBuilders.clear();
-        routesBuilders = null;
-        configurations.clear();
-        configurations = null;
+        if (vaultConfigurationProperties != null) {
+            vaultConfigurationProperties.close();
+            vaultConfigurationProperties = null;
+        }
+        if (routesBuilders != null) {
+            routesBuilders.clear();
+            routesBuilders = null;
+        }
+        if (configurations != null) {
+            configurations.clear();
+            configurations = null;
+        }
     }
 
     // extended
@@ -146,24 +155,6 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
     }
 
     /**
-     * To configure Circuit Breaker EIP with Hystrix
-     */
-    @Deprecated
-    public HystrixConfigurationProperties hystrix() {
-        if (hystrixConfigurationProperties == null) {
-            hystrixConfigurationProperties = new HystrixConfigurationProperties(this);
-        }
-        return hystrixConfigurationProperties;
-    }
-
-    /**
-     * Whether there has been any Hystrix EIP configuration specified
-     */
-    public boolean hasHystrixConfiguration() {
-        return hystrixConfigurationProperties != null;
-    }
-
-    /**
      * To configure Circuit Breaker EIP with Resilience4j
      */
     public Resilience4jConfigurationProperties resilience4j() {
@@ -214,6 +205,23 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
         return restConfigurationProperties != null;
     }
 
+    /**
+     * To configure access to AWS vaults
+     */
+    public VaultConfigurationProperties vault() {
+        if (vaultConfigurationProperties == null) {
+            vaultConfigurationProperties = new VaultConfigurationProperties(this);
+        }
+        return vaultConfigurationProperties;
+    }
+
+    /**
+     * Whether there has been any vault configuration specified
+     */
+    public boolean hasVaultConfiguration() {
+        return vaultConfigurationProperties != null;
+    }
+
     // getter and setters
     // --------------------------------------------------------------
 
@@ -223,9 +231,8 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
 
     /**
      * Whether auto configuration of components, dataformats, languages is enabled or not. When enabled the
-     * configuration parameters are loaded from the properties component and optionally from the classpath file
-     * META-INF/services/org/apache/camel/autowire.properties. You can prefix the parameters in the properties file
-     * with: - camel.component.name.option1=value1 - camel.component.name.option2=value2 -
+     * configuration parameters are loaded from the properties component. You can prefix the parameters in the
+     * properties file with: - camel.component.name.option1=value1 - camel.component.name.option2=value2 -
      * camel.dataformat.name.option1=value1 - camel.dataformat.name.option2=value2 - camel.language.name.option1=value1
      * - camel.language.name.option2=value2 Where name is the name of the component, dataformat or language such as
      * seda,direct,jaxb.
@@ -300,18 +307,59 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
         this.autoConfigurationLogSummary = autoConfigurationLogSummary;
     }
 
-    public String getPackageScanRouteBuilders() {
-        return packageScanRouteBuilders;
+    public String getBasePackageScan() {
+        return basePackageScan;
     }
 
     /**
-     * Sets package names for scanning for {@link org.apache.camel.builder.RouteBuilder} classes as candidates to be
-     * included. If you are using Spring Boot then its instead recommended to use Spring Boots component scanning and
-     * annotate your route builder classes with `@Component`. In other words only use this for Camel Main in standalone
-     * mode.
+     * Package name to use as base (offset) for classpath scanning of {@link RouteBuilder}, and
+     * {@link org.apache.camel.TypeConverter} classes.
+     *
+     * If you are using Spring Boot then it is instead recommended to use Spring Boots component scanning and annotate
+     * your route builder classes with `@Component`. In other words only use this for Camel Main in standalone mode.
      */
-    public void setPackageScanRouteBuilders(String packageScanRouteBuilders) {
-        this.packageScanRouteBuilders = packageScanRouteBuilders;
+    public void setBasePackageScan(String basePackageScan) {
+        this.basePackageScan = basePackageScan;
+    }
+
+    public boolean isBasePackageScanEnabled() {
+        return basePackageScanEnabled;
+    }
+
+    /**
+     * Whether base package scan is enabled.
+     */
+    public void setBasePackageScanEnabled(boolean basePackageScanEnabled) {
+        this.basePackageScanEnabled = basePackageScanEnabled;
+    }
+
+    public String getRoutesCompileDirectory() {
+        return routesCompileDirectory;
+    }
+
+    /**
+     * Directory to use for saving runtime compiled Camel routes to class files, when using camel-java-joor-dsl as Java
+     * DSL (such as when using Camel K with Java source routes). Camel will compile to in-memory only by default.
+     * Specifying this option, allows Camel to persist the compiled class to disk. And when starting the application
+     * again the routes are loaded from the pre-compiled class files instead of re-compiling again.
+     */
+    public void setRoutesCompileDirectory(String routesCompileDirectory) {
+        this.routesCompileDirectory = routesCompileDirectory;
+    }
+
+    public boolean isRoutesCompileLoadFirst() {
+        return routesCompileLoadFirst;
+    }
+
+    /**
+     * Whether to load preexisting compiled Camel routes class files, when using camel-java-joor-dsl as Java DSL (such
+     * as when using Camel K with Java source routes).
+     *
+     * If enabled then Camel will look in the routes compile directory if a compiled Java route already exists and load
+     * its bytecode instead of runtime compiling from its java source file.
+     */
+    public void setRoutesCompileLoadFirst(boolean routesCompileLoadFirst) {
+        this.routesCompileLoadFirst = routesCompileLoadFirst;
     }
 
     public int getDurationHitExitCode() {
@@ -323,6 +371,20 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
      */
     public void setDurationHitExitCode(int durationHitExitCode) {
         this.durationHitExitCode = durationHitExitCode;
+    }
+
+    public int getExtraShutdownTimeout() {
+        return extraShutdownTimeout;
+    }
+
+    /**
+     * Extra timeout in seconds to graceful shutdown Camel.
+     *
+     * When Camel is shutting down then Camel first shutdown all the routes (shutdownTimeout). Then additional services
+     * is shutdown (extraShutdownTimeout).
+     */
+    public void setExtraShutdownTimeout(int extraShutdownTimeout) {
+        this.extraShutdownTimeout = extraShutdownTimeout;
     }
 
     // getter and setters - configurations
@@ -341,15 +403,16 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
     }
 
     /**
-     * Add an additional configuration class to the known list of configurations classes.
+     * Adds configuration object to the known list of configurations objects.
      */
-    public void addConfigurationClass(Class<?>... configuration) {
+    @SuppressWarnings("unchecked")
+    private void addConfigurationClass(Class<? extends CamelConfiguration>... configuration) {
         String existing = configurationClasses;
         if (existing == null) {
             existing = "";
         }
         if (configuration != null) {
-            for (Class clazz : configuration) {
+            for (Class<? extends CamelConfiguration> clazz : configuration) {
                 if (!existing.isEmpty()) {
                     existing = existing + ",";
                 }
@@ -360,20 +423,27 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
     }
 
     /**
-     * Add an additional configuration object to the known list of configurations objects.
+     * Adds configuration object to the known list of configurations objects.
      */
-    public void addConfiguration(Object configuration) {
+    public void addConfiguration(CamelConfiguration configuration) {
         configurations.add(configuration);
     }
 
-    public List<Object> getConfigurations() {
+    /**
+     * Adds configuration object to the known list of configurations objects.
+     */
+    public void addConfiguration(Class<? extends CamelConfiguration> configuration) {
+        addConfigurationClass(configuration);
+    }
+
+    public List<CamelConfiguration> getConfigurations() {
         return configurations;
     }
 
     /**
      * Sets the configuration objects used to configure the camel context.
      */
-    public void setConfigurations(List<Object> configurations) {
+    public void setConfigurations(List<CamelConfiguration> configurations) {
         this.configurations = configurations;
     }
 
@@ -521,13 +591,56 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
     }
 
     /**
-     * Sets package names for scanning for {@link org.apache.camel.builder.RouteBuilder} classes as candidates to be
-     * included. If you are using Spring Boot then its instead recommended to use Spring Boots component scanning and
-     * annotate your route builder classes with `@Component`. In other words only use this for Camel Main in standalone
-     * mode.
+     * Extra timeout in seconds to graceful shutdown Camel.
+     *
+     * When Camel is shutting down then Camel first shutdown all the routes (shutdownTimeout). Then additional services
+     * is shutdown (extraShutdownTimeout).
      */
-    public MainConfigurationProperties withPackageScanRouteBuilders(String packageScanRouteBuilders) {
-        this.packageScanRouteBuilders = packageScanRouteBuilders;
+    public MainConfigurationProperties withExtraShutdownTimeout(int extraShutdownTimeout) {
+        this.extraShutdownTimeout = extraShutdownTimeout;
+        return this;
+    }
+
+    /**
+     * Package name to use as base (offset) for classpath scanning of {@link RouteBuilder}, and
+     * {@link org.apache.camel.TypeConverter} classes.
+     *
+     * If you are using Spring Boot then it is instead recommended to use Spring Boots component scanning and annotate
+     * your route builder classes with `@Component`. In other words only use this for Camel Main in standalone mode.
+     */
+    public MainConfigurationProperties withBasePackageScan(String basePackageScan) {
+        this.basePackageScan = basePackageScan;
+        return this;
+    }
+
+    /**
+     * Whether base package scan is enabled.
+     */
+    public MainConfigurationProperties withBasePackageScanEnabled(boolean basePackageScanEnabled) {
+        this.basePackageScanEnabled = basePackageScanEnabled;
+        return this;
+    }
+
+    /**
+     * Directory to use for saving runtime compiled Camel routes to class files, when using camel-java-joor-dsl as Java
+     * DSL (such as when using Camel K with Java source routes). Camel will compile to in-memory only by default.
+     * Specifying this option, allows Camel to persist the compiled class to disk. And when starting the application
+     * again the routes are loaded from the pre-compiled class files instead of re-compiling again.
+     */
+    public MainConfigurationProperties withRoutesCompileDirectory(String routeCompileDirectory) {
+        this.routesCompileDirectory = routeCompileDirectory;
+        return this;
+    }
+
+    /**
+     * Whether to load preexisting compiled Camel routes class files, when using camel-java-joor-dsl as Java DSL (such
+     * as when using Camel K with Java source routes).
+     *
+     * If enabled then Camel will look in the routes compile directory if a compiled Java route already exists and load
+     * its bytecode instead of runtime compiling from its java source file.
+     */
+    public MainConfigurationProperties withRoutesCompileLoadFirst(boolean routesCompileLoadFirst) {
+        this.routesCompileLoadFirst = routesCompileLoadFirst;
         return this;
     }
 
@@ -535,34 +648,35 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
     // --------------------------------------------------------------
 
     /**
-     * Sets classes names that will be used to configure the camel context as example by providing custom beans through
+     * Adds classes names that will be used to configure the camel context as example by providing custom beans through
      * {@link org.apache.camel.BindToRegistry} annotation.
      */
-    public MainConfigurationProperties withConfigurationClasses(String configurations) {
-        setConfigurationClasses(configurations);
+    public MainConfigurationProperties withConfigurations(String configurations) {
+        if (this.configurationClasses == null) {
+            this.configurationClasses = "";
+        }
+        if (this.configurationClasses.isEmpty()) {
+            this.configurationClasses = configurations;
+        } else {
+            this.configurationClasses = "," + configurations;
+        }
         return this;
     }
 
     /**
-     * Add an additional configuration class to the known list of configurations classes.
+     * Adds a configuration class to the known list of configurations classes.
      */
-    public MainConfigurationProperties withAdditionalConfigurationClasses(Class... configuration) {
+    @SuppressWarnings("unchecked")
+    public MainConfigurationProperties withConfigurations(
+            Class<? extends CamelConfiguration>... configuration) {
         addConfigurationClass(configuration);
-        return this;
-    }
-
-    /**
-     * Add an additional configuration object to the known list of configurations objects.
-     */
-    public MainConfigurationProperties withAdditionalConfiguration(Object configuration) {
-        addConfiguration(configuration);
         return this;
     }
 
     /**
      * Sets the configuration objects used to configure the camel context.
      */
-    public MainConfigurationProperties withConfigurations(List<Object> configurations) {
+    public MainConfigurationProperties withConfigurations(List<CamelConfiguration> configurations) {
         setConfigurations(configurations);
         return this;
     }

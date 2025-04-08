@@ -23,16 +23,13 @@
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>components</artifactId>
-        <version>3.9.0-SNAPSHOT</version>
+        <version>3.18.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>camel-micrometer</artifactId>
     <packaging>jar</packaging>
     <name>Camel :: Micrometer</name>
     <description>Camel Micrometer based monitoring component</description>
-
-    <properties>
-    </properties>
 
     <dependencies>
 
@@ -70,11 +67,6 @@
         <dependency>
             <groupId>org.apache.camel</groupId>
             <artifactId>camel-spring-xml</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.camel</groupId>
-            <artifactId>camel-spring-javaconfig</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

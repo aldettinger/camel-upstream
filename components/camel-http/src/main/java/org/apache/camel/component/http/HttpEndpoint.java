@@ -56,8 +56,9 @@ import org.slf4j.LoggerFactory;
 /**
  * Send requests to external HTTP servers using Apache HTTP Client 4.x.
  */
-@UriEndpoint(firstVersion = "2.3.0", scheme = "http,https", title = "HTTP,HTTPS", syntax = "http:httpUri",
-             producerOnly = true, category = { Category.HTTP }, lenientProperties = true)
+@UriEndpoint(firstVersion = "2.3.0", scheme = "http,https", title = "HTTP,HTTPS", syntax = "http://httpUri",
+             producerOnly = true, category = { Category.HTTP }, lenientProperties = true, headersClass = HttpConstants.class)
+@Metadata(excludeProperties = "httpBinding,matchOnUriPrefix,chunked,transferException")
 @ManagedResource(description = "Managed HttpEndpoint")
 public class HttpEndpoint extends HttpCommonEndpoint {
 
@@ -116,7 +117,8 @@ public class HttpEndpoint extends HttpCommonEndpoint {
     private CookieStore cookieStore = new BasicCookieStore();
     @UriParam(label = "producer", defaultValue = "true",
               description = "Whether to clear expired cookies before sending the HTTP request."
-                            + " This ensures the cookies store does not keep growing by adding new cookies which is newer removed when they are expired.")
+                            + " This ensures the cookies store does not keep growing by adding new cookies which is newer removed when they are expired."
+                            + " If the component has disabled cookie management then this option is disabled too.")
     private boolean clearExpiredCookies = true;
     @UriParam(label = "producer,security",
               description = "If this option is true, camel-http sends preemptive basic authentication to the server.")
@@ -137,6 +139,18 @@ public class HttpEndpoint extends HttpCommonEndpoint {
     @UriParam(label = "producer", description = "To use custom host header for producer. When not set in query will "
                                                 + "be ignored. When set will override host header derived from url.")
     private String customHostHeader;
+    @UriParam(label = "producer,advanced",
+              description = "Whether to skip mapping all the Camel headers as HTTP request headers."
+                            + " If there are no data from Camel headers needed to be included in the HTTP request then this can avoid"
+                            + " parsing overhead with many object allocations for the JVM garbage collector.")
+    private boolean skipRequestHeaders;
+    @UriParam(label = "producer,advanced",
+              description = "Whether to skip mapping all the HTTP response headers to Camel headers."
+                            + " If there are no data needed from HTTP headers then this can avoid parsing overhead"
+                            + " with many object allocations for the JVM garbage collector.")
+    private boolean skipResponseHeaders;
+    @UriParam(label = "producer,advanced", description = "To set a custom HTTP User-Agent request header")
+    private String userAgent;
 
     public HttpEndpoint() {
     }
@@ -158,7 +172,7 @@ public class HttpEndpoint extends HttpCommonEndpoint {
 
     public HttpEndpoint(String endPointURI, HttpComponent component, URI httpURI, HttpClientBuilder clientBuilder,
                         HttpClientConnectionManager clientConnectionManager,
-                        HttpClientConfigurer clientConfigurer) throws URISyntaxException {
+                        HttpClientConfigurer clientConfigurer) {
         super(endPointURI, component, httpURI);
         this.clientBuilder = clientBuilder;
         this.httpClientConfigurer = clientConfigurer;
@@ -192,7 +206,7 @@ public class HttpEndpoint extends HttpCommonEndpoint {
     /**
      * Sets a custom HttpClient to be used by the producer
      */
-    public void setHttpClient(HttpClient httpClient) {
+    public synchronized void setHttpClient(HttpClient httpClient) {
         this.httpClient = httpClient;
     }
 
@@ -237,6 +251,10 @@ public class HttpEndpoint extends HttpCommonEndpoint {
         if (isAuthenticationPreemptive()) {
             // setup the PreemptiveAuthInterceptor here
             clientBuilder.addInterceptorFirst(new PreemptiveAuthInterceptor());
+        }
+        String userAgent = getUserAgent();
+        if (userAgent != null) {
+            clientBuilder.setUserAgent(userAgent);
         }
 
         HttpClientConfigurer configurer = getHttpClientConfigurer();
@@ -324,7 +342,8 @@ public class HttpEndpoint extends HttpCommonEndpoint {
 
     /**
      * Whether to clear expired cookies before sending the HTTP request. This ensures the cookies store does not keep
-     * growing by adding new cookies which is newer removed when they are expired.
+     * growing by adding new cookies which is newer removed when they are expired. If the component has disabled cookie
+     * management then this option is disabled too.
      */
     public void setClearExpiredCookies(boolean clearExpiredCookies) {
         this.clearExpiredCookies = clearExpiredCookies;
@@ -531,6 +550,42 @@ public class HttpEndpoint extends HttpCommonEndpoint {
 
     public String getCustomHostHeader() {
         return customHostHeader;
+    }
+
+    public boolean isSkipRequestHeaders() {
+        return skipRequestHeaders;
+    }
+
+    /**
+     * Whether to skip mapping all the Camel headers as HTTP request headers. If there are no data from Camel headers
+     * needed to be included in the HTTP request then this can avoid parsing overhead with many object allocations for
+     * the JVM garbage collector.
+     */
+    public void setSkipRequestHeaders(boolean skipRequestHeaders) {
+        this.skipRequestHeaders = skipRequestHeaders;
+    }
+
+    public boolean isSkipResponseHeaders() {
+        return skipResponseHeaders;
+    }
+
+    /**
+     * Whether to skip mapping all the HTTP response headers to Camel headers. If there are no data needed from HTTP
+     * headers then this can avoid parsing overhead with many object allocations for the JVM garbage collector.
+     */
+    public void setSkipResponseHeaders(boolean skipResponseHeaders) {
+        this.skipResponseHeaders = skipResponseHeaders;
+    }
+
+    public String getUserAgent() {
+        return userAgent;
+    }
+
+    /**
+     * To set a custom HTTP User-Agent request header
+     */
+    public void setUserAgent(String userAgent) {
+        this.userAgent = userAgent;
     }
 
     @ManagedAttribute(description = "Maximum number of allowed persistent connections")

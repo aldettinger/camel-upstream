@@ -28,6 +28,7 @@ import com.thoughtworks.xstream.converters.UnmarshallingContext;
 import com.thoughtworks.xstream.io.HierarchicalStreamReader;
 import com.thoughtworks.xstream.io.HierarchicalStreamWriter;
 import com.thoughtworks.xstream.io.json.JsonHierarchicalStreamDriver;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.model.dataformat.XStreamDataFormat;
@@ -132,10 +133,10 @@ public class XStreamConfigurationTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 XStreamDataFormat xstreamDefinition = new XStreamDataFormat();
                 Map<String, String> aliases = new HashMap<>();
                 aliases.put("purchase-order", PurchaseOrder.class.getName());
@@ -211,7 +212,7 @@ public class XStreamConfigurationTest extends CamelTestSupport {
             if (xstream != null) {
                 constructorInjected = true;
             } else {
-                throw new RuntimeException("XStream should not be null");
+                throw new RuntimeCamelException("XStream should not be null");
             }
         }
 
@@ -240,7 +241,7 @@ public class XStreamConfigurationTest extends CamelTestSupport {
             if (xstream != null) {
                 methodInjected = true;
             } else {
-                throw new RuntimeException("XStream should not be null");
+                throw new RuntimeCamelException("XStream should not be null");
             }
         }
 

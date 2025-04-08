@@ -34,10 +34,10 @@ public final class ExpressionNodeHelper {
     }
 
     /**
-     * Determines which {@link ExpressionDefinition} describes the given expression best possible.
+     * Determines which {@link ExpressionDefinition} describes the given expression in the best possible way.
      * <p/>
      * This implementation will use types such as {@link SimpleExpression}, {@link XPathExpression} etc. if the given
-     * expression is detect as such a type.
+     * expression is detected as such a type.
      *
      * @param  expression the expression
      * @return            a definition which describes the expression
@@ -45,8 +45,7 @@ public final class ExpressionNodeHelper {
     public static ExpressionDefinition toExpressionDefinition(Expression expression) {
         if (expression instanceof SimpleBuilder) {
             SimpleBuilder builder = (SimpleBuilder) expression;
-            // only transfer over the expression text and result type from SimpleBuilder
-            // as we want to use the definition objects in the route graph
+            // we want to use the definition objects in the route graph
             SimpleExpression answer = new SimpleExpression(builder.getText());
             answer.setResultType(builder.getResultType());
             return answer;
@@ -72,7 +71,7 @@ public final class ExpressionNodeHelper {
     }
 
     /**
-     * Determines which {@link ExpressionDefinition} describes the given predicate best possible.
+     * Determines which {@link ExpressionDefinition} describes the given predicate in the best possible way.
      * <p/>
      * This implementation will use types such as {@link SimpleExpression}, {@link XPathExpression} etc. if the given
      * predicate is detect as such a type.
@@ -83,10 +82,10 @@ public final class ExpressionNodeHelper {
     public static ExpressionDefinition toExpressionDefinition(Predicate predicate) {
         if (predicate instanceof SimpleBuilder) {
             SimpleBuilder builder = (SimpleBuilder) predicate;
-            // only transfer over the expression text and result type from SimpleBuilder
-            // as we want to use the definition objects in the route graph
+            // we want to use the definition objects in the route graph
             SimpleExpression answer = new SimpleExpression(builder.getText());
             answer.setExpression(builder.getText());
+            answer.setResultType(builder.getResultType());
             return answer;
         } else if (predicate instanceof ExpressionResultTypeAware
                 && predicate.getClass().getName().equals("org.apache.camel.language.xpath.XPathBuilder")) {

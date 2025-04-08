@@ -17,10 +17,8 @@
 package org.apache.camel.component.platform.http;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.util.regex.Pattern;
 
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -55,7 +53,6 @@ public class JettyCustomPlatformHttpConsumer extends DefaultConsumer {
         ContextHandler contextHandler = createHandler(endpoint, path);
         // add handler after starting server.
         jettyServerTest.addHandler(contextHandler);
-
     }
 
     private ContextHandler createHandler(PlatformHttpEndpoint endpoint, String path) {
@@ -67,8 +64,7 @@ public class JettyCustomPlatformHttpConsumer extends DefaultConsumer {
         contextHandler.setHandler(new AbstractHandler() {
             @Override
             public void handle(
-                    String s, Request request, HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse)
-                    throws IOException, ServletException {
+                    String s, Request request, HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse) {
                 Exchange exchg = null;
                 try {
                     BufferedReader reader = httpServletRequest.getReader();

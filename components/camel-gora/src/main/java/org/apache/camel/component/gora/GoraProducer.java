@@ -19,11 +19,12 @@ package org.apache.camel.component.gora;
 import java.util.Map;
 
 import org.apache.camel.Exchange;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.support.DefaultProducer;
 import org.apache.gora.persistency.Persistent;
 import org.apache.gora.store.DataStore;
 
-import static org.apache.camel.component.gora.utils.GoraUtils.constractQueryFromPropertiesMap;
+import static org.apache.camel.component.gora.utils.GoraUtils.constructQueryFromPropertiesMap;
 import static org.apache.camel.component.gora.utils.GoraUtils.getKeyFromExchange;
 import static org.apache.camel.component.gora.utils.GoraUtils.getValueFromExchange;
 
@@ -63,7 +64,7 @@ public class GoraProducer extends DefaultProducer {
         final String operation = (String) exchange.getIn().getHeader(GoraAttribute.GORA_OPERATION.value);
 
         if (operation == null || operation.isEmpty()) {
-            throw new RuntimeException("Gora operation is null or empty!");
+            throw new RuntimeCamelException("Gora operation is null or empty!");
         }
 
         Object result = 0; // 0 used as default response in order to avoid null body exception
@@ -76,10 +77,10 @@ public class GoraProducer extends DefaultProducer {
             result = dataStore.delete(getKeyFromExchange(exchange));
         } else if (GoraOperation.QUERY.value.equalsIgnoreCase(operation)) {
             final Map<String, Object> props = exchange.getIn().getHeaders();
-            result = constractQueryFromPropertiesMap(props, dataStore, this.configuration).execute();
+            result = constructQueryFromPropertiesMap(props, dataStore).execute();
         } else if (GoraOperation.DELETE_BY_QUERY.value.equalsIgnoreCase(operation)) {
             final Map<String, Object> props = exchange.getIn().getHeaders();
-            result = dataStore.deleteByQuery(constractQueryFromPropertiesMap(props, dataStore, this.configuration));
+            result = dataStore.deleteByQuery(constructQueryFromPropertiesMap(props, dataStore));
         } else if (GoraOperation.GET_SCHEMA_NAME.value.equalsIgnoreCase(operation)) {
             result = dataStore.getSchemaName();
         } else if (GoraOperation.DELETE_SCHEMA.value.equalsIgnoreCase(operation)) {
@@ -89,7 +90,7 @@ public class GoraProducer extends DefaultProducer {
         } else if (GoraOperation.SCHEMA_EXIST.value.equalsIgnoreCase(operation)) {
             result = dataStore.schemaExists();
         } else {
-            throw new RuntimeException("Unknown operation: " + operation);
+            throw new RuntimeCamelException("Unknown operation: " + operation);
         }
 
         /*
@@ -101,9 +102,9 @@ public class GoraProducer extends DefaultProducer {
             dataStore.flush();
         }
 
-        exchange.getOut().setBody(result);
+        exchange.getMessage().setBody(result);
         // preserve headers
-        exchange.getOut().setHeaders(exchange.getIn().getHeaders());
+        exchange.getMessage().setHeaders(exchange.getIn().getHeaders());
     }
 
 }

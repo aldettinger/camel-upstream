@@ -29,7 +29,7 @@ import org.apache.camel.test.junit5.CamelTestSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class AbstractMicrometerRoutePolicyTest extends CamelTestSupport {
+public abstract class AbstractMicrometerRoutePolicyTest extends CamelTestSupport {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
     protected CompositeMeterRegistry meterRegistry;
@@ -40,7 +40,7 @@ public class AbstractMicrometerRoutePolicyTest extends CamelTestSupport {
     }
 
     @BindToRegistry(MicrometerConstants.METRICS_REGISTRY_NAME)
-    public CompositeMeterRegistry addRegistry() throws Exception {
+    public CompositeMeterRegistry addRegistry() {
         meterRegistry = new CompositeMeterRegistry();
         meterRegistry.add(new SimpleMeterRegistry());
         meterRegistry.add(new JmxMeterRegistry(CamelJmxConfig.DEFAULT, Clock.SYSTEM, HierarchicalNameMapper.DEFAULT));

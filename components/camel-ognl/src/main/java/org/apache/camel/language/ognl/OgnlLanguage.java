@@ -16,26 +16,47 @@
  */
 package org.apache.camel.language.ognl;
 
+import java.util.Map;
+
+import ognl.Ognl;
+import ognl.OgnlContext;
 import org.apache.camel.Expression;
+import org.apache.camel.ExpressionIllegalSyntaxException;
 import org.apache.camel.Predicate;
+import org.apache.camel.spi.ScriptingLanguage;
 import org.apache.camel.spi.annotations.Language;
 import org.apache.camel.support.LanguageSupport;
 
-/**
- * An <a href="http://www.ognl.org/">OGNL</a> {@link org.apache.camel.spi.Language} plugin
- */
 @Language("ognl")
-public class OgnlLanguage extends LanguageSupport {
+public class OgnlLanguage extends LanguageSupport implements ScriptingLanguage {
 
     @Override
     public Predicate createPredicate(String expression) {
         expression = loadResource(expression);
-        return new OgnlExpression(this, expression, Boolean.class);
+        return new OgnlExpression(expression, Boolean.class);
     }
 
     @Override
     public Expression createExpression(String expression) {
         expression = loadResource(expression);
-        return new OgnlExpression(this, expression, Object.class);
+        return new OgnlExpression(expression, Object.class);
+    }
+
+    @Override
+    public <T> T evaluate(String script, Map<String, Object> bindings, Class<T> resultType) {
+        script = loadResource(script);
+        try {
+            Object compiled = Ognl.parseExpression(script);
+            OgnlContext oglContext = new OgnlContext();
+            if (bindings != null && !bindings.isEmpty()) {
+                oglContext.setValues(bindings);
+            }
+            // setup the class resolver from camel
+            oglContext.setClassResolver(new CamelClassResolver(getCamelContext().getClassResolver()));
+            Object value = Ognl.getValue(compiled, oglContext);
+            return getCamelContext().getTypeConverter().convertTo(resultType, value);
+        } catch (Exception e) {
+            throw new ExpressionIllegalSyntaxException(script, e);
+        }
     }
 }

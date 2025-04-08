@@ -33,7 +33,7 @@ import org.iota.jota.IotaAPI;
  * Manage financial transactions using IOTA distributed ledger.
  */
 @UriEndpoint(firstVersion = "2.23.0", scheme = "iota", title = "IOTA", syntax = "iota:name",
-             category = { Category.LEDGER, Category.API }, producerOnly = true)
+             category = { Category.LEDGER, Category.API }, producerOnly = true, headersClass = IOTAConstants.class)
 public class IOTAEndpoint extends DefaultEndpoint {
 
     private volatile IotaAPI apiClient;
@@ -126,7 +126,7 @@ public class IOTAEndpoint extends DefaultEndpoint {
     }
 
     /**
-     * Address security level
+     * Security level to be used for the private key / address. Can be 1, 2 or 3.
      */
     public void setSecurityLevel(Integer securityLevel) {
         this.securityLevel = securityLevel;
@@ -140,7 +140,6 @@ public class IOTAEndpoint extends DefaultEndpoint {
      * The minWeightMagnitude is the minimum number of zeroes that a proof-of-work output/transaction hash must end with
      * to be considered valid by full nodes
      */
-
     public void setMinWeightMagnitude(Integer minWeightMagnitude) {
         this.minWeightMagnitude = minWeightMagnitude;
     }

@@ -22,10 +22,13 @@ import org.apache.camel.Exchange;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.test.junit5.params.Test;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 import static org.apache.camel.test.junit5.TestSupport.deleteDirectory;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@DisabledOnOs({ OS.AIX, OS.OTHER })
 public class LevelDBAggregateRecoverDeadLetterChannelFailedTest extends LevelDBTestSupport {
 
     @Override
@@ -76,10 +79,10 @@ public class LevelDBAggregateRecoverDeadLetterChannelFailedTest extends LevelDBT
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("direct:start")
                         .aggregate(header("id"), new StringAggregationStrategy())
                         .completionSize(5).aggregationRepository(getRepo())

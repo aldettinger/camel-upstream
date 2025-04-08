@@ -16,11 +16,18 @@
  */
 package org.apache.camel.main;
 
-import java.util.LinkedHashMap;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.LineNumberReader;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.function.Function;
 
 import org.apache.camel.CamelContext;
@@ -31,16 +38,62 @@ import org.apache.camel.spi.ExtendedPropertyConfigurerGetter;
 import org.apache.camel.spi.PropertyConfigurer;
 import org.apache.camel.support.PropertyBindingSupport;
 import org.apache.camel.support.service.ServiceHelper;
+import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
+import org.apache.camel.util.OrderedLocationProperties;
 import org.apache.camel.util.OrderedProperties;
 import org.apache.camel.util.StringHelper;
+import org.apache.camel.util.TimeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public final class MainHelper {
     private static final Logger LOG = LoggerFactory.getLogger(MainHelper.class);
 
-    private MainHelper() {
+    private final String version;
+    private final long startDate;
+    private final Set<String> componentEnvNames = new HashSet<>();
+    private final Set<String> dataformatEnvNames = new HashSet<>();
+    private final Set<String> languageEnvNames = new HashSet<>();
+
+    public MainHelper() {
+        startDate = System.currentTimeMillis();
+        try {
+            InputStream is = MainHelper.class.getResourceAsStream("/org/apache/camel/main/components.properties");
+            loadLines(is, componentEnvNames, s -> "CAMEL_COMPONENT_" + s.toUpperCase(Locale.US).replace('-', '_'));
+            IOHelper.close(is);
+
+            is = MainHelper.class.getResourceAsStream("/org/apache/camel/main/dataformats.properties");
+            loadLines(is, dataformatEnvNames, s -> "CAMEL_DATAFORMAT_" + s.toUpperCase(Locale.US).replace('-', '_'));
+            IOHelper.close(is);
+
+            is = MainHelper.class.getResourceAsStream("/org/apache/camel/main/languages.properties");
+            loadLines(is, languageEnvNames, s -> "CAMEL_LANGUAGE_" + s.toUpperCase(Locale.US).replace('-', '_'));
+            IOHelper.close(is);
+        } catch (Exception e) {
+            throw new RuntimeException("Error loading catalog information from classpath", e);
+        }
+
+        version = doGetVersion();
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public String getUptime() {
+        long delta = System.currentTimeMillis() - startDate;
+        if (delta == 0) {
+            return "";
+        }
+        return TimeUtils.printDuration(delta);
+    }
+
+    public void bootstrapDone() {
+        // after bootstrap then these maps are no longer needed
+        componentEnvNames.clear();
+        dataformatEnvNames.clear();
+        languageEnvNames.clear();
     }
 
     public static String toEnvVar(String name) {
@@ -68,13 +121,92 @@ public final class MainHelper {
             System.getenv().forEach((k, v) -> {
                 k = k.toUpperCase(Locale.US);
                 if (k.startsWith(pk) || k.startsWith(pk2)) {
-                    String key = k.toLowerCase(Locale.ENGLISH).replace('_', '.');
+                    String key = k.toLowerCase(Locale.US).replace('_', '.');
                     answer.put(key, v);
                 }
             });
         }
 
         return answer;
+    }
+
+    public static Map<String, String> filterEnvVariables(String[] prefixes) {
+        Map<String, String> answer = new HashMap<>();
+        System.getenv().forEach((k, v) -> {
+            final String uk = k.toUpperCase(Locale.US);
+            for (String prefix : prefixes) {
+                if (uk.startsWith(prefix)) {
+                    answer.put(uk, v);
+                }
+            }
+        });
+        return answer;
+    }
+
+    public void addComponentEnvVariables(Map<String, String> env, Properties properties, boolean custom) {
+        Set<String> toRemove = new HashSet<>();
+        env.forEach((k, v) -> {
+            if (custom) {
+                toRemove.add(k);
+                String ck = "camel.component." + k.substring(16).toLowerCase(Locale.US).replace('_', '-');
+                ck = ck.replaceFirst("-", ".");
+                properties.put(ck, v);
+            } else {
+                Optional<String> e
+                        = componentEnvNames.stream().filter(k::startsWith).findFirst();
+                if (e.isPresent()) {
+                    toRemove.add(k);
+                    String cname = "camel.component." + e.get().substring(16).toLowerCase(Locale.US).replace('_', '-');
+                    String option = k.substring(cname.length() + 1).toLowerCase(Locale.US).replace('_', '-');
+                    properties.put(cname + "." + option, v);
+                }
+            }
+        });
+        toRemove.forEach(env::remove);
+    }
+
+    public void addDataFormatEnvVariables(Map<String, String> env, Properties properties, boolean custom) {
+        Set<String> toRemove = new HashSet<>();
+        env.forEach((k, v) -> {
+            if (custom) {
+                toRemove.add(k);
+                String ck = "camel.dataformat." + k.substring(17).toLowerCase(Locale.US).replace('_', '-');
+                ck = ck.replaceFirst("-", ".");
+                properties.put(ck, v);
+            } else {
+                Optional<String> e
+                        = dataformatEnvNames.stream().filter(k::startsWith).findFirst();
+                if (e.isPresent()) {
+                    toRemove.add(k);
+                    String cname = "camel.dataformat." + e.get().substring(17).toLowerCase(Locale.US).replace('_', '-');
+                    String option = k.substring(cname.length() + 1).toLowerCase(Locale.US).replace('_', '-');
+                    properties.put(cname + "." + option, v);
+                }
+            }
+        });
+        toRemove.forEach(env::remove);
+    }
+
+    public void addLanguageEnvVariables(Map<String, String> env, Properties properties, boolean custom) {
+        Set<String> toRemove = new HashSet<>();
+        env.forEach((k, v) -> {
+            if (custom) {
+                toRemove.add(k);
+                String ck = "camel.language." + k.substring(15).toLowerCase(Locale.US).replace('_', '-');
+                ck = ck.replaceFirst("-", ".");
+                properties.put(ck, v);
+            } else {
+                Optional<String> e
+                        = languageEnvNames.stream().filter(k::startsWith).findFirst();
+                if (e.isPresent()) {
+                    toRemove.add(k);
+                    String cname = "camel.language." + e.get().substring(15).toLowerCase(Locale.US).replace('_', '-');
+                    String option = k.substring(cname.length() + 1).toLowerCase(Locale.US).replace('_', '-');
+                    properties.put(cname + "." + option, v);
+                }
+            }
+        });
+        toRemove.forEach(env::remove);
     }
 
     public static Properties loadJvmSystemPropertiesAsProperties(String[] prefixes) {
@@ -148,9 +280,9 @@ public final class MainHelper {
     }
 
     public static boolean setPropertiesOnTarget(
-            CamelContext context, Object target, Map<String, Object> properties,
+            CamelContext context, Object target, OrderedLocationProperties properties,
             String optionPrefix, boolean failIfNotSet, boolean ignoreCase,
-            Map<String, String> autoConfiguredProperties) {
+            OrderedLocationProperties autoConfiguredProperties) {
 
         ObjectHelper.notNull(context, "context");
         ObjectHelper.notNull(target, "target");
@@ -173,16 +305,17 @@ public final class MainHelper {
 
         try {
             // keep a reference of the original keys
-            Map<String, Object> backup = new LinkedHashMap<>(properties);
+            OrderedLocationProperties backup = new OrderedLocationProperties();
+            backup.putAll(properties);
 
             rc = PropertyBindingSupport.build()
                     .withMandatory(failIfNotSet)
                     .withRemoveParameters(true)
                     .withConfigurer(configurer)
                     .withIgnoreCase(ignoreCase)
-                    .bind(context, target, properties);
+                    .bind(context, target, properties.asMap());
 
-            for (Map.Entry<String, Object> entry : backup.entrySet()) {
+            for (Map.Entry<Object, Object> entry : backup.entrySet()) {
                 if (entry.getValue() != null && !properties.containsKey(entry.getKey())) {
                     String prefix = optionPrefix;
                     if (prefix != null && !prefix.endsWith(".")) {
@@ -190,7 +323,9 @@ public final class MainHelper {
                     }
 
                     LOG.debug("Configured property: {}{}={} on bean: {}", prefix, entry.getKey(), entry.getValue(), target);
-                    autoConfiguredProperties.put(prefix + entry.getKey(), entry.getValue().toString());
+                    String loc = backup.getLocation(entry.getKey());
+                    String key = prefix + entry.getKey();
+                    autoConfiguredProperties.put(loc, key, entry.getValue());
                 }
             }
         } catch (PropertyBindingException e) {
@@ -221,7 +356,8 @@ public final class MainHelper {
     }
 
     public static void computeProperties(
-            String keyPrefix, String key, Properties prop, Map<PropertyOptionKey, Map<String, Object>> properties,
+            String keyPrefix, String key, OrderedLocationProperties prop,
+            Map<PropertyOptionKey, OrderedLocationProperties> properties,
             Function<String, Iterable<Object>> supplier) {
         if (key.startsWith(keyPrefix)) {
             // grab name
@@ -266,10 +402,11 @@ public final class MainHelper {
             Iterable<Object> targets = supplier.apply(name);
             for (Object target : targets) {
                 PropertyOptionKey pok = new PropertyOptionKey(target, prefix);
-                Map<String, Object> values = properties.computeIfAbsent(pok, k -> new LinkedHashMap<>());
+                OrderedLocationProperties values = properties.computeIfAbsent(pok, k -> new OrderedLocationProperties());
+                String loc = prop.getLocation(key);
 
                 // we ignore case for property keys (so we should store them in canonical style
-                values.put(optionKey(option), value);
+                values.put(loc, optionKey(option), value);
             }
         }
     }
@@ -296,6 +433,111 @@ public final class MainHelper {
         if (ObjectHelper.isEmpty(value)) {
             throw new IllegalArgumentException("Error configuring property: " + key + " because value is empty");
         }
+    }
+
+    /**
+     * Loads the entire stream into memory as a String and returns it.
+     * <p/>
+     * <b>Notice:</b> This implementation appends a <tt>\n</tt> as line terminator at the of the text.
+     * <p/>
+     * Warning, don't use for crazy big streams :)
+     */
+    private static void loadLines(InputStream in, Set<String> lines, Function<String, String> func) throws IOException {
+        try (final InputStreamReader isr = new InputStreamReader(in);
+             final BufferedReader reader = new LineNumberReader(isr)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lines.add(func.apply(line));
+            }
+        }
+    }
+
+    private String doGetVersion() {
+        String version = null;
+
+        InputStream is = null;
+        // try to load from maven properties first
+        try {
+            Properties p = new Properties();
+            is = MainHelper.class
+                    .getResourceAsStream("/META-INF/maven/org.apache.camel/camel-main/pom.properties");
+            if (is != null) {
+                p.load(is);
+                version = p.getProperty("version", "");
+            }
+        } catch (Exception e) {
+            // ignore
+        } finally {
+            if (is != null) {
+                IOHelper.close(is);
+            }
+        }
+
+        // fallback to using Java API
+        if (version == null) {
+            Package aPackage = getClass().getPackage();
+            if (aPackage != null) {
+                version = aPackage.getImplementationVersion();
+                if (version == null) {
+                    version = aPackage.getSpecificationVersion();
+                }
+            }
+        }
+
+        if (version == null) {
+            // we could not compute the version so use a blank
+            version = "";
+        }
+
+        return version;
+    }
+
+    public static OrderedLocationProperties extractProperties(OrderedLocationProperties properties, String optionPrefix) {
+        if (properties == null) {
+            return new OrderedLocationProperties();
+        }
+        OrderedLocationProperties rc = new OrderedLocationProperties();
+
+        Set<Object> toRemove = new HashSet<>();
+        for (var entry : properties.entrySet()) {
+            String key = entry.getKey().toString();
+            String loc = properties.getLocation(key);
+            if (key.startsWith(optionPrefix)) {
+                Object value = properties.get(key);
+                key = key.substring(optionPrefix.length());
+                rc.put(loc, key, value);
+                toRemove.add(entry.getKey());
+            }
+        }
+        toRemove.forEach(properties::remove);
+
+        return rc;
+    }
+
+    public static OrderedLocationProperties extractProperties(
+            OrderedLocationProperties properties, String optionPrefix, String optionSuffix) {
+        if (properties == null) {
+            return new OrderedLocationProperties();
+        }
+        OrderedLocationProperties rc = new OrderedLocationProperties();
+
+        Set<Object> toRemove = new HashSet<>();
+        for (var entry : properties.entrySet()) {
+            String key = entry.getKey().toString();
+            String loc = properties.getLocation(key);
+            if (key.startsWith(optionPrefix)) {
+                Object value = properties.get(key);
+                key = key.substring(optionPrefix.length());
+                if (key.endsWith(optionSuffix)) {
+                    key = key.substring(0, key.length() - optionSuffix.length());
+                }
+                rc.put(loc, key, value);
+                toRemove.add(entry.getKey());
+            }
+        }
+        toRemove.forEach(properties::remove);
+
+        return rc;
     }
 
 }

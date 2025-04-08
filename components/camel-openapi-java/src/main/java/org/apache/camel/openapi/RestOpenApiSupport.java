@@ -20,7 +20,6 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -31,15 +30,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
+import io.apicurio.datamodels.core.models.common.Contact;
+import io.apicurio.datamodels.core.models.common.License;
 import io.apicurio.datamodels.openapi.models.OasDocument;
-import io.apicurio.datamodels.openapi.v2.models.Oas20Contact;
 import io.apicurio.datamodels.openapi.v2.models.Oas20Document;
 import io.apicurio.datamodels.openapi.v2.models.Oas20Info;
-import io.apicurio.datamodels.openapi.v2.models.Oas20License;
-import io.apicurio.datamodels.openapi.v3.models.Oas30Contact;
 import io.apicurio.datamodels.openapi.v3.models.Oas30Document;
 import io.apicurio.datamodels.openapi.v3.models.Oas30Info;
-import io.apicurio.datamodels.openapi.v3.models.Oas30License;
 import io.apicurio.datamodels.openapi.v3.models.Oas30Server;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
@@ -47,7 +44,6 @@ import org.apache.camel.ExtendedCamelContext;
 import org.apache.camel.model.rest.RestDefinition;
 import org.apache.camel.spi.ClassResolver;
 import org.apache.camel.spi.RestConfiguration;
-import org.apache.camel.support.PatternHelper;
 import org.apache.camel.support.ResolverHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.URISupport;
@@ -134,7 +130,7 @@ public class RestOpenApiSupport {
                     String trimmedScheme = scheme.trim();
                     if (ObjectHelper.isNotEmpty(trimmedScheme)) {
                         if (((Oas20Document) openApi).schemes == null) {
-                            ((Oas20Document) openApi).schemes = new ArrayList();
+                            ((Oas20Document) openApi).schemes = new ArrayList<>();
                         }
                         ((Oas20Document) openApi).schemes.add(trimmedScheme.toLowerCase());
                     }
@@ -163,8 +159,7 @@ public class RestOpenApiSupport {
                 String[] schemes = proto.split(",");
                 for (String schema : schemes) {
                     String trimmedScheme = schema.trim();
-                    String serverUrl = new StringBuilder().append(trimmedScheme.toLowerCase()).append("://").append(host)
-                            .append(basePath).toString();
+                    String serverUrl = String.format("%s://%s%s", trimmedScheme.toLowerCase(), host, basePath);
                     ((Oas30Document) openApi).addServer(serverUrl, null);
 
                 }
@@ -214,11 +209,8 @@ public class RestOpenApiSupport {
                         URL serverUrl = new URL(
                                 parseVariables(((Oas30Document) openapi).getServers().get(0).url,
                                         (Oas30Server) ((Oas30Document) openapi).getServers().get(0)));
-                        basePath = serverUrl.getPath();
-                        if (basePath.indexOf("//") == 0) {
-                            // strip off the first "/" if double "/" exists
-                            basePath = basePath.substring(1);
-                        }
+                        // strip off the first "/" if double "/" exists
+                        basePath = serverUrl.getPath().replaceAll("//", "/");
                         if ("/".equals(basePath)) {
                             basePath = "";
                         }
@@ -231,15 +223,14 @@ public class RestOpenApiSupport {
             }
 
         }
-        return basePath;
 
+        return basePath;
     }
 
     public static String parseVariables(String url, Oas30Server server) {
-        Pattern p = Pattern.compile("\\{(.*?)\\}");
+        Pattern p = Pattern.compile("\\{(.*?)}");
         Matcher m = p.matcher(url);
         while (m.find()) {
-
             String var = m.group(1);
             if (server != null && server.variables != null && server.variables.get(var) != null) {
                 String varValue = server.variables.get(var).default_;
@@ -291,14 +282,12 @@ public class RestOpenApiSupport {
         String contactEmail = (String) config.get("api.contact.email");
 
         if (!openApiConfig.isOpenApi3()) {
-
             setInfoOas20(openApiConfig, version, title, description, termsOfService, licenseName, licenseUrl,
                     contactName, contactUrl, contactEmail);
         } else {
             setInfoOas30(openApiConfig, version, title, description, termsOfService, licenseName, licenseUrl,
                     contactName, contactUrl, contactEmail);
         }
-
     }
 
     private void setInfoOas30(
@@ -312,19 +301,18 @@ public class RestOpenApiSupport {
         info.termsOfService = termsOfService;
 
         if (licenseName != null || licenseUrl != null) {
-            Oas30License license = new Oas30License();
+            License license = info.createLicense();
             license.name = licenseName;
             license.url = licenseUrl;
             info.license = license;
         }
 
         if (contactName != null || contactUrl != null || contactEmail != null) {
-            Oas30Contact contact = new Oas30Contact();
+            Contact contact = info.createContact();
             contact.name = contactName;
             contact.url = contactUrl;
             contact.email = contactEmail;
             info.contact = contact;
-            contact._parent = info;
         }
         openApiConfig.setInfo(info);
     }
@@ -340,19 +328,18 @@ public class RestOpenApiSupport {
         info.termsOfService = termsOfService;
 
         if (licenseName != null || licenseUrl != null) {
-            Oas20License license = new Oas20License();
+            License license = info.createLicense();
             license.name = licenseName;
             license.url = licenseUrl;
             info.license = license;
         }
 
         if (contactName != null || contactUrl != null || contactEmail != null) {
-            Oas20Contact contact = new Oas20Contact();
+            Contact contact = info.createContact();
             contact.name = contactName;
             contact.url = contactUrl;
             contact.email = contactEmail;
             info.contact = contact;
-            contact._parent = info;
         }
         openApiConfig.setInfo(info);
     }
@@ -380,8 +367,8 @@ public class RestOpenApiSupport {
 
     public void renderResourceListing(
             CamelContext camelContext, RestApiResponseAdapter response,
-            BeanConfig openApiConfig, String contextId, String route, boolean json,
-            boolean yaml, Map<String, Object> headers, ClassResolver classResolver,
+            BeanConfig openApiConfig, boolean json,
+            Map<String, Object> headers, ClassResolver classResolver,
             RestConfiguration configuration)
             throws Exception {
         LOG.trace("renderResourceListing");
@@ -394,12 +381,7 @@ public class RestOpenApiSupport {
             setupCorsHeaders(response, configuration.getCorsHeaders());
         }
 
-        List<RestDefinition> rests;
-        if (camelContext.getName().equals(contextId)) {
-            rests = getRestDefinitions(camelContext);
-        } else {
-            rests = getRestDefinitions(camelContext, contextId);
-        }
+        List<RestDefinition> rests = getRestDefinitions(camelContext);
 
         if (rests != null) {
             final Map<String, Object> apiProperties = configuration.getApiProperties() != null
@@ -409,7 +391,8 @@ public class RestOpenApiSupport {
                         .getOrDefault("api.specification.contentType.json", "application/json"));
 
                 // read the rest-dsl into openApi model
-                OasDocument openApi = reader.read(camelContext, rests, route, openApiConfig, contextId, classResolver);
+                OasDocument openApi = reader.read(
+                        camelContext, rests, openApiConfig, camelContext.getName(), classResolver);
                 if (configuration.isUseXForwardHeaders()) {
                     setupXForwardedHeaders(openApi, headers);
                 }
@@ -429,7 +412,8 @@ public class RestOpenApiSupport {
                         .getOrDefault("api.specification.contentType.yaml", "text/yaml"));
 
                 // read the rest-dsl into openApi model
-                OasDocument openApi = reader.read(camelContext, rests, route, openApiConfig, contextId, classResolver);
+                OasDocument openApi = reader.read(
+                        camelContext, rests, openApiConfig, camelContext.getName(), classResolver);
                 if (configuration.isUseXForwardHeaders()) {
                     setupXForwardedHeaders(openApi, headers);
                 }
@@ -455,73 +439,4 @@ public class RestOpenApiSupport {
         }
     }
 
-    /**
-     * Renders a list of available CamelContexts in the JVM
-     */
-    public void renderCamelContexts(
-            CamelContext camelContext, RestApiResponseAdapter response, String contextId,
-            String contextIdPattern, boolean json, boolean yaml,
-            RestConfiguration configuration)
-            throws Exception {
-        LOG.trace("renderCamelContexts");
-
-        if (cors) {
-            setupCorsHeaders(response, configuration.getCorsHeaders());
-        }
-
-        List<String> contexts = findCamelContexts(camelContext);
-
-        // filter non matched CamelContext's
-        if (contextIdPattern != null) {
-            Iterator<String> it = contexts.iterator();
-            while (it.hasNext()) {
-                String name = it.next();
-
-                boolean match;
-                if ("#name#".equals(contextIdPattern)) {
-                    match = name.equals(contextId);
-                } else {
-                    match = PatternHelper.matchPattern(name, contextIdPattern);
-                }
-                if (!match) {
-                    it.remove();
-                }
-            }
-        }
-
-        StringBuffer sb = new StringBuffer();
-
-        if (json) {
-            response.setHeader(Exchange.CONTENT_TYPE, "application/json");
-
-            sb.append("[\n");
-            for (int i = 0; i < contexts.size(); i++) {
-                String name = contexts.get(i);
-                sb.append("{\"name\": \"").append(name).append("\"}");
-                if (i < contexts.size() - 1) {
-                    sb.append(",\n");
-                }
-            }
-            sb.append("\n]");
-        } else {
-            response.setHeader(Exchange.CONTENT_TYPE, "text/yaml");
-
-            for (int i = 0; i < contexts.size(); i++) {
-                String name = contexts.get(i);
-                sb.append("- \"").append(name).append("\"\n");
-            }
-        }
-
-        int len = sb.length();
-        response.setHeader(Exchange.CONTENT_LENGTH, "" + len);
-
-        response.writeBytes(sb.toString().getBytes());
-    }
-
-    private List<String> findCamelContexts(CamelContext camelContext) throws Exception {
-        if (jmxRestDefinitionResolver == null) {
-            jmxRestDefinitionResolver = createJmxRestDefinitionsResolver(camelContext);
-        }
-        return jmxRestDefinitionResolver.findCamelContexts();
-    }
 }

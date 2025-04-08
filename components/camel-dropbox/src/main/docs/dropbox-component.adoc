@@ -1,12 +1,13 @@
-[[dropbox-component]]
 = Dropbox Component
-:docTitle: Dropbox
-:artifactId: camel-dropbox
+:doctitle: Dropbox
+:shortname: dropbox
+:artifactid: camel-dropbox
 :description: Upload, download and manage files, folders, groups, collaborations, etc on Dropbox.
 :since: 2.14
-:supportLevel: Stable
+:supportlevel: Stable
 :component-header: Both producer and consumer are supported
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/components/dropbox.adoc[opts=optional]
+//Manually maintained attributes
+:camel-spring-boot-name: dropbox
 
 *Since Camel {since}*
 
@@ -23,6 +24,12 @@ component has the following features:
 * As a producer, download files, move files between remote directories,
 delete files/dir, upload files and search files by queries
 
+In order to work with Dropbox API you need to obtain an *accessToken*,
+ *expireIn*, *refreshToken*, *apiKey*, *apiSecret* and a *clientIdentifier.* +
+You can refer to the
+https://dropbox.tech/developers/migrating-app-permissions-and-access-tokens[Dropbox
+documentation] that explains how to get them.
+
 Maven users will need to add the following dependency to their `pom.xml`
 for this component:
 
@@ -38,7 +45,6 @@ for this component:
 
 == URI format
 
-[source]
 ----
 dropbox://[operation]?[options]
 ----
@@ -66,68 +72,23 @@ perform on Dropbox remote folder.
 *Operations* require additional options to work, some are mandatory for
 the specific operation.
 
-== Options
 
-In order to work with Dropbox API you need to obtain an *accessToken*
-and a *clientIdentifier.* +
-You can refer to the
-https://www.dropbox.com/developers/core/start/java[Dropbox
-documentation] that explains how to get them.  
+// component-configure options: START
+
+// component-configure options: END
 
 // component options: START
-The Dropbox component supports 3 options, which are listed below.
-
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *bridgeErrorHandler* (consumer) | Allows for bridging the consumer to the Camel routing Error Handler, which mean any exceptions occurred while the consumer is trying to pickup incoming messages, or the likes, will now be processed as a message and handled by the routing Error Handler. By default the consumer will use the org.apache.camel.spi.ExceptionHandler to deal with exceptions, that will be logged at WARN or ERROR level and ignored. | false | boolean
-| *lazyStartProducer* (producer) | Whether the producer should be started lazy (on the first message). By starting lazy you can use this to allow CamelContext and routes to startup in situations where a producer may otherwise fail during starting and cause the route to fail being started. By deferring this startup to be lazy then the startup failure can be handled during routing messages via Camel's routing error handlers. Beware that when the first message is processed then creating and starting the producer may take a little time and prolong the total processing time of the processing. | false | boolean
-| *autowiredEnabled* (advanced) | Whether autowiring is enabled. This is used for automatic autowiring options (the option must be marked as autowired) by looking up in the registry to find if there is a single instance of matching type, which then gets configured on the component. This can be used for automatic configuring JDBC data sources, JMS connection factories, AWS Clients, etc. | true | boolean
-|===
+include::partial$component-configure-options.adoc[]
+include::partial$component-endpoint-options.adoc[]
 // component options: END
 
 // endpoint options: START
-The Dropbox endpoint is configured using URI syntax:
 
-----
-dropbox:operation
-----
-
-with the following path and query parameters:
-
-=== Path Parameters (1 parameters):
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *operation* | *Required* The specific action (typically is a CRUD action) to perform on Dropbox remote folder. There are 5 enums and the value can be one of: put, del, search, get, move |  | DropboxOperation
-|===
-
-
-=== Query Parameters (12 parameters):
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *accessToken* (common) | *Required* The access token to make API requests for a specific Dropbox user |  | String
-| *client* (common) | To use an existing DbxClient instance as DropBox client. |  | DbxClientV2
-| *clientIdentifier* (common) | Name of the app registered to make API requests |  | String
-| *localPath* (common) | Optional folder or file to upload on Dropbox from the local filesystem. If this option has not been configured then the message body is used as the content to upload. |  | String
-| *newRemotePath* (common) | Destination file or folder |  | String
-| *query* (common) | A space-separated list of sub-strings to search for. A file matches only if it contains all the sub-strings. If this option is not set, all files will be matched. |  | String
-| *remotePath* (common) | Original file or folder to move |  | String
-| *uploadMode* (common) | Which mode to upload. in case of add the new file will be renamed if a file with the same name already exists on dropbox. in case of force if a file with the same name already exists on dropbox, this will be overwritten. There are 2 enums and the value can be one of: add, force |  | DropboxUploadMode
-| *bridgeErrorHandler* (consumer) | Allows for bridging the consumer to the Camel routing Error Handler, which mean any exceptions occurred while the consumer is trying to pickup incoming messages, or the likes, will now be processed as a message and handled by the routing Error Handler. By default the consumer will use the org.apache.camel.spi.ExceptionHandler to deal with exceptions, that will be logged at WARN or ERROR level and ignored. | false | boolean
-| *exceptionHandler* (consumer) | To let the consumer use a custom ExceptionHandler. Notice if the option bridgeErrorHandler is enabled then this option is not in use. By default the consumer will deal with exceptions, that will be logged at WARN or ERROR level and ignored. |  | ExceptionHandler
-| *exchangePattern* (consumer) | Sets the exchange pattern when the consumer creates an exchange. There are 3 enums and the value can be one of: InOnly, InOut, InOptionalOut |  | ExchangePattern
-| *lazyStartProducer* (producer) | Whether the producer should be started lazy (on the first message). By starting lazy you can use this to allow CamelContext and routes to startup in situations where a producer may otherwise fail during starting and cause the route to fail being started. By deferring this startup to be lazy then the startup failure can be handled during routing messages via Camel's routing error handlers. Beware that when the first message is processed then creating and starting the producer may take a little time and prolong the total processing time of the processing. | false | boolean
-|===
 // endpoint options: END
 
+// component headers: START
+include::partial$component-endpoint-headers.adoc[]
+// component headers: END
 
 == Del operation
 
@@ -149,24 +110,15 @@ Below are listed the options for this operation:
 [source,java]
 ----
 from("direct:start")
-  .to("dropbox://del?accessToken=XXX&clientIdentifier=XXX&remotePath=/root/folder1")
+  .to("dropbox://del?accessToken=XXX&clientIdentifier=XXX&expireIn=1000&refreshToken=XXXX"
+      +"&apiKey=XXXXX&apiSecret=XXXXXX&remotePath=/root/folder1")
   .to("mock:result");
 
 from("direct:start")
-  .to("dropbox://del?accessToken=XXX&clientIdentifier=XXX&remotePath=/root/folder1/file1.tar.gz")
+  .to("dropbox://del?accessToken=XXX&clientIdentifier=XXX&expireIn=1000&refreshToken=XXXX"
+      +"&apiKey=XXXXX&apiSecret=XXXXXX&remotePath=/root/folder1/file1.tar.gz")
   .to("mock:result");
 ----
-
-=== Result Message Headers
-
-The following headers are set on message result:
-
-[width="100%",cols="50%,50%",options="header",]
-|===
-|Property |Value
-
-|`DELETED_PATH` |name of the path deleted on dropbox
-|===
 
 === Result Message Body
 
@@ -199,29 +151,19 @@ Below are listed the options for this operation:
 [source,java]
 ----
 from("direct:start")
-  .to("dropbox://get?accessToken=XXX&clientIdentifier=XXX&remotePath=/root/folder1/file1.tar.gz")
+  .to("dropbox://get?accessToken=XXX&clientIdentifier=XXX&expireIn=1000&refreshToken=XXXX"
+      +"&apiKey=XXXXX&apiSecret=XXXXXX&remotePath=/root/folder1/file1.tar.gz")
   .to("file:///home/kermit/?fileName=file1.tar.gz");
 
 from("direct:start")
-  .to("dropbox://get?accessToken=XXX&clientIdentifier=XXX&remotePath=/root/folder1")
+  .to("dropbox://get?accessToken=XXX&clientIdentifier=XXX&expireIn=1000&refreshToken=XXXX"
+      +"&apiKey=XXXXX&apiSecret=XXXXXX&remotePath=/root/folder1")
   .to("mock:result");
 
-from("dropbox://get?accessToken=XXX&clientIdentifier=XXX&remotePath=/root/folder1")
+from("dropbox://get?accessToken=XXX&clientIdentifier=XXX&expireIn=1000&refreshToken=XXXX"
+      +"&apiKey=XXXXX&apiSecret=XXXXXX&remotePath=/root/folder1")
   .to("file:///home/kermit/");
 ----
-
-=== Result Message Headers
-
-The following headers are set on message result:
-
-[width="100%",cols="50%,50%",options="header",]
-|===
-|Property |Value
-
-|`DOWNLOADED_FILE` |in case of single file download, path of the remote file downloaded
-
-|`DOWNLOADED_FILES` |in case of multiple files download, path of the remote files downloaded
-|===
 
 === Result Message Body
 
@@ -260,20 +202,10 @@ Below are listed the options for this operation:
 [source,java]
 ----
 from("direct:start")
-  .to("dropbox://move?accessToken=XXX&clientIdentifier=XXX&remotePath=/root/folder1&newRemotePath=/root/folder2")
+  .to("dropbox://move?accessToken=XXX&clientIdentifier=XXX&expireIn=1000&refreshToken=XXXX"
+      +"&apiKey=XXXXX&apiSecret=XXXXXX&remotePath=/root/folder1&newRemotePath=/root/folder2")
   .to("mock:result");
 ----
-
-=== Result Message Headers
-
-The following headers are set on message result:
-
-[width="100%",cols="50%,50%",options="header",]
-|===
-|Property |Value
-
-|`MOVED_PATH` |name of the path moved on dropbox
-|===
 
 === Result Message Body
 
@@ -321,10 +253,12 @@ Caused by: java.lang.IllegalArgumentException: 'path': bad path: must start with
 
 [source,java]
 ----
-from("direct:start").to("dropbox://put?accessToken=XXX&clientIdentifier=XXX&uploadMode=add&localPath=/root/folder1")
+from("direct:start").to("dropbox://put?accessToken=XXX&clientIdentifier=XXX&expireIn=1000&refreshToken=XXXX"
+      +"&apiKey=XXXXX&apiSecret=XXXXXX&uploadMode=add&localPath=/root/folder1")
   .to("mock:result");
 
-from("direct:start").to("dropbox://put?accessToken=XXX&clientIdentifier=XXX&uploadMode=add&localPath=/root/folder1&remotePath=/root/folder2")
+from("direct:start").to("dropbox://put?accessToken=XXX&clientIdentifier=XXX&expireIn=1000&refreshToken=XXXX"
+      +"&apiKey=XXXXX&apiSecret=XXXXXX&uploadMode=add&localPath=/root/folder1&remotePath=/root/folder2")
   .to("mock:result");
 ----
 
@@ -334,26 +268,14 @@ And to upload a single file with content from the message body
 ----
 from("direct:start")
    .setHeader(DropboxConstants.HEADER_PUT_FILE_NAME, constant("myfile.txt"))
-   .to("dropbox://put?accessToken=XXX&clientIdentifier=XXX&uploadMode=add&remotePath=/root/folder2")
+   .to("dropbox://put?accessToken=XXX&clientIdentifier=XXX&expireIn=1000&refreshToken=XXXX"
+      +"&apiKey=XXXXX&apiSecret=XXXXXX&uploadMode=add&remotePath=/root/folder2")
    .to("mock:result");
 ----
 
 The name of the file can be provided in the header `DropboxConstants.HEADER_PUT_FILE_NAME`
 or `Exchange.FILE_NAME` in that order of precedence. If no header has been provided then the message id (uuid) is
 used as the file name.
-
-=== Result Message Headers
-
-The following headers are set on message result:
-
-[width="100%",cols="50%,50%",options="header",]
-|===
-|Property |Value
-
-|`UPLOADED_FILE` |in case of single file upload, path of the remote path uploaded
-
-|`UPLOADED_FILES` |in case of multiple files upload, string with the remote paths uploaded
-|===
 
 === Result Message Body
 
@@ -394,25 +316,16 @@ or as a header `CamelDropboxQuery` on the Camel message.
 
 [source,java]
 ----
-from("dropbox://search?accessToken=XXX&clientIdentifier=XXX&remotePath=/XXX&query=XXX")
+from("dropbox://search?accessToken=XXX&clientIdentifier=XXX&expireIn=1000&refreshToken=XXXX"
+      +"&apiKey=XXXXX&apiSecret=XXXXXX&remotePath=/XXX&query=XXX")
   .to("mock:result");
 
 from("direct:start")
   .setHeader("CamelDropboxQuery", constant("XXX"))
-  .to("dropbox://search?accessToken=XXX&clientIdentifier=XXX&remotePath=/XXX")
+  .to("dropbox://search?accessToken=XXX&clientIdentifier=XXX&expireIn=1000&refreshToken=XXXX"
+      +"&apiKey=XXXXX&apiSecret=XXXXXX&remotePath=/XXX")
   .to("mock:result");
 ----
-
-=== Result Message Headers
-
-The following headers are set on message result:
-
-[width="100%",cols="50%,50%",options="header",]
-|===
-|Property |Value
-
-|`FOUNDED_FILES` |list of file path founded
-|===
 
 === Result Message Body
 
@@ -430,4 +343,5 @@ Dropbox documentation,
 
  
 
-include::camel-spring-boot::page$dropbox-starter.adoc[]
+
+include::spring-boot:partial$starter.adoc[]

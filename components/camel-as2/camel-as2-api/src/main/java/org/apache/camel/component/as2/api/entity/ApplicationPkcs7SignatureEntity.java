@@ -19,8 +19,8 @@ package org.apache.camel.component.as2.api.entity;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
-import org.apache.camel.component.as2.api.AS2Charset;
 import org.apache.camel.component.as2.api.AS2Header;
 import org.apache.camel.component.as2.api.AS2MediaType;
 import org.apache.camel.component.as2.api.CanonicalOutputStream;
@@ -30,6 +30,7 @@ import org.apache.http.HeaderIterator;
 import org.apache.http.HttpException;
 import org.apache.http.entity.ContentType;
 import org.apache.http.util.Args;
+import org.bouncycastle.cms.CMSException;
 import org.bouncycastle.cms.CMSProcessableByteArray;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.CMSSignedDataGenerator;
@@ -65,8 +66,7 @@ public class ApplicationPkcs7SignatureEntity extends MimeEntity {
     public ApplicationPkcs7SignatureEntity(byte[] signature,
                                            String charset,
                                            String contentTransferEncoding,
-                                           boolean isMainBody)
-                                                               throws HttpException {
+                                           boolean isMainBody) {
         this.signature = Args.notNull(signature, "signature");
 
         ContentType contentType = ContentType
@@ -88,7 +88,7 @@ public class ApplicationPkcs7SignatureEntity extends MimeEntity {
 
         // Write out mime part headers if this is not the main body of message.
         if (!isMainBody()) {
-            try (CanonicalOutputStream canonicalOutstream = new CanonicalOutputStream(ncos, AS2Charset.US_ASCII)) {
+            try (CanonicalOutputStream canonicalOutstream = new CanonicalOutputStream(ncos, StandardCharsets.US_ASCII.name())) {
 
                 HeaderIterator it = headerIterator();
                 while (it.hasNext()) {
@@ -111,7 +111,7 @@ public class ApplicationPkcs7SignatureEntity extends MimeEntity {
         }
     }
 
-    private byte[] createSignature(MimeEntity data, CMSSignedDataGenerator signer) throws Exception {
+    private byte[] createSignature(MimeEntity data, CMSSignedDataGenerator signer) throws IOException, CMSException {
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
             data.writeTo(bos);
             bos.flush();
@@ -119,8 +119,6 @@ public class ApplicationPkcs7SignatureEntity extends MimeEntity {
             CMSTypedData contentData = new CMSProcessableByteArray(bos.toByteArray());
             CMSSignedData signedData = signer.generate(contentData, false);
             return signedData.getEncoded();
-        } catch (Exception e) {
-            throw new Exception("", e);
         }
 
     }

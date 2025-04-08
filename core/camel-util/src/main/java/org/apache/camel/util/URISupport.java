@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import static org.apache.camel.util.CamelURIParser.URI_ALREADY_NORMALIZED;
+
 /**
  * URI utilities.
  */
@@ -40,8 +42,8 @@ public final class URISupport {
     // Match any key-value pair in the URI query string whose key contains
     // "passphrase" or "password" or secret key (case-insensitive).
     // First capture group is the key, second is the value.
-    private static final Pattern SECRETS = Pattern.compile(
-            "([?&][^=]*(?:passphrase|password|secretKey|accessToken|clientSecret|authorizationToken|saslJaasConfig)[^=]*)=(RAW[({].*[)}]|[^&]*)",
+    private static final Pattern ALL_SECRETS = Pattern.compile(
+            "([?&][^=]*(?:" + SensitiveUtils.getSensitivePattern() + ")[^=]*)=(RAW(([{][^}]*[}])|([(][^)]*[)]))|[^&]*)",
             Pattern.CASE_INSENSITIVE);
 
     // Match the user password in the URI as second capture group
@@ -64,15 +66,15 @@ public final class URISupport {
      * Removes detected sensitive information (such as passwords) from the URI and returns the result.
      *
      * @param  uri The uri to sanitize.
-     * @see        #SECRETS and #USERINFO_PASSWORD for the matched pattern
      * @return     Returns null if the uri is null, otherwise the URI with the passphrase, password or secretKey
      *             sanitized.
+     * @see        #ALL_SECRETS and #USERINFO_PASSWORD for the matched pattern
      */
     public static String sanitizeUri(String uri) {
         // use xxxxx as replacement as that works well with JMX also
         String sanitized = uri;
         if (uri != null) {
-            sanitized = SECRETS.matcher(sanitized).replaceAll("$1=xxxxxx");
+            sanitized = ALL_SECRETS.matcher(sanitized).replaceAll("$1=xxxxxx");
             sanitized = USERINFO_PASSWORD.matcher(sanitized).replaceFirst("$1xxxxxx$3");
         }
         return sanitized;
@@ -131,6 +133,20 @@ public final class URISupport {
         } else {
             return null;
         }
+    }
+
+    /**
+     * Strips the query parameters from the uri
+     *
+     * @param  uri the uri
+     * @return     the uri without the query parameter
+     */
+    public static String stripQuery(String uri) {
+        int idx = uri.indexOf('?');
+        if (idx > -1) {
+            uri = uri.substring(0, idx);
+        }
+        return uri;
     }
 
     /**
@@ -352,7 +368,7 @@ public final class URISupport {
         if (query != null) {
             s = s + "?" + query;
         }
-        if ((!s.contains("#")) && (uri.getFragment() != null)) {
+        if (!s.contains("#") && uri.getFragment() != null) {
             s = s + "#" + uri.getFragment();
         }
 
@@ -477,7 +493,8 @@ public final class URISupport {
     private static void appendQueryStringParameter(String key, String value, StringBuilder rc, boolean encode)
             throws UnsupportedEncodingException {
         if (encode) {
-            rc.append(URLEncoder.encode(key, CHARSET));
+            String encoded = URLEncoder.encode(key, CHARSET);
+            rc.append(encoded);
         } else {
             rc.append(key);
         }
@@ -490,11 +507,12 @@ public final class URISupport {
         if (raw != null) {
             // do not encode RAW parameters unless it has %
             // need to replace % with %25 to avoid losing "%" when decoding
-            String s = StringHelper.replaceAll(value, "%", "%25");
+            String s = value.replace("%", "%25");
             rc.append(s);
         } else {
             if (encode) {
-                rc.append(URLEncoder.encode(value, CHARSET));
+                String encoded = URLEncoder.encode(value, CHARSET);
+                rc.append(encoded);
             } else {
                 rc.append(value);
             }
@@ -552,8 +570,12 @@ public final class URISupport {
      */
     public static String normalizeUri(String uri) throws URISyntaxException, UnsupportedEncodingException {
         // try to parse using the simpler and faster Camel URI parser
-        String[] parts = CamelURIParser.parseUri(uri);
+        String[] parts = CamelURIParser.fastParseUri(uri);
         if (parts != null) {
+            // we optimized specially if an empty array is returned
+            if (parts == URI_ALREADY_NORMALIZED) {
+                return uri;
+            }
             // use the faster and more simple normalizer
             return doFastNormalizeUri(parts);
         } else {
@@ -609,7 +631,7 @@ public final class URISupport {
             String after = path.substring(max);
 
             // replace the @ with %40
-            before = StringHelper.replaceAll(before, "@", "%40");
+            before = before.replace("@", "%40");
             path = before + after;
         }
 
@@ -765,4 +787,5 @@ public final class URISupport {
 
         return joined.toString();
     }
+
 }

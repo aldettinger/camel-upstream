@@ -54,17 +54,19 @@ public class RestUndertowHttpBindingModeJsonWithContractTest extends BaseUnderto
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 context.getTypeConverterRegistry().addTypeConverters(new MyTypeConverters());
                 restConfiguration().component("undertow").host("localhost").port(getPort()).bindingMode(RestBindingMode.json);
 
                 rest("/users/")
                         // REST binding converts from JSON to UserPojo
                         .post("new").type(UserPojo.class)
-                        .route()
+                        .to("direct:new");
+
+                from("direct:new")
                         // then contract advice converts from UserPojo to UserPojoEx
                         .inputType(UserPojoEx.class)
                         .to("mock:input");

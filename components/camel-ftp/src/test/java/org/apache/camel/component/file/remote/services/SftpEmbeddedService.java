@@ -17,69 +17,62 @@
 
 package org.apache.camel.component.file.remote.services;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.FileSystems;
+import java.net.InetSocketAddress;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.BiConsumer;
 
-import org.apache.camel.test.AvailablePortFinder;
+import org.apache.camel.test.infra.common.services.AbstractTestService;
 import org.apache.camel.test.infra.ftp.common.FtpProperties;
 import org.apache.camel.test.infra.ftp.services.FtpService;
-import org.apache.camel.util.FileUtil;
-import org.apache.commons.io.FileUtils;
+import org.apache.sshd.common.NamedFactory;
 import org.apache.sshd.common.file.virtualfs.VirtualFileSystemFactory;
 import org.apache.sshd.common.keyprovider.FileKeyPairProvider;
 import org.apache.sshd.common.session.helpers.AbstractSession;
+import org.apache.sshd.common.signature.BuiltinSignatures;
+import org.apache.sshd.common.signature.Signature;
+import org.apache.sshd.scp.server.ScpCommandFactory;
 import org.apache.sshd.server.SshServer;
 import org.apache.sshd.server.auth.pubkey.PublickeyAuthenticator;
-import org.apache.sshd.server.scp.ScpCommandFactory;
-import org.apache.sshd.server.subsystem.sftp.SftpSubsystemFactory;
-import org.junit.jupiter.api.Assertions;
+import org.apache.sshd.sftp.server.SftpSubsystemFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.camel.test.junit5.TestSupport.createDirectory;
-
-public class SftpEmbeddedService implements FtpService {
+public class SftpEmbeddedService extends AbstractTestService implements FtpService {
     private static final Logger LOG = LoggerFactory.getLogger(SftpEmbeddedService.class);
-    private static final String FTP_ROOT_DIR = "target/res/home";
     private static final String KNOWN_HOSTS = "[localhost]:%d ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQDdfIWeSV4o68dRrKS"
                                               + "zFd/Bk51E65UTmmSrmW0O1ohtzi6HzsDPjXgCtlTt3FqTcfFfI92IlTr4JWqC9UK1QT1ZTeng0MkPQmv68hDANHbt5CpETZHjW5q4OOgWhV"
                                               + "vj5IyOC2NZHtKlJBkdsMAa15ouOOJLzBvAvbqOR/yUROsEiQ==";
 
     protected SshServer sshd;
-    protected String oldUserHome;
     protected final boolean rootDirMode;
-    protected final int port;
+    protected int port;
 
-    private String simulatedUserHome = "./target/user-home";
-    private String simulatedUserSsh = "./target/user-home/.ssh";
+    private Path rootDir;
+    private Path knownHosts;
 
     public SftpEmbeddedService() {
         this(false);
     }
 
     public SftpEmbeddedService(boolean rootDirMode) {
-        port = AvailablePortFinder.getNextAvailable();
         this.rootDirMode = rootDirMode;
     }
 
     public void setUp() throws Exception {
-        FileUtil.removeDir(new File(FTP_ROOT_DIR));
-
-        oldUserHome = System.getProperty("user.home");
-
-        System.setProperty("user.home", "target/user-home");
-
-        FileUtil.removeDir(new File(simulatedUserHome));
-        createDirectory(simulatedUserHome);
-        createDirectory(simulatedUserSsh);
-
-        FileUtils.writeByteArrayToFile(new File(simulatedUserSsh + "/known_hosts"), buildKnownHosts());
-
+        rootDir = testDirectory().resolve("res/home");
+        knownHosts = testDirectory().resolve("user-home/.ssh/known_hosts");
+        Files.createDirectories(knownHosts.getParent());
+        Files.write(knownHosts, buildKnownHosts());
         setUpServer();
+    }
+
+    private Path testDirectory() {
+        return Paths.get("target", "ftp", context.getRequiredTestClass().getSimpleName());
     }
 
     public void setUpServer() throws Exception {
@@ -92,37 +85,34 @@ public class SftpEmbeddedService implements FtpService {
         sshd.setPublickeyAuthenticator(getPublickeyAuthenticator());
 
         if (rootDirMode) {
-            sshd.setFileSystemFactory(new VirtualFileSystemFactory(
-                    FileSystems.getDefault().getPath(System.getProperty("user.dir") + "/target/res")));
+            sshd.setFileSystemFactory(new VirtualFileSystemFactory(testDirectory().resolve("res").toAbsolutePath()));
         }
-
+        List<NamedFactory<Signature>> signatureFactories = sshd.getSignatureFactories();
+        signatureFactories.clear();
+        // use only one, quite strong signature algorithms for 3 kinds of keys - RSA, EC, EDDSA
+        signatureFactories.add(BuiltinSignatures.rsaSHA512);
+        signatureFactories.add(BuiltinSignatures.nistp521);
+        signatureFactories.add(BuiltinSignatures.ed25519);
+        sshd.setSignatureFactories(signatureFactories);
         sshd.start();
+
+        port = ((InetSocketAddress) sshd.getBoundAddresses().iterator().next()).getPort();
     }
 
     protected PublickeyAuthenticator getPublickeyAuthenticator() {
         return (username, key, session) -> true;
     }
 
-    public void tearDown() throws Exception {
-        if (oldUserHome != null) {
-            System.setProperty("user.home", oldUserHome);
-        } else {
-            System.clearProperty("user.home");
-        }
-
+    public void tearDown() {
         tearDownServer();
     }
 
     public void tearDownServer() {
-        if (sshd == null) {
-            return;
-        }
-
         try {
             // stop asap as we may hang forever
-            sshd.stop(true);
-
-            sshd = null;
+            if (sshd != null) {
+                sshd.stop(true);
+            }
         } catch (Exception e) {
             // ignore while shutting down as we could be polling during
             // shutdown
@@ -131,6 +121,8 @@ public class SftpEmbeddedService implements FtpService {
             // since we host the ftp server embedded in the same jvm for
             // unit testing
             LOG.trace("Exception while shutting down: {}", e.getMessage(), e);
+        } finally {
+            sshd = null;
         }
     }
 
@@ -147,38 +139,18 @@ public class SftpEmbeddedService implements FtpService {
     }
 
     public String getKnownHostsFile() {
-        return simulatedUserSsh + "/known_hosts";
+        return knownHosts.toString();
     }
 
-    public static String getFtpRootDir() {
-        return FTP_ROOT_DIR;
-    }
-
-    @Override
-    public void registerProperties() {
-        System.setProperty(FtpProperties.SERVER_HOST, "localhost");
-        System.setProperty(FtpProperties.SERVER_PORT, String.valueOf(port));
-        System.setProperty(FtpProperties.ROOT_DIR, FTP_ROOT_DIR);
+    public Path getFtpRootDir() {
+        return rootDir;
     }
 
     @Override
-    public void initialize() {
-        try {
-            setUp();
-
-            registerProperties();
-        } catch (Exception e) {
-            Assertions.fail("Unable to initialize the SFTP server " + e.getMessage());
-        }
-    }
-
-    @Override
-    public void shutdown() {
-        try {
-            tearDown();
-        } catch (Exception e) {
-            Assertions.fail("Unable to shutdown the SFTP server " + e.getMessage());
-        }
+    protected void registerProperties(BiConsumer<String, String> store) {
+        store.accept(FtpProperties.SERVER_HOST, "localhost");
+        store.accept(FtpProperties.SERVER_PORT, String.valueOf(port));
+        store.accept(FtpProperties.ROOT_DIR, rootDir.toString());
     }
 
     public int getPort() {

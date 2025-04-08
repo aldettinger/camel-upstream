@@ -21,8 +21,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.camel.resume.ConsumerListener;
+import org.apache.camel.resume.ResumeStrategy;
 import org.apache.camel.spi.InterceptStrategy;
 import org.apache.camel.spi.ManagementInterceptStrategy;
+import org.apache.camel.spi.Resource;
 import org.apache.camel.spi.RouteController;
 import org.apache.camel.spi.RouteError;
 import org.apache.camel.spi.RoutePolicy;
@@ -44,6 +47,7 @@ public interface Route extends RuntimeConfiguration {
     String REST_PROPERTY = "rest";
     String TEMPLATE_PROPERTY = "template";
     String DESCRIPTION_PROPERTY = "description";
+    String CONFIGURATION_ID_PROPERTY = "configurationId";
 
     /**
      * Gets the route id
@@ -53,6 +57,13 @@ public interface Route extends RuntimeConfiguration {
     String getId();
 
     /**
+     * Whether the route id is custom assigned or auto assigned
+     *
+     * @return true if custom id, false if auto assigned id
+     */
+    boolean isCustomId();
+
+    /**
      * Gets the route group
      *
      * @return the route group
@@ -60,7 +71,7 @@ public interface Route extends RuntimeConfiguration {
     String getGroup();
 
     /**
-     * Gets the uptime in a human readable format
+     * Gets the uptime in a human-readable format
      *
      * @return the uptime in days/hours/minutes
      */
@@ -114,6 +125,33 @@ public interface Route extends RuntimeConfiguration {
      * @return the description, or <tt>null</tt> if no description has been configured.
      */
     String getDescription();
+
+    /**
+     * Gets the route configuration id(s) the route has been applied with. Multiple ids is separated by comma.
+     * <p/>
+     * The configuration ids is configured using the {@link #CONFIGURATION_ID_PROPERTY} as key in the
+     * {@link #getProperties()}.
+     *
+     * @return the configuration, or <tt>null</tt> if no configuration has been configured.
+     */
+    String getConfigurationId();
+
+    /**
+     * Gets the source resource that this route is located from
+     *
+     * @return the source, or null if this route is not loaded from a resource
+     */
+    Resource getSourceResource();
+
+    /**
+     * The source:line-number where the route input is located in the source code
+     */
+    String getSourceLocation();
+
+    /**
+     * The source:line-number in short format that can be used for logging or summary purposes.
+     */
+    String getSourceLocationShort();
 
     /**
      * Gets the camel context
@@ -171,14 +209,22 @@ public interface Route extends RuntimeConfiguration {
     void warmUp();
 
     /**
-     * Gets the last error.
+     * Gets the last error that happened during changing the route lifecycle, i.e. such as when an exception was thrown
+     * during starting the route.
+     * <p/>
+     * This is only errors for route lifecycle changes, it is not exceptions thrown during routing messsages with the
+     * Camel routing engine.
      *
      * @return the error
      */
     RouteError getLastError();
 
     /**
-     * Sets the last error.
+     * Sets the last error that happened during changing the route lifecycle, i.e. such as when an exception was thrown
+     * during starting the route.
+     * <p/>
+     * This is only errors for route lifecycle changes, it is not exceptions thrown during routing messsages with the
+     * Camel routing engine.
      *
      * @param error the error
      */
@@ -333,5 +379,15 @@ public interface Route extends RuntimeConfiguration {
      * @param target the target factory
      */
     void addErrorHandlerFactoryReference(ErrorHandlerFactory source, ErrorHandlerFactory target);
+
+    /**
+     * Sets the resume strategy for the route
+     */
+    void setResumeStrategy(ResumeStrategy resumeStrategy);
+
+    /**
+     * Sets the consumer listener for the route
+     */
+    void setConsumerListener(ConsumerListener<?, ?> consumerListener);
 
 }

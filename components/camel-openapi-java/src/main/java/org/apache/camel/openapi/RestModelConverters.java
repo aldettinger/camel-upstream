@@ -16,24 +16,46 @@
  */
 package org.apache.camel.openapi;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.apicurio.datamodels.core.models.Extension;
 import io.apicurio.datamodels.openapi.models.OasDocument;
 import io.apicurio.datamodels.openapi.models.OasSchema;
-import io.apicurio.datamodels.openapi.v2.models.Oas20Definitions;
 import io.apicurio.datamodels.openapi.v2.models.Oas20Document;
+import io.apicurio.datamodels.openapi.v2.models.Oas20Schema;
 import io.apicurio.datamodels.openapi.v2.models.Oas20SchemaDefinition;
+import io.apicurio.datamodels.openapi.v3.models.Oas30Discriminator;
 import io.apicurio.datamodels.openapi.v3.models.Oas30Document;
+import io.apicurio.datamodels.openapi.v3.models.Oas30Schema.Oas30AnyOfSchema;
+import io.apicurio.datamodels.openapi.v3.models.Oas30Schema.Oas30OneOfSchema;
 import io.apicurio.datamodels.openapi.v3.models.Oas30SchemaDefinition;
+import io.swagger.v3.core.converter.ModelConverters;
+import io.swagger.v3.core.jackson.ModelResolver;
+import io.swagger.v3.oas.models.media.ArraySchema;
+import io.swagger.v3.oas.models.media.ComposedSchema;
+import io.swagger.v3.oas.models.media.Discriminator;
+import io.swagger.v3.oas.models.media.Schema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A Camel extended {@link ModelConverters} where we appending vendor extensions to include the java class name of the
  * model classes.
  */
+@SuppressWarnings("rawtypes")
 public class RestModelConverters {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RestModelConverters.class);
+    private static final ModelConverters MODEL_CONVERTERS;
+
+    static {
+        MODEL_CONVERTERS = ModelConverters.getInstance();
+        MODEL_CONVERTERS.addConverter(new FqnModelResolver());
+    }
 
     public List<? extends OasSchema> readClass(OasDocument oasDocument, Class<?> clazz) {
         if (clazz.equals(java.io.File.class)) {
@@ -53,19 +75,20 @@ public class RestModelConverters {
         if (!name.contains(".")) {
             return null;
         }
+
         if (oasDocument.components == null) {
             oasDocument.components = oasDocument.createComponents();
         }
-        Oas30SchemaDefinition model = oasDocument.components.createSchemaDefinition(clazz.getSimpleName());
-        oasDocument.components.addSchemaDefinition(clazz.getSimpleName(), model);
-        model.type = clazz.getSimpleName();
-        Extension extension = model.createExtension();
-        extension.name = "x-className";
-        Map<String, String> value = new HashMap<String, String>();
-        value.put("type", "string");
-        value.put("format", name);
-        extension.value = value;
-        model.addExtension("x-className", extension);
+
+        Map<String, Schema> swaggerModel = MODEL_CONVERTERS.readAll(clazz);
+        swaggerModel.forEach((key, schema) -> {
+            Oas30SchemaDefinition model = oasDocument.components.createSchemaDefinition(key);
+            oasDocument.components.addSchemaDefinition(key, model);
+            processSchema(model, schema);
+
+            addClassNameExtension(model, key);
+        });
+
         return oasDocument.components.getSchemaDefinitions();
     }
 
@@ -74,20 +97,183 @@ public class RestModelConverters {
         if (!name.contains(".")) {
             return null;
         }
+
         if (oasDocument.definitions == null) {
             oasDocument.definitions = oasDocument.createDefinitions();
         }
-        Oas20Definitions resolved = oasDocument.definitions;
-        Oas20SchemaDefinition model = resolved.createSchemaDefinition(clazz.getSimpleName());
-        resolved.addDefinition(clazz.getSimpleName(), model);
-        model.type = clazz.getSimpleName();
-        Extension extension = model.createExtension();
+
+        Map<String, Schema> swaggerModel = ModelConverters.getInstance().readAll(clazz);
+        swaggerModel.forEach((key, schema) -> {
+            Oas20SchemaDefinition model = oasDocument.definitions.createSchemaDefinition(key);
+            oasDocument.definitions.addDefinition(key, model);
+            processSchema(model, schema);
+
+            addClassNameExtension(model, key);
+        });
+
+        return oasDocument.definitions.getDefinitions();
+    }
+
+    private void processSchema(OasSchema model, Schema schema) {
+        String type = schema.getType();
+        model.type = type;
+        model.format = schema.getFormat();
+
+        String ref = schema.get$ref();
+        if (ref != null) {
+            if (model instanceof Oas20Schema) {
+                // Change the prefix from 3.x to 2.x
+                model.$ref = RestOpenApiReader.OAS20_SCHEMA_DEFINITION_PREFIX +
+                             ref.substring(RestOpenApiReader.OAS30_SCHEMA_DEFINITION_PREFIX.length());
+            } else {
+                model.$ref = ref;
+            }
+        }
+
+        // xxxOf support
+        if (model instanceof Oas30SchemaDefinition && schema instanceof ComposedSchema) {
+            ComposedSchema composedSchema = (ComposedSchema) schema;
+            Oas30SchemaDefinition modelDefinition = (Oas30SchemaDefinition) model;
+
+            // oneOf
+            boolean xOf = false;
+            if (null != composedSchema.getOneOf()) {
+                xOf = true;
+                for (Schema oneOfSchema : composedSchema.getOneOf()) {
+                    if (null != oneOfSchema.get$ref()) {
+                        Oas30OneOfSchema oneOfModel = modelDefinition.createOneOfSchema();
+                        oneOfModel.setReference(oneOfSchema.get$ref());
+                        modelDefinition.addOneOfSchema(oneOfModel);
+                        type = null; // No longer typed
+                        model.type = null;
+                    }
+                }
+            }
+
+            // allOf
+            if (null != composedSchema.getAllOf()) {
+                xOf = true;
+                for (Schema allOfSchema : composedSchema.getAllOf()) {
+                    if (null != allOfSchema.get$ref()) {
+                        OasSchema allOfModel = modelDefinition.createAllOfSchema();
+                        allOfModel.setReference(allOfSchema.get$ref());
+                        modelDefinition.addAllOfSchema(allOfModel);
+                        type = null; // No longer typed
+                        model.type = null;
+                    }
+                }
+            }
+
+            // anyOf
+            if (null != composedSchema.getAnyOf()) {
+                xOf = true;
+                for (Schema anyOfSchema : composedSchema.getAnyOf()) {
+                    if (null != anyOfSchema.get$ref()) {
+                        Oas30AnyOfSchema anyOfModel = modelDefinition.createAnyOfSchema();
+                        anyOfModel.setReference(anyOfSchema.get$ref());
+                        modelDefinition.addAnyOfSchema(anyOfModel);
+                        type = null; // No longer typed
+                        model.type = null;
+                    }
+                }
+            }
+
+            // Discriminator
+            if (xOf && null != composedSchema.getDiscriminator()) {
+                Discriminator discriminator = schema.getDiscriminator();
+                Oas30Discriminator modelDiscriminator = modelDefinition.createDiscriminator();
+                modelDiscriminator.propertyName = discriminator.getPropertyName();
+
+                if (null != discriminator.getMapping()) {
+                    discriminator.getMapping().entrySet().stream()
+                            .forEach(e -> modelDiscriminator.addMapping(e.getKey(), e.getValue()));
+                }
+                modelDefinition.discriminator = modelDiscriminator;
+            }
+        }
+
+        if (type != null) {
+            switch (type) {
+                case "object":
+                    if (schema.getProperties() != null) {
+                        //noinspection unchecked
+                        schema.getProperties().forEach((p, v) -> {
+                            OasSchema property = (OasSchema) model.createPropertySchema((String) p);
+                            model.addProperty((String) p, property);
+                            processSchema(property, (Schema) v);
+                        });
+                    }
+                    break;
+                case "array":
+                    Schema items = ((ArraySchema) schema).getItems();
+                    OasSchema modelItems = model.createItemsSchema();
+                    model.items = modelItems;
+                    processSchema(modelItems, items);
+                    break;
+                case "string":
+                    if (schema.getEnum() != null) {
+                        //noinspection unchecked
+                        model.enum_ = new ArrayList<String>(schema.getEnum());
+                    }
+                    break;
+                case "number":
+                case "integer":
+                    break;
+                default:
+                    LOG.warn("Encountered unexpected type {} in processing schema.", type);
+                    break;
+            }
+        }
+
+        if (schema.getRequired() != null) {
+            //noinspection unchecked
+            model.required = new ArrayList<String>(schema.getRequired());
+        }
+
+        String description = schema.getDescription();
+        if (description != null) {
+            model.description = description;
+        }
+        Object example = schema.getExample();
+        if (example != null) {
+            model.example = example;
+        }
+
+        if (schema.getAdditionalProperties() instanceof Schema) {
+            OasSchema additionalProperties = model.createAdditionalPropertiesSchema();
+            model.additionalProperties = additionalProperties;
+            processSchema(additionalProperties, (Schema) schema.getAdditionalProperties());
+        }
+
+        if (schema.getExtensions() != null) {
+            //noinspection unchecked
+            schema.getExtensions().forEach((key, value) -> {
+                Extension extension = model.createExtension();
+                extension.name = (String) key;
+                extension.value = value;
+            });
+        }
+    }
+
+    private void addClassNameExtension(OasSchema schema, String name) {
+        Extension extension = schema.createExtension();
         extension.name = "x-className";
-        Map<String, String> value = new HashMap<String, String>();
+        Map<String, String> value = new HashMap<>();
         value.put("type", "string");
         value.put("format", name);
         extension.value = value;
-        model.addExtension("x-className", extension);
-        return resolved.getDefinitions();
+        schema.addExtension("x-className", extension);
     }
+
+    private static class FqnModelResolver extends ModelResolver {
+        public FqnModelResolver() {
+            this(new ObjectMapper());
+        }
+
+        public FqnModelResolver(ObjectMapper mapper) {
+            super(mapper);
+            this._typeNameResolver.setUseFqn(true);
+        }
+    }
+
 }

@@ -26,24 +26,25 @@ import org.apache.camel.spi.Metadata;
 /**
  * Configures batch-processing resequence eip.
  */
-@Metadata(label = "eip,routing,resequence")
+@Metadata(label = "configuration,eip")
 @XmlRootElement(name = "batch-config")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class BatchResequencerConfig extends ResequencerConfig {
+
     @XmlAttribute
     @Metadata(defaultValue = "100", javaType = "java.lang.Integer")
     private String batchSize;
     @XmlAttribute
-    @Metadata(defaultValue = "1s", javaType = "java.time.Duration")
+    @Metadata(defaultValue = "1000", javaType = "java.time.Duration")
     private String batchTimeout;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String allowDuplicates;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String reverse;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String ignoreInvalidExchanges;
 
     /**

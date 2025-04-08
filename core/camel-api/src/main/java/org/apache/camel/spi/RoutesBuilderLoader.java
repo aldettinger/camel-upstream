@@ -31,11 +31,6 @@ public interface RoutesBuilderLoader extends StaticService, CamelContextAware {
     String FACTORY_PATH = "META-INF/services/org/apache/camel/routes-loader/";
 
     /**
-     * Service factory group.
-     */
-    String FACTORY_GROUP = "routes-loader";
-
-    /**
      * The supported file extension.
      * <p/>
      * Implementations should support a single extension only.
@@ -49,4 +44,17 @@ public interface RoutesBuilderLoader extends StaticService, CamelContextAware {
      * @return          a {@link RoutesBuilder}
      */
     RoutesBuilder loadRoutesBuilder(Resource resource) throws Exception;
+
+    /**
+     * Pre-parses the {@link RoutesBuilder} from {@link Resource}.
+     *
+     * This is used during bootstrap, to eager detect configurations from route DSL resources which makes it possible to
+     * specify configurations that affect the bootstrap, such as by camel-jbang and camel-yaml-dsl.
+     *
+     * @param resource the resource to be pre parsed.
+     */
+    default void preParseRoute(Resource resource) throws Exception {
+        // noop
+    }
+
 }

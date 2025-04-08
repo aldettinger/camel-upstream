@@ -139,7 +139,7 @@ public class URISupportTest {
 
     @Test
     public void testParseParametersURLEncodedValue() throws Exception {
-        String out = URISupport.normalizeUri("http://www.google.com?q=S%C3%B8ren+Hansen");
+        String out = URISupport.normalizeUri("http://www.google.com?q=S%C3%B8ren%20Hansen");
         URI uri = new URI(out);
 
         Map<String, Object> parameters = URISupport.parseParameters(uri);
@@ -200,12 +200,12 @@ public class URISupportTest {
 
     @Test
     public void testParseParameters() throws Exception {
-        URI u = new URI("quartz:myGroup/myTimerName?cron=0+0+*+*+*+?");
+        URI u = new URI("quartz:myGroup/myTimerName?cron=0%200%20*%20*%20*%20?");
         Map<String, Object> params = URISupport.parseParameters(u);
         assertEquals(1, params.size());
         assertEquals("0 0 * * * ?", params.get("cron"));
 
-        u = new URI("quartz:myGroup/myTimerName?cron=0+0+*+*+*+?&bar=123");
+        u = new URI("quartz:myGroup/myTimerName?cron=0%200%20*%20*%20*%20?&bar=123");
         params = URISupport.parseParameters(u);
         assertEquals(2, params.size());
         assertEquals("0 0 * * * ?", params.get("cron"));
@@ -301,7 +301,7 @@ public class URISupportTest {
     public void testSanitizeUriWithRawPassword() {
         String uri1 = "http://foo?username=me&password=RAW(me#@123)&foo=bar";
         String uri2 = "http://foo?username=me&password=RAW{me#@123}&foo=bar";
-        String expected = "http://foo?username=me&password=xxxxxx&foo=bar";
+        String expected = "http://foo?username=xxxxxx&password=xxxxxx&foo=bar";
         assertEquals(expected, URISupport.sanitizeUri(uri1));
         assertEquals(expected, URISupport.sanitizeUri(uri2));
     }
@@ -310,9 +310,21 @@ public class URISupportTest {
     public void testSanitizeUriRawUnsafePassword() {
         String uri1 = "sftp://localhost/target?password=RAW(beforeAmp&afterAmp)&username=jrandom";
         String uri2 = "sftp://localhost/target?password=RAW{beforeAmp&afterAmp}&username=jrandom";
-        String expected = "sftp://localhost/target?password=xxxxxx&username=jrandom";
+        String expected = "sftp://localhost/target?password=xxxxxx&username=xxxxxx";
         assertEquals(expected, URISupport.sanitizeUri(uri1));
         assertEquals(expected, URISupport.sanitizeUri(uri2));
+    }
+
+    @Test
+    public void testSanitizeUriWithRawPasswordAndSimpleExpression() {
+        String uriPlain
+                = "http://foo?username=me&password=RAW(me#@123)&foo=bar&port=21&tempFileName=${file:name.noext}.tmp&anotherOption=true";
+        String uriCurly
+                = "http://foo?username=me&password=RAW{me#@123}&foo=bar&port=21&tempFileName=${file:name.noext}.tmp&anotherOption=true";
+        String expected
+                = "http://foo?username=xxxxxx&password=xxxxxx&foo=bar&port=21&tempFileName=${file:name.noext}.tmp&anotherOption=true";
+        assertEquals(expected, URISupport.sanitizeUri(uriPlain));
+        assertEquals(expected, URISupport.sanitizeUri(uriCurly));
     }
 
     @Test
@@ -575,6 +587,19 @@ public class URISupportTest {
         assertEquals(null, URISupport.extractQuery("file:foo"));
         assertEquals("recursive=true", URISupport.extractQuery("file:foo?recursive=true"));
         assertEquals("recursive=true&delete=true", URISupport.extractQuery("file:foo?recursive=true&delete=true"));
+    }
+
+    @Test
+    public void testPlusInQuery() throws Exception {
+        Map<String, Object> map = new HashMap<>();
+        map.put("param1", "+447777111222");
+        String q = URISupport.createQueryString(map);
+        assertEquals("param1=%2B447777111222", q);
+
+        // will be double encoded however
+        map.put("param1", "%2B447777111222");
+        q = URISupport.createQueryString(map);
+        assertEquals("param1=%252B447777111222", q);
     }
 
 }

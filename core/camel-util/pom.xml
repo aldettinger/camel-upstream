@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>core</artifactId>
-        <version>3.9.0-SNAPSHOT</version>
+        <version>3.18.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>camel-util</artifactId>
@@ -31,6 +31,10 @@
 
     <name>Camel :: Util</name>
     <description>The Camel Utilities</description>
+
+    <properties>
+        <firstVersion>3.0.0</firstVersion>
+    </properties>
 
     <dependencies>
 

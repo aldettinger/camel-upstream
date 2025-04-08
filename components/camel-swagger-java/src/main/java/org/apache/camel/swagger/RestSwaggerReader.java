@@ -60,17 +60,17 @@ import io.swagger.models.properties.LongProperty;
 import io.swagger.models.properties.Property;
 import io.swagger.models.properties.RefProperty;
 import io.swagger.models.properties.StringProperty;
+import org.apache.camel.CamelContext;
+import org.apache.camel.ExtendedCamelContext;
+import org.apache.camel.model.rest.ApiKeyDefinition;
+import org.apache.camel.model.rest.ParamDefinition;
+import org.apache.camel.model.rest.ResponseHeaderDefinition;
+import org.apache.camel.model.rest.ResponseMessageDefinition;
 import org.apache.camel.model.rest.RestDefinition;
-import org.apache.camel.model.rest.RestOperationParamDefinition;
-import org.apache.camel.model.rest.RestOperationResponseHeaderDefinition;
-import org.apache.camel.model.rest.RestOperationResponseMsgDefinition;
 import org.apache.camel.model.rest.RestParamType;
 import org.apache.camel.model.rest.RestPropertyDefinition;
 import org.apache.camel.model.rest.RestSecuritiesDefinition;
-import org.apache.camel.model.rest.RestSecurityApiKey;
-import org.apache.camel.model.rest.RestSecurityBasicAuth;
 import org.apache.camel.model.rest.RestSecurityDefinition;
-import org.apache.camel.model.rest.RestSecurityOAuth2;
 import org.apache.camel.model.rest.SecurityDefinition;
 import org.apache.camel.model.rest.VerbDefinition;
 import org.apache.camel.spi.ClassResolver;
@@ -89,28 +89,21 @@ public class RestSwaggerReader {
     /**
      * Read the REST-DSL definition's and parse that as a Swagger model representation
      *
+     * @param  camelContext           the camel context
      * @param  rests                  the rest-dsl
-     * @param  route                  optional route path to filter the rest-dsl to only include from the chose route
      * @param  config                 the swagger configuration
      * @param  classResolver          class resolver to use
      * @return                        the swagger model
      * @throws ClassNotFoundException
      */
     public Swagger read(
-            List<RestDefinition> rests, String route, BeanConfig config, String camelContextId, ClassResolver classResolver)
+            CamelContext camelContext,
+            List<RestDefinition> rests, BeanConfig config, String camelContextId, ClassResolver classResolver)
             throws ClassNotFoundException {
         Swagger swagger = new Swagger();
 
         for (RestDefinition rest : rests) {
-
-            if (org.apache.camel.util.ObjectHelper.isNotEmpty(route) && !route.equals("/")) {
-                // filter by route
-                if (!rest.getPath().equals(route)) {
-                    continue;
-                }
-            }
-
-            parse(swagger, rest, camelContextId, classResolver);
+            parse(camelContext, swagger, rest, camelContextId, classResolver);
         }
 
         // configure before returning
@@ -118,7 +111,8 @@ public class RestSwaggerReader {
         return swagger;
     }
 
-    private void parse(Swagger swagger, RestDefinition rest, String camelContextId, ClassResolver classResolver)
+    private void parse(
+            CamelContext camelContext, Swagger swagger, RestDefinition rest, String camelContextId, ClassResolver classResolver)
             throws ClassNotFoundException {
         List<VerbDefinition> verbs = new ArrayList<>(rest.getVerbs());
         // must sort the verbs by uri so we group them together when an uri has multiple operations
@@ -140,12 +134,12 @@ public class RestSwaggerReader {
         RestSecuritiesDefinition sd = rest.getSecurityDefinitions();
         if (sd != null) {
             for (RestSecurityDefinition def : sd.getSecurityDefinitions()) {
-                if (def instanceof RestSecurityBasicAuth) {
+                if (def instanceof org.apache.camel.model.rest.BasicAuthDefinition) {
                     BasicAuthDefinition auth = new BasicAuthDefinition();
                     auth.setDescription(def.getDescription());
                     swagger.addSecurityDefinition(def.getKey(), auth);
-                } else if (def instanceof RestSecurityApiKey) {
-                    RestSecurityApiKey rs = (RestSecurityApiKey) def;
+                } else if (def instanceof ApiKeyDefinition) {
+                    ApiKeyDefinition rs = (ApiKeyDefinition) def;
                     ApiKeyAuthDefinition auth = new ApiKeyAuthDefinition();
                     auth.setDescription(rs.getDescription());
                     auth.setName(rs.getName());
@@ -155,8 +149,8 @@ public class RestSwaggerReader {
                         auth.setIn(In.QUERY);
                     }
                     swagger.addSecurityDefinition(def.getKey(), auth);
-                } else if (def instanceof RestSecurityOAuth2) {
-                    RestSecurityOAuth2 rs = (RestSecurityOAuth2) def;
+                } else if (def instanceof org.apache.camel.model.rest.OAuth2Definition) {
+                    org.apache.camel.model.rest.OAuth2Definition rs = (org.apache.camel.model.rest.OAuth2Definition) def;
                     OAuth2Definition auth = new OAuth2Definition();
                     auth.setDescription(rs.getDescription());
                     String flow = rs.getFlow();
@@ -210,7 +204,7 @@ public class RestSwaggerReader {
             }
             // there can also be types in response messages
             if (verb.getResponseMsgs() != null) {
-                for (RestOperationResponseMsgDefinition def : verb.getResponseMsgs()) {
+                for (ResponseMessageDefinition def : verb.getResponseMsgs()) {
                     type = def.getResponseModel();
                     if (org.apache.camel.util.ObjectHelper.isNotEmpty(type)) {
                         if (type.endsWith("[]")) {
@@ -228,10 +222,11 @@ public class RestSwaggerReader {
             appendModels(clazz, swagger);
         }
 
-        doParseVerbs(swagger, rest, camelContextId, verbs, pathAsTag);
+        doParseVerbs(camelContext, swagger, rest, camelContextId, verbs, pathAsTag);
     }
 
     private void doParseVerbs(
+            CamelContext camelContext,
             Swagger swagger, RestDefinition rest, String camelContextId, List<VerbDefinition> verbs, String pathAsTag) {
         String basePath = rest.getPath();
 
@@ -250,7 +245,7 @@ public class RestSwaggerReader {
             // the method must be in lower case
             String method = verb.asVerb().toLowerCase(Locale.US);
             // operation path is a key
-            String opPath = SwaggerHelper.buildUrl(basePath, verb.getUri());
+            String opPath = SwaggerHelper.buildUrl(basePath, verb.getPath());
 
             Operation op = new Operation();
             if (org.apache.camel.util.ObjectHelper.isNotEmpty(pathAsTag)) {
@@ -258,7 +253,6 @@ public class RestSwaggerReader {
                 op.addTag(pathAsTag);
             }
 
-            final String routeId = verb.getRouteId();
             // favour ids from verb, rest, route
             final String operationId;
             if (verb.getId() != null) {
@@ -266,13 +260,13 @@ public class RestSwaggerReader {
             } else if (rest.getId() != null) {
                 operationId = rest.getId();
             } else {
-                operationId = routeId;
+                verb.idOrCreate(camelContext.adapt(ExtendedCamelContext.class).getNodeIdFactory());
+                operationId = verb.getId();
             }
             op.operationId(operationId);
 
             // add id as vendor extensions
             op.getVendorExtensions().put("x-camelContextId", camelContextId);
-            op.getVendorExtensions().put("x-routeId", routeId);
 
             Path path = swagger.getPath(opPath);
             if (path == null) {
@@ -300,6 +294,10 @@ public class RestSwaggerReader {
                 op.summary(verb.getDescriptionText());
             }
 
+            if ("true".equals(verb.getDeprecated())) {
+                op.deprecated(Boolean.TRUE);
+            }
+
             // security
             for (SecurityDefinition sd : verb.getSecurity()) {
                 List<String> scopes = new ArrayList<>();
@@ -311,7 +309,7 @@ public class RestSwaggerReader {
                 op.addSecurity(sd.getKey(), scopes);
             }
 
-            for (RestOperationParamDefinition param : verb.getParams()) {
+            for (ParamDefinition param : verb.getParams()) {
                 Parameter parameter = null;
                 if (param.getType().equals(RestParamType.body)) {
                     parameter = new BodyParameter();
@@ -385,7 +383,7 @@ public class RestSwaggerReader {
                             qp.setDefaultValue(param.getDefaultValue());
                         }
                         // add examples
-                        if (param.getExamples() != null && param.getExamples().size() >= 1) {
+                        if (param.getExamples() != null && !param.getExamples().isEmpty()) {
                             // we can only set one example on the parameter
                             qp.example(param.getExamples().get(0).getValue());
                         }
@@ -494,7 +492,7 @@ public class RestSwaggerReader {
     }
 
     private void doParseResponseMessages(Swagger swagger, VerbDefinition verb, Operation op) {
-        for (RestOperationResponseMsgDefinition msg : verb.getResponseMsgs()) {
+        for (ResponseMessageDefinition msg : verb.getResponseMsgs()) {
             Response response = null;
             if (op.getResponses() != null) {
                 response = op.getResponses().get(msg.getCode());
@@ -512,7 +510,7 @@ public class RestSwaggerReader {
 
             // add headers
             if (msg.getHeaders() != null) {
-                for (RestOperationResponseHeaderDefinition header : msg.getHeaders()) {
+                for (ResponseHeaderDefinition header : msg.getHeaders()) {
                     String name = header.getName();
                     String type = header.getDataType();
                     String format = header.getDataFormat();
@@ -523,7 +521,7 @@ public class RestSwaggerReader {
                             sp.setFormat(format);
                         }
                         sp.setDescription(header.getDescription());
-                        if (header.getAllowableValues() != null) {
+                        if (!header.getAllowableValues().isEmpty()) {
                             sp.setEnum(header.getAllowableValues());
                         }
                         // add example
@@ -790,14 +788,14 @@ public class RestSwaggerReader {
         public int compare(VerbDefinition a, VerbDefinition b) {
 
             String u1 = "";
-            if (a.getUri() != null) {
+            if (a.getPath() != null) {
                 // replace { with _ which comes before a when soring by char
-                u1 = a.getUri().replace("{", "_");
+                u1 = a.getPath().replace("{", "_");
             }
             String u2 = "";
-            if (b.getUri() != null) {
+            if (b.getPath() != null) {
                 // replace { with _ which comes before a when soring by char
-                u2 = b.getUri().replace("{", "_");
+                u2 = b.getPath().replace("{", "_");
             }
 
             int num = u1.compareTo(u2);

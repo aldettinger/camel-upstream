@@ -70,8 +70,7 @@ public class Olingo4Producer extends AbstractApiProducer<Olingo4ApiName, Olingo4
                 exchange.getOut().setHeaders(exchange.getIn().getHeaders());
 
                 // Add http response headers
-                exchange.getOut().setHeader(Olingo4Constants.PROPERTY_PREFIX + Olingo4Constants.RESPONSE_HTTP_HEADERS,
-                        responseHeaders);
+                exchange.getOut().setHeader(Olingo4Constants.FULL_RESPONSE_HTTP_HEADERS, responseHeaders);
 
                 interceptResult(response, exchange);
 
@@ -105,8 +104,8 @@ public class Olingo4Producer extends AbstractApiProducer<Olingo4ApiName, Olingo4
 
         try {
             doInvokeMethod(method, properties);
-        } catch (Throwable t) {
-            exchange.setException(RuntimeCamelException.wrapRuntimeCamelException(t));
+        } catch (Exception e) {
+            exchange.setException(RuntimeCamelException.wrapRuntimeCamelException(e));
             callback.done(true);
             return true;
         }

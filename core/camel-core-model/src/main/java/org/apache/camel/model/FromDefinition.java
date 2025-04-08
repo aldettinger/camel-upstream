@@ -29,17 +29,19 @@ import org.apache.camel.spi.Metadata;
 /**
  * Act as a message source as input to a route
  */
-@Metadata(label = "eip,endpoint,routing")
+@Metadata(label = "eip,routing")
 @XmlRootElement(name = "from")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class FromDefinition extends OptionalIdentifiedDefinition<FromDefinition> implements EndpointRequiredDefinition {
-    @XmlAttribute
-    @Metadata(required = true)
-    private String uri;
+
     @XmlTransient
     private Endpoint endpoint;
     @XmlTransient
     private EndpointConsumerBuilder endpointConsumerBuilder;
+
+    @XmlAttribute
+    @Metadata(required = true)
+    private String uri;
 
     public FromDefinition() {
     }

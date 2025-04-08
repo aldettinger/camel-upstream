@@ -48,7 +48,7 @@ public class TypeConverterRegistryStatisticsEnabledTest extends ContextTestSuppo
         Long failed = reg.getStatistics().getFailedCounter();
         assertEquals(0, failed.intValue());
         Long miss = reg.getStatistics().getMissCounter();
-        assertEquals(0, miss.intValue());
+        assertEquals(4, miss.intValue()); // stream caching misses
 
         try {
             template.sendBody("direct:start", "foo");
@@ -61,7 +61,7 @@ public class TypeConverterRegistryStatisticsEnabledTest extends ContextTestSuppo
         failed = reg.getStatistics().getFailedCounter();
         assertEquals(1, failed.intValue());
         miss = reg.getStatistics().getMissCounter();
-        assertEquals(0, miss.intValue());
+        assertEquals(5, miss.intValue()); // stream caching misses
 
         // reset
         reg.getStatistics().reset();

@@ -185,7 +185,7 @@ public class TimerConsumer extends DefaultConsumer implements StartupListener, S
     }
 
     protected void sendTimerExchange(long counter) {
-        final Exchange exchange = endpoint.createExchange();
+        final Exchange exchange = createExchange(false);
 
         if (endpoint.isIncludeMetadata()) {
             exchange.setProperty(Exchange.TIMER_COUNTER, counter);
@@ -196,7 +196,8 @@ public class TimerConsumer extends DefaultConsumer implements StartupListener, S
             Date now = new Date();
             exchange.setProperty(Exchange.TIMER_FIRED_TIME, now);
             // also set now on in header with same key as quartz to be consistent
-            exchange.getIn().setHeader("firedTime", now);
+            exchange.getIn().setHeader(TimerConstants.HEADER_FIRED_TIME, now);
+            exchange.getIn().setHeader(TimerConstants.HEADER_MESSAGE_TIMESTAMP, now.getTime());
         }
 
         if (LOG.isTraceEnabled()) {
@@ -204,15 +205,9 @@ public class TimerConsumer extends DefaultConsumer implements StartupListener, S
         }
 
         if (!endpoint.isSynchronous()) {
-            getAsyncProcessor().process(exchange, new AsyncCallback() {
-                @Override
-                public void done(boolean doneSync) {
-                    // handle any thrown exception
-                    if (exchange.getException() != null) {
-                        getExceptionHandler().handleException("Error processing exchange", exchange, exchange.getException());
-                    }
-                }
-            });
+            // use default consumer callback
+            AsyncCallback cb = defaultConsumerCallback(exchange, false);
+            getAsyncProcessor().process(exchange, cb);
         } else {
             try {
                 getProcessor().process(exchange);
@@ -221,8 +216,12 @@ public class TimerConsumer extends DefaultConsumer implements StartupListener, S
             }
 
             // handle any thrown exception
-            if (exchange.getException() != null) {
-                getExceptionHandler().handleException("Error processing exchange", exchange, exchange.getException());
+            try {
+                if (exchange.getException() != null) {
+                    getExceptionHandler().handleException("Error processing exchange", exchange, exchange.getException());
+                }
+            } finally {
+                releaseExchange(exchange, false);
             }
         }
     }

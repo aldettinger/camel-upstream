@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MultiPartFormTest extends BaseUndertowTest {
 
-    private HttpEntity createMultipartRequestEntity() throws Exception {
+    private HttpEntity createMultipartRequestEntity() {
         File file = new File("src/test/resources/log4j2.properties");
         return MultipartEntityBuilder.create()
                 .addTextBody("comment", "A binary file of some kind")
@@ -60,16 +60,16 @@ public class MultiPartFormTest extends BaseUndertowTest {
     }
 
     @Test
-    public void testSendMultiPartFormFromCamelHttpComponnent() throws Exception {
+    public void testSendMultiPartFormFromCamelHttpComponnent() {
         String result
                 = template.requestBody("http://localhost:" + getPort() + "/test", createMultipartRequestEntity(), String.class);
         assertEquals("A binary file of some kind", result, "Get a wrong result");
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
-            public void configure() throws Exception {
+            public void configure() {
                 from("undertow://http://localhost:{{port}}/test").process(exchange -> {
                     AttachmentMessage in = exchange.getIn(AttachmentMessage.class);
                     assertEquals(1, in.getAttachments().size(), "Get a wrong attachement size");

@@ -40,29 +40,18 @@ public class JsonDataFormatReifier extends DataFormatReifier<JsonDataFormat> {
                 properties.put("useDefaultObjectMapper", definition.getUseDefaultObjectMapper());
             }
             properties.put("autoDiscoverObjectMapper", definition.getAutoDiscoverObjectMapper());
-            if (definition.getJsonView() != null) {
-                properties.put("jsonViewTypeName", asTypeName(definition.getJsonView()));
-            } else {
-                properties.put("jsonViewTypeName", definition.getJsonViewTypeName());
-            }
+            properties.put("jsonView", or(definition.getJsonView(), definition.getJsonViewTypeName()));
+        } else {
+            properties.put("jsonView", definition.getJsonView());
         }
         if (definition.getLibrary() != JsonLibrary.XStream) {
-            if (definition.getUnmarshalType() != null) {
-                properties.put("unmarshalTypeName", asTypeName(definition.getUnmarshalType()));
-            } else {
-                properties.put("unmarshalTypeName", definition.getUnmarshalTypeName());
-            }
+            properties.put("unmarshalType", or(definition.getUnmarshalType(), definition.getUnmarshalTypeName()));
         }
         properties.put("prettyPrint", definition.getPrettyPrint());
-        properties.put("jsonView", definition.getJsonView());
         properties.put("include", definition.getInclude());
         properties.put("allowJmsType", definition.getAllowJmsType());
         if (definition.getLibrary() != JsonLibrary.XStream) {
-            if (definition.getCollectionType() != null) {
-                properties.put("collectionTypeName", asTypeName(definition.getCollectionType()));
-            } else {
-                properties.put("collectionTypeName", definition.getCollectionTypeName());
-            }
+            properties.put("collectionType", or(definition.getCollectionType(), definition.getCollectionTypeName()));
         }
         properties.put("useList", definition.getUseList());
         properties.put("moduleClassNames", definition.getModuleClassNames());
@@ -82,6 +71,12 @@ public class JsonDataFormatReifier extends DataFormatReifier<JsonDataFormat> {
             properties.put("permissions", type);
             // xstream has no unmarshalType option
             properties.remove("unmarshalType");
+        }
+        if (definition.getLibrary() == JsonLibrary.Jackson) {
+            properties.put("schemaResolver", asRef(definition.getSchemaResolver()));
+            properties.put("autoDiscoverSchemaResolver", definition.getAutoDiscoverSchemaResolver());
+            properties.put("namingStrategy", definition.getNamingStrategy());
+            properties.put("timezone", definition.getTimezone());
         }
     }
 

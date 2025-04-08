@@ -48,6 +48,9 @@ public class GenerateMojo extends AbstractGenerateMojo {
     @Parameter
     private String packageName;
 
+    @Parameter(defaultValue = "/**", required = true)
+    private String[] requestMappingValues;
+
     @Override
     public void execute() throws MojoExecutionException {
         if (skip) {
@@ -88,8 +91,9 @@ public class GenerateMojo extends AbstractGenerateMojo {
 
         if (ObjectHelper.isNotEmpty(destinationGenerator)) {
             final DestinationGenerator destinationGeneratorObject = createDestinationGenerator();
-
             generator.withDestinationGenerator(destinationGeneratorObject);
+        } else if (ObjectHelper.isNotEmpty(destinationToSyntax)) {
+            generator.withDestinationToSyntax(destinationToSyntax);
         }
 
         final Path outputPath = new File(outputDirectory).toPath();
@@ -98,6 +102,9 @@ public class GenerateMojo extends AbstractGenerateMojo {
             String comp = findAppropriateComponent();
             generator.withRestComponent(comp);
 
+            if (clientRequestValidation) {
+                generator.withClientRequestValidation();
+            }
             if (ObjectHelper.isNotEmpty(apiContextPath)) {
                 generator.withApiContextPath(apiContextPath);
             }
@@ -117,7 +124,8 @@ public class GenerateMojo extends AbstractGenerateMojo {
                     }
                     getLog().info("Generating Camel Rest Controller source with package name " + packageName
                                   + " in source directory: " + outputPath);
-                    SpringBootProjectSourceCodeGenerator.generator().withPackageName(packageName).generate(outputPath);
+                    SpringBootProjectSourceCodeGenerator.generator().withPackageName(packageName)
+                            .withMappingValues(requestMappingValues).generate(outputPath);
                     // the Camel Rest Controller allows to use root as context-path
                     generator.withRestContextPath("/");
                 } catch (final IOException e) {

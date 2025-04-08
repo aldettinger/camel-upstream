@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.AbstractList;
 import java.util.Date;
 import java.util.Iterator;
@@ -77,6 +78,7 @@ public class DataSetList extends AbstractList<Map<String, Object>> implements Da
                 return result;
             }
 
+            @Override
             public void remove() {
                 throw new UnsupportedOperationException("remove() not supported");
             }
@@ -305,6 +307,11 @@ public class DataSetList extends AbstractList<Map<String, Object>> implements Da
     @Override
     public LocalDate getLocalDate(String column) throws ParseException {
         return dataSet.getLocalDate(column);
+    }
+
+    @Override
+    public LocalDate getLocalDate(String column, DateTimeFormatter formatter) throws ParseException {
+        return dataSet.getLocalDate(column, formatter);
     }
 
     @Override

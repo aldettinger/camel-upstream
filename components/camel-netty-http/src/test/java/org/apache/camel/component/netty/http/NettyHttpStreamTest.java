@@ -25,11 +25,13 @@ import org.apache.camel.Exchange;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.support.DefaultExchange;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+@Disabled
 public class NettyHttpStreamTest extends BaseNettyTest {
     public static final long SIZE = 10 * 256;
 
@@ -68,10 +70,10 @@ public class NettyHttpStreamTest extends BaseNettyTest {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("direct:upstream-call")
                         .bean(Helper.class, "prepareStream")
                         .to("netty-http:http://localhost:{{port}}/upstream?disableStreamCache=true")

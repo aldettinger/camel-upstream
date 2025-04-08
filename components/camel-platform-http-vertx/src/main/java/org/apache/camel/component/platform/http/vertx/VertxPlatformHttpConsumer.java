@@ -31,10 +31,15 @@ import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.ext.auth.User;
 import io.vertx.ext.web.FileUpload;
+import io.vertx.ext.web.RequestBody;
 import io.vertx.ext.web.Route;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.impl.RouteImpl;
 import org.apache.camel.Exchange;
+import org.apache.camel.ExchangePattern;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.attachment.AttachmentMessage;
@@ -43,7 +48,6 @@ import org.apache.camel.component.platform.http.PlatformHttpEndpoint;
 import org.apache.camel.component.platform.http.spi.Method;
 import org.apache.camel.spi.HeaderFilterStrategy;
 import org.apache.camel.support.DefaultConsumer;
-import org.apache.camel.support.DefaultMessage;
 import org.apache.camel.util.FileUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,13 +66,13 @@ public class VertxPlatformHttpConsumer extends DefaultConsumer {
 
     private final List<Handler<RoutingContext>> handlers;
     private final String fileNameExtWhitelist;
+    private final boolean muteExceptions;
     private Set<Method> methods;
     private String path;
-
     private Route route;
+    private VertxPlatformHttpRouter router;
 
-    public VertxPlatformHttpConsumer(
-                                     PlatformHttpEndpoint endpoint,
+    public VertxPlatformHttpConsumer(PlatformHttpEndpoint endpoint,
                                      Processor processor,
                                      List<Handler<RoutingContext>> handlers) {
         super(endpoint, processor);
@@ -76,6 +80,7 @@ public class VertxPlatformHttpConsumer extends DefaultConsumer {
         this.handlers = handlers;
         this.fileNameExtWhitelist
                 = endpoint.getFileNameExtWhitelist() == null ? null : endpoint.getFileNameExtWhitelist().toLowerCase(Locale.US);
+        this.muteExceptions = endpoint.isMuteException();
     }
 
     @Override
@@ -88,14 +93,18 @@ public class VertxPlatformHttpConsumer extends DefaultConsumer {
         super.doInit();
         methods = Method.parseList(getEndpoint().getHttpMethodRestrict());
         path = configureEndpointPath(getEndpoint());
+        router = VertxPlatformHttpRouter.lookup(getEndpoint().getCamelContext());
     }
 
     @Override
     protected void doStart() throws Exception {
         super.doStart();
 
-        final VertxPlatformHttpRouter router = VertxPlatformHttpRouter.lookup(getEndpoint().getCamelContext());
         final Route newRoute = router.route(path);
+
+        if (getEndpoint().getCamelContext().getRestConfiguration().isEnableCORS() && getEndpoint().getConsumes() != null) {
+            ((RouteImpl) newRoute).setEmptyBodyPermittedWithConsumes(true);
+        }
 
         if (!methods.equals(Method.getAll())) {
             methods.forEach(m -> newRoute.method(HttpMethod.valueOf(m.name())));
@@ -145,14 +154,14 @@ public class VertxPlatformHttpConsumer extends DefaultConsumer {
 
     private String configureEndpointPath(PlatformHttpEndpoint endpoint) {
         String path = endpoint.getPath();
-        if (endpoint.isMatchOnUriPrefix()) {
+        if (endpoint.isMatchOnUriPrefix() && !path.endsWith("*")) {
             path += "*";
         }
         // Transform from the Camel path param syntax /path/{key} to vert.x web's /path/:key
         return PATH_PARAMETER_PATTERN.matcher(path).replaceAll(":$1");
     }
 
-    private void handleRequest(RoutingContext ctx) {
+    protected void handleRequest(RoutingContext ctx) {
         final Vertx vertx = ctx.vertx();
         final Exchange exchange = toExchange(ctx);
 
@@ -164,7 +173,7 @@ public class VertxPlatformHttpConsumer extends DefaultConsumer {
         // for the rest dsl, then the following code may result in a blocking operation that could
         // block Vert.x event-loop for too long if the target service takes long to respond, as
         // example in case the service is a knative service scaled to zero that could take some time
-        // to be come available:
+        // to become available:
         //
         //     rest("/results")
         //         .get("/{id}")
@@ -182,11 +191,7 @@ public class VertxPlatformHttpConsumer extends DefaultConsumer {
                     }
 
                     getAsyncProcessor().process(exchange, c -> {
-                        if (!exchange.isFailed()) {
-                            promise.complete();
-                        } else {
-                            promise.fail(exchange.getException());
-                        }
+                        promise.complete();
                     });
                 },
                 false,
@@ -195,7 +200,7 @@ public class VertxPlatformHttpConsumer extends DefaultConsumer {
                     try {
                         if (result.succeeded()) {
                             try {
-                                writeResponse(ctx, exchange, getEndpoint().getHeaderFilterStrategy());
+                                writeResponse(ctx, exchange, getEndpoint().getHeaderFilterStrategy(), muteExceptions);
                             } catch (Exception e) {
                                 failure = e;
                             }
@@ -211,26 +216,32 @@ public class VertxPlatformHttpConsumer extends DefaultConsumer {
                         }
                     } finally {
                         doneUoW(exchange);
+                        releaseExchange(exchange, false);
                     }
                 });
     }
 
-    private Exchange toExchange(RoutingContext ctx) {
-        final Exchange exchange = getEndpoint().createExchange();
-        final Message in = toCamelMessage(ctx, exchange);
+    protected Exchange toExchange(RoutingContext ctx) {
+        final Exchange exchange = createExchange(false);
+        exchange.setPattern(ExchangePattern.InOut);
 
+        final Message in = toCamelMessage(ctx, exchange);
         final String charset = ctx.parsedHeaders().contentType().parameter("charset");
         if (charset != null) {
-            exchange.setProperty(Exchange.CHARSET_NAME, charset);
+            exchange.setProperty(ExchangePropertyKey.CHARSET_NAME, charset);
             in.setHeader(Exchange.HTTP_CHARACTER_ENCODING, charset);
         }
 
-        exchange.setIn(in);
+        User user = ctx.user();
+        if (user != null) {
+            in.setHeader(VertxPlatformHttpConstants.AUTHENTICATED_USER, user);
+        }
+
         return exchange;
     }
 
-    private Message toCamelMessage(RoutingContext ctx, Exchange exchange) {
-        final Message result = new DefaultMessage(exchange);
+    protected Message toCamelMessage(RoutingContext ctx, Exchange exchange) {
+        final Message result = exchange.getIn();
 
         final HeaderFilterStrategy headerFilterStrategy = getEndpoint().getHeaderFilterStrategy();
         populateCamelHeaders(ctx, result.getHeaders(), exchange, headerFilterStrategy);
@@ -248,18 +259,21 @@ public class VertxPlatformHttpConsumer extends DefaultConsumer {
                     }
                 }
             }
-            result.setBody(body);
+
+            if (!body.isEmpty()) {
+                result.setBody(body);
+            }
+
             if (isMultipartFormData) {
                 populateAttachments(ctx.fileUploads(), result);
             }
         } else {
-            // extract body by myself if undertow parser didn't handle and the method is allowed to have one
-            // body is extracted as byte[] then auto TypeConverter kicks in
             Method m = Method.valueOf(ctx.request().method().name());
             if (m.canHaveBody()) {
-                final Buffer body = ctx.getBody();
+                final RequestBody requestBody = ctx.body();
+                final Buffer body = requestBody.buffer();
                 if (body != null) {
-                    result.setBody(body.getBytes());
+                    result.setBody(body);
                 } else {
                     result.setBody(null);
                 }
@@ -270,7 +284,7 @@ public class VertxPlatformHttpConsumer extends DefaultConsumer {
         return result;
     }
 
-    private void populateAttachments(Set<FileUpload> uploads, Message message) {
+    protected void populateAttachments(List<FileUpload> uploads, Message message) {
         for (FileUpload upload : uploads) {
             final String name = upload.name();
             final String fileName = upload.fileName();

@@ -49,7 +49,6 @@ public class HttpPollingConsumer extends PollingConsumerSupport {
         this.endpoint = endpoint;
         this.httpContext = endpoint.getHttpContext();
         this.httpClient = endpoint.getHttpClient();
-
     }
 
     @Override
@@ -83,16 +82,16 @@ public class HttpPollingConsumer extends PollingConsumerSupport {
             httpClientContext.setRequestConfig(requestConfig);
         }
 
-        HttpEntity responeEntity = null;
+        HttpEntity responseEntity = null;
         try {
             // execute request
             HttpResponse response = executeMethod(method, httpClientContext);
             int responseCode = response.getStatusLine().getStatusCode();
-            responeEntity = response.getEntity();
-            Object body = HttpHelper.readResponseBodyFromInputStream(responeEntity.getContent(), exchange);
+            responseEntity = response.getEntity();
+            Object body = HttpHelper.cacheResponseBodyFromInputStream(responseEntity.getContent(), exchange);
 
             // lets store the result in the output message.
-            Message message = exchange.getOut();
+            Message message = exchange.getMessage();
             message.setBody(body);
 
             // lets set the headers
@@ -109,18 +108,18 @@ public class HttpPollingConsumer extends PollingConsumerSupport {
                     message.setHeader(name, value);
                 }
             }
-            message.setHeader(Exchange.HTTP_RESPONSE_CODE, responseCode);
+            message.setHeader(HttpConstants.HTTP_RESPONSE_CODE, responseCode);
             if (response.getStatusLine() != null) {
-                message.setHeader(Exchange.HTTP_RESPONSE_TEXT, response.getStatusLine().getReasonPhrase());
+                message.setHeader(HttpConstants.HTTP_RESPONSE_TEXT, response.getStatusLine().getReasonPhrase());
             }
 
             return exchange;
         } catch (IOException e) {
             throw new RuntimeCamelException(e);
         } finally {
-            if (responeEntity != null) {
+            if (responseEntity != null) {
                 try {
-                    EntityUtils.consume(responeEntity);
+                    EntityUtils.consume(responseEntity);
                 } catch (IOException e) {
                     // nothing what we can do
                 }

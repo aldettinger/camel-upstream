@@ -17,29 +17,46 @@
 package org.apache.camel.component.milo.server;
 
 import org.apache.camel.test.junit5.CamelTestSupport;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Test setting security policies
  */
 public class ServerSetSecurityPoliciesTest extends CamelTestSupport {
 
+    private static final Logger LOG = LoggerFactory.getLogger(ServerSetSecurityPoliciesTest.class);
+
+    @BeforeEach
+    public void setup(TestInfo testInfo) {
+        final var displayName = testInfo.getDisplayName();
+        LOG.info("********************************************************************************");
+        LOG.info(displayName);
+        LOG.info("********************************************************************************");
+    }
+
     @Test
     public void testSetSecurityPolicies1() {
         final MiloServerComponent component = new MiloServerComponent();
-        component.setSecurityPoliciesById("None");
+        Assertions.assertDoesNotThrow(() -> component.setSecurityPoliciesById("None"));
     }
 
     @Test
     public void testSetSecurityPolicies2() {
         final MiloServerComponent component = new MiloServerComponent();
-        component.setSecurityPoliciesById("http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256");
+        Assertions.assertDoesNotThrow(
+                () -> component.setSecurityPoliciesById("http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256"));
     }
 
     @Test
     public void testSetSecurityPolicies3() {
         final MiloServerComponent component = new MiloServerComponent();
-        component.setSecurityPoliciesById("None,http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256");
+        Assertions.assertDoesNotThrow(
+                () -> component.setSecurityPoliciesById("None,http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256"));
     }
 
 }

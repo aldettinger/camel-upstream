@@ -1,11 +1,12 @@
-[[swagger-java-other]]
 = Swagger Java Component
-:docTitle: Swagger Java
-:artifactId: camel-swagger-java
+:doctitle: Swagger Java
+:shortname: swagger-java
+:artifactid: camel-swagger-java
 :description: Rest-dsl support for using swagger api-doc
 :since: 2.16
-:supportLevel: Stable
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/others/swagger-java.adoc[opts=optional]
+:supportlevel: Stable
+//Manually maintained attributes
+:camel-spring-boot-name: swagger-java
 
 *Since Camel {since}*
 
@@ -119,22 +120,9 @@ So using relative paths is much easier. See above for an example.
 |api.license.name |String |The license name used for the API.
 
 |api.license.url |String |A URL to the license used for the API.
-
-|apiContextIdListing |boolean |Whether to allow listing all the CamelContext names in the JVM that has
-REST services. When enabled then the root path of the api-doc will list
-all the contexts. When disabled then no context ids is listed and the
-root path of the api-doc lists the current CamelContext. Is default
-false.
-
-|apiContextIdPattern |String |A pattern that allows to filter which CamelContext names is shown in the
-context listing. The pattern is using regular expression and * as
-wildcard. Its the same pattern matching as used by
-Intercept
 |===
 
 == Adding Security Definitions in API doc
-
-*Since Camel 2.22.0*
 
 The Rest DSL now supports declaring Swagger `securityDefinitions` in the generated API document.
 For example as shown below:
@@ -172,20 +160,7 @@ their key (petstore_auth or api_key).
 Here the get operation is using the Api Key security and the put operation
 is using OAuth security with permitted scopes of read and write pets.
 
-
-
-== ContextIdListing enabled
-
-When contextIdListing is enabled then its detecting all the running
-CamelContexts in the same JVM. These contexts are listed in the root
-path, eg `/api-docs` as a simple list of names in json format. To access
-the swagger documentation then the context-path must be appended with
-the Camel context id, such as `api-docs/myCamel`. The
-option apiContextIdPattern can be used to filter the names in this list.
-
 == JSon or Yaml
-
-*Since Camel 2.17*
 
 The camel-swagger-java module supports both JSon and Yaml out of the
 box. You can specify in the request url what you want returned by using
@@ -194,8 +169,28 @@ the HTTP Accept header is used to detect if json or yaml can be
 accepted. If either both is accepted or none was set as accepted then
 json is returned as the default format.
 
+== useXForwardHeaders and API URL resolution
+
+The Swagger specification allows you to specify the host, port & path that is serving the API. This is done
+via the `host` field.
+
+By default, the value for these fields is determined by `X-Forwarded` headers, `X-Forwarded-Host` & `X-Forwarded-Proto`.
+
+This can be overridden by disabling the lookup of `X-Forwarded` headers and by specifying your own host, port & scheme on the REST configuration.
+
+[source,java]
+----
+restConfiguration().component("netty-http")
+    .useXForwardHeaders(false)
+    .apiProperty("schemes", "https");
+    .host("localhost")
+    .port(8080);
+----
+
 == Examples
 
 In the Apache Camel distribution we ship
 the `camel-example-swagger-cdi` and `camel-example-swagger-java` which
 demonstrates using this Swagger component.
+
+include::spring-boot:partial$starter.adoc[]

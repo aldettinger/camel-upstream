@@ -34,10 +34,15 @@ import org.apache.camel.spi.Metadata;
 @XmlRootElement(name = "restContextRef")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class RestContextRefDefinition {
+
     @XmlAttribute(required = true)
     private String ref;
 
     public RestContextRefDefinition() {
+    }
+
+    public RestContextRefDefinition(String ref) {
+        this.ref = ref;
     }
 
     @Override

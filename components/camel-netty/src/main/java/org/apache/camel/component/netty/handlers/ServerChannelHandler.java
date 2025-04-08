@@ -21,9 +21,9 @@ import java.net.SocketAddress;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import org.apache.camel.AsyncCallback;
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangePattern;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.component.netty.NettyConstants;
 import org.apache.camel.component.netty.NettyConsumer;
 import org.apache.camel.component.netty.NettyHelper;
@@ -82,19 +82,18 @@ public class ServerChannelHandler extends SimpleChannelInboundHandler<Object> {
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
-        Object in = msg;
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Channel: {} received body: {}", ctx.channel(), in);
+            LOG.debug("Channel: {} received body: {}", ctx.channel(), msg);
         }
 
         // create Exchange and let the consumer process it
-        final Exchange exchange = consumer.getEndpoint().createExchange(ctx, msg);
+        final Exchange exchange = createExchange(ctx, msg);
         if (consumer.getConfiguration().isSync()) {
             exchange.setPattern(ExchangePattern.InOut);
         }
         // set the exchange charset property for converting
         if (consumer.getConfiguration().getCharsetName() != null) {
-            exchange.setProperty(Exchange.CHARSET_NAME,
+            exchange.setProperty(ExchangePropertyKey.CHARSET_NAME,
                     IOHelper.normalizeCharset(consumer.getConfiguration().getCharsetName()));
         }
         if (consumer.getConfiguration().isReuseChannel()) {
@@ -108,10 +107,18 @@ public class ServerChannelHandler extends SimpleChannelInboundHandler<Object> {
 
         // process accordingly to endpoint configuration
         if (consumer.getEndpoint().isSynchronous()) {
-            processSynchronously(exchange, ctx, msg);
+            processSynchronously(exchange, ctx);
         } else {
-            processAsynchronously(exchange, ctx, msg);
+            processAsynchronously(exchange, ctx);
         }
+    }
+
+    protected Exchange createExchange(ChannelHandlerContext ctx, Object message) throws Exception {
+        // must be prototype scoped (not pooled) so we create the exchange via endpoint
+        Exchange exchange = consumer.createExchange(false);
+        consumer.getEndpoint().updateMessageHeader(exchange.getIn(), ctx);
+        NettyPayloadHelper.setIn(exchange, message);
+        return exchange;
     }
 
     /**
@@ -125,38 +132,37 @@ public class ServerChannelHandler extends SimpleChannelInboundHandler<Object> {
         // noop
     }
 
-    private void processSynchronously(final Exchange exchange, final ChannelHandlerContext ctx, final Object message) {
+    private void processSynchronously(final Exchange exchange, final ChannelHandlerContext ctx) {
         try {
             consumer.getProcessor().process(exchange);
             if (consumer.getConfiguration().isSync()) {
-                sendResponse(message, ctx, exchange);
+                sendResponse(ctx, exchange);
             }
-        } catch (Throwable e) {
+        } catch (Exception e) {
             consumer.getExceptionHandler().handleException(e);
         } finally {
             consumer.doneUoW(exchange);
+            consumer.releaseExchange(exchange, false);
         }
     }
 
-    private void processAsynchronously(final Exchange exchange, final ChannelHandlerContext ctx, final Object message) {
-        consumer.getAsyncProcessor().process(exchange, new AsyncCallback() {
-            @Override
-            public void done(boolean doneSync) {
-                // send back response if the communication is synchronous
-                try {
-                    if (consumer.getConfiguration().isSync()) {
-                        sendResponse(message, ctx, exchange);
-                    }
-                } catch (Throwable e) {
-                    consumer.getExceptionHandler().handleException(e);
-                } finally {
-                    consumer.doneUoW(exchange);
+    private void processAsynchronously(final Exchange exchange, final ChannelHandlerContext ctx) {
+        consumer.getAsyncProcessor().process(exchange, doneSync -> {
+            // send back response if the communication is synchronous
+            try {
+                if (consumer.getConfiguration().isSync()) {
+                    sendResponse(ctx, exchange);
                 }
+            } catch (Exception e) {
+                consumer.getExceptionHandler().handleException(e);
+            } finally {
+                consumer.doneUoW(exchange);
+                consumer.releaseExchange(exchange, false);
             }
         });
     }
 
-    private void sendResponse(Object message, ChannelHandlerContext ctx, Exchange exchange) throws Exception {
+    private void sendResponse(ChannelHandlerContext ctx, Exchange exchange) throws Exception {
         Object body = getResponseBody(exchange);
 
         if (body == null) {
@@ -179,10 +185,10 @@ public class ServerChannelHandler extends SimpleChannelInboundHandler<Object> {
             // we got a body to write
             ChannelFutureListener listener = createResponseFutureListener(consumer, exchange, ctx.channel().remoteAddress());
             if (consumer.getConfiguration().isTcp()) {
-                NettyHelper.writeBodyAsync(LOG, ctx.channel(), null, body, exchange, listener);
+                NettyHelper.writeBodyAsync(LOG, ctx.channel(), null, body, listener);
             } else {
                 NettyHelper.writeBodyAsync(LOG, ctx.channel(),
-                        exchange.getProperty(NettyConstants.NETTY_REMOTE_ADDRESS, SocketAddress.class), body, exchange,
+                        exchange.getProperty(NettyConstants.NETTY_REMOTE_ADDRESS, SocketAddress.class), body,
                         listener);
             }
         }

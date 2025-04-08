@@ -95,7 +95,7 @@ public class XsltBuilder implements Processor {
 
         if (isDeleteOutputFile()) {
             // add on completion so we can delete the file when the Exchange is done
-            String fileName = ExchangeHelper.getMandatoryHeader(exchange, Exchange.XSLT_FILE_NAME, String.class);
+            String fileName = ExchangeHelper.getMandatoryHeader(exchange, XsltConstants.XSLT_FILE_NAME, String.class);
             exchange.adapt(ExtendedExchange.class).addOnCompletion(new XsltBuilderOnCompletion(fileName));
         }
 
@@ -176,7 +176,7 @@ public class XsltBuilder implements Processor {
     /**
      * Creates an XSLT processor using the given XSLT source
      */
-    public static XsltBuilder xslt(InputStream xslt) throws TransformerConfigurationException, IOException {
+    public static XsltBuilder xslt(InputStream xslt) throws TransformerConfigurationException {
         notNull(xslt, "xslt");
         return xslt(new StreamSource(xslt));
     }
@@ -371,7 +371,7 @@ public class XsltBuilder implements Processor {
     /**
      * Sets the XSLT transformer from the given input stream
      */
-    public void setTransformerInputStream(InputStream in) throws TransformerConfigurationException, IOException {
+    public void setTransformerInputStream(InputStream in) throws TransformerConfigurationException {
         notNull(in, "InputStream");
         setTransformerSource(new StreamSource(in));
     }
@@ -413,7 +413,10 @@ public class XsltBuilder implements Processor {
     private void releaseTransformer(Transformer transformer) {
         if (transformers != null) {
             transformer.reset();
-            transformers.offer(transformer);
+            boolean result = transformers.offer(transformer);
+            if (!result) {
+                LOG.error("failed to offer() a transform");
+            }
         }
     }
 

@@ -31,6 +31,7 @@ import com.hazelcast.transaction.TransactionOptions;
 import com.hazelcast.transaction.TransactionalMap;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.spi.OptimisticLockingAggregationRepository;
 import org.apache.camel.spi.RecoverableAggregationRepository;
 import org.apache.camel.support.DefaultExchangeHolder;
@@ -232,6 +233,7 @@ public class ReplicatedHazelcastAggregationRepository extends HazelcastAggregati
      * 
      * @param key Object - key in question
      */
+    @Override
     public boolean containsKey(Object key) {
         if (replicatedCache != null) {
             return replicatedCache.containsKey(key);
@@ -302,7 +304,7 @@ public class ReplicatedHazelcastAggregationRepository extends HazelcastAggregati
                             "Transaction with ID %s was rolled back for remove operation with a key %s and an Exchange ID %s.",
                             tCtx.getTxnId(), key, exchange.getExchangeId());
                     LOG.warn(msg, throwable);
-                    throw new RuntimeException(msg, throwable);
+                    throw new RuntimeCamelException(msg, throwable);
                 }
             } else {
                 replicatedCache.remove(key);

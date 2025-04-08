@@ -48,7 +48,7 @@ public final class GoraUtils {
      */
     public static Query<Object, Persistent> constractQueryFromConfiguration(
             final DataStore<Object, Persistent> dataStore, final GoraConfiguration conf)
-            throws ClassNotFoundException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+            throws IllegalAccessException, NoSuchMethodException, InvocationTargetException {
 
         final Query<Object, Persistent> query = dataStore.newQuery();
 
@@ -96,11 +96,9 @@ public final class GoraUtils {
      *
      * <b>NOTE:</b> values used in order construct the query should be stored in the "in" message headers.
      */
-    public static Query<Object, Persistent> constractQueryFromPropertiesMap(
+    public static Query<Object, Persistent> constructQueryFromPropertiesMap(
             final Map<String, ?> propertiesMap,
-            final DataStore<Object, Persistent> dataStore,
-            final GoraConfiguration conf)
-            throws ClassNotFoundException {
+            final DataStore<Object, Persistent> dataStore) {
 
         final Query<Object, Persistent> query = dataStore.newQuery();
 

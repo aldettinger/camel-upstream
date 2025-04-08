@@ -34,12 +34,12 @@ import org.apache.thrift.async.AsyncMethodCallback;
 import org.apache.thrift.async.TAsyncClientManager;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TNonblockingSocket;
 import org.apache.thrift.transport.TNonblockingTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
+import org.apache.thrift.transport.layered.TFramedTransport;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,7 +67,7 @@ public class ThriftConsumerConcurrentTest extends CamelTestSupport {
     }
 
     @Test
-    public void testSyncWithConcurrentThreads() throws Exception {
+    public void testSyncWithConcurrentThreads() {
         RunnableAssert ra = new RunnableAssert("testSyncWithConcurrentThreads") {
 
             @Override
@@ -98,7 +98,7 @@ public class ThriftConsumerConcurrentTest extends CamelTestSupport {
     }
 
     @Test
-    public void testAsyncWithConcurrentThreads() throws Exception {
+    public void testAsyncWithConcurrentThreads() {
         RunnableAssert ra = new RunnableAssert("testAsyncWithConcurrentThreads") {
 
             @Override
@@ -157,7 +157,7 @@ public class ThriftConsumerConcurrentTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
             public void configure() {

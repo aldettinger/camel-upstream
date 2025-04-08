@@ -72,6 +72,10 @@ public class VertxPlatformHttpServer extends ServiceSupport implements CamelCont
         this.context = context;
     }
 
+    public HttpServer getServer() {
+        return server;
+    }
+
     public Vertx getVertx() {
         return vertx;
     }
@@ -118,11 +122,11 @@ public class VertxPlatformHttpServer extends ServiceSupport implements CamelCont
     // *******************************
 
     protected Vertx lookupVertx() {
-        return CamelContextHelper.findByType(context, Vertx.class);
+        return CamelContextHelper.findSingleByType(context, Vertx.class);
     }
 
     protected Vertx createVertxInstance() {
-        VertxOptions options = CamelContextHelper.findByType(context, VertxOptions.class);
+        VertxOptions options = CamelContextHelper.findSingleByType(context, VertxOptions.class);
         if (options == null) {
             options = new VertxOptions();
         }
@@ -134,7 +138,7 @@ public class VertxPlatformHttpServer extends ServiceSupport implements CamelCont
         if (vertx == null) {
             vertx = lookupVertx();
             if (vertx == null) {
-                LOGGER.info("Creating new Vert.x instance");
+                LOGGER.debug("Creating new Vert.x instance");
                 vertx = createVertxInstance();
                 localVertx = true;
             }
@@ -151,7 +155,7 @@ public class VertxPlatformHttpServer extends ServiceSupport implements CamelCont
 
         context.getRegistry().bind(
                 VertxPlatformHttpRouter.PLATFORM_HTTP_ROUTER_NAME,
-                new VertxPlatformHttpRouter(vertx, subRouter) {
+                new VertxPlatformHttpRouter(this, vertx, subRouter) {
                     @Override
                     public Handler<RoutingContext> bodyHandler() {
                         return createBodyHandler(configuration);
@@ -159,7 +163,7 @@ public class VertxPlatformHttpServer extends ServiceSupport implements CamelCont
                 });
     }
 
-    protected void startServer() {
+    protected void startServer() throws Exception {
         HttpServerOptions options = new HttpServerOptions();
 
         configureSSL(options, configuration, context);

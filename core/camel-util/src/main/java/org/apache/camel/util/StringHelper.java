@@ -18,8 +18,10 @@ package org.apache.camel.util;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -46,8 +48,7 @@ public final class StringHelper {
      * @throws NullPointerException if <code>s</code> is <code>null</code>.
      */
     public static String sanitize(String s) {
-        return s
-                .replace(':', '-')
+        return s.replace(':', '-')
                 .replace('_', '-')
                 .replace('.', '-')
                 .replace('/', '-')
@@ -128,8 +129,8 @@ public final class StringHelper {
             return s;
         }
 
-        s = replaceAll(s, "'", "");
-        s = replaceAll(s, "\"", "");
+        s = s.replace("'", "");
+        s = s.replace("\"", "");
         return s;
     }
 
@@ -145,6 +146,9 @@ public final class StringHelper {
         }
 
         String copy = s.trim();
+        if (copy.length() < 2) {
+            return s;
+        }
         if (copy.startsWith("'") && copy.endsWith("'")) {
             return copy.substring(1, copy.length() - 1);
         }
@@ -188,10 +192,10 @@ public final class StringHelper {
             return "";
         }
         // must replace amp first, so we dont replace &lt; to amp later
-        text = replaceAll(text, "&", "&amp;");
-        text = replaceAll(text, "\"", "&quot;");
-        text = replaceAll(text, "<", "&lt;");
-        text = replaceAll(text, ">", "&gt;");
+        text = text.replace("&", "&amp;");
+        text = text.replace("\"", "&quot;");
+        text = text.replace("<", "&lt;");
+        text = text.replace(">", "&gt;");
         return text;
     }
 
@@ -255,58 +259,6 @@ public final class StringHelper {
         }
 
         return false;
-    }
-
-    /**
-     * Replaces all the from tokens in the given input string.
-     * <p/>
-     * This implementation is not recursive, not does it check for tokens in the replacement string.
-     *
-     * @param  input                    the input string
-     * @param  from                     the from string, must <b>not</b> be <tt>null</tt> or empty
-     * @param  to                       the replacement string, must <b>not</b> be empty
-     * @return                          the replaced string, or the input string if no replacement was needed
-     * @throws IllegalArgumentException if the input arguments is invalid
-     */
-    public static String replaceAll(String input, String from, String to) {
-        // TODO: Use String.replace instead of this method when using JDK11 as minimum (as its much faster in JDK 11 onwards)
-
-        if (ObjectHelper.isEmpty(input)) {
-            return input;
-        }
-        if (from == null) {
-            throw new IllegalArgumentException("from cannot be null");
-        }
-        if (to == null) {
-            // to can be empty, so only check for null
-            throw new IllegalArgumentException("to cannot be null");
-        }
-
-        // fast check if there is any from at all
-        if (!input.contains(from)) {
-            return input;
-        }
-
-        final int len = from.length();
-        final int max = input.length();
-        StringBuilder sb = new StringBuilder(max);
-        for (int i = 0; i < max;) {
-            if (i + len <= max) {
-                String token = input.substring(i, i + len);
-                if (from.equals(token)) {
-                    sb.append(to);
-                    // fast forward
-                    i = i + len;
-                    continue;
-                }
-            }
-
-            // append single char
-            sb.append(input.charAt(i));
-            // forward to next
-            i++;
-        }
-        return sb.toString();
     }
 
     /**
@@ -397,6 +349,86 @@ public final class StringHelper {
         return rc;
     }
 
+    public static Iterator<String> splitOnCharacterAsIterator(String value, char needle, int count) {
+        // skip leading and trailing needles
+        int end = value.length() - 1;
+        boolean skipStart = value.charAt(0) == needle;
+        boolean skipEnd = value.charAt(end) == needle;
+        if (skipStart && skipEnd) {
+            value = value.substring(1, end);
+            count = count - 2;
+        } else if (skipStart) {
+            value = value.substring(1);
+            count = count - 1;
+        } else if (skipEnd) {
+            value = value.substring(0, end);
+            count = count - 1;
+        }
+
+        final int size = count;
+        final String text = value;
+
+        return new Iterator<String>() {
+            int i;
+            int pos;
+
+            @Override
+            public boolean hasNext() {
+                return i < size;
+            }
+
+            @Override
+            public String next() {
+                if (i == size) {
+                    throw new NoSuchElementException();
+                }
+                String answer;
+                int end = text.indexOf(needle, pos);
+                if (end != -1) {
+                    answer = text.substring(pos, end);
+                    pos = end + 1;
+                } else {
+                    answer = text.substring(pos);
+                    // no more data
+                    i = size;
+                }
+                return answer;
+            }
+        };
+    }
+
+    public static List<String> splitOnCharacterAsList(String value, char needle, int count) {
+        // skip leading and trailing needles
+        int end = value.length() - 1;
+        boolean skipStart = value.charAt(0) == needle;
+        boolean skipEnd = value.charAt(end) == needle;
+        if (skipStart && skipEnd) {
+            value = value.substring(1, end);
+            count = count - 2;
+        } else if (skipStart) {
+            value = value.substring(1);
+            count = count - 1;
+        } else if (skipEnd) {
+            value = value.substring(0, end);
+            count = count - 1;
+        }
+
+        List<String> rc = new ArrayList<>(count);
+        int pos = 0;
+        for (int i = 0; i < count; i++) {
+            end = value.indexOf(needle, pos);
+            if (end != -1) {
+                String part = value.substring(pos, end);
+                pos = end + 1;
+                rc.add(part);
+            } else {
+                rc.add(value.substring(pos));
+                break;
+            }
+        }
+        return rc;
+    }
+
     /**
      * Removes any starting characters on the given text which match the given character
      *
@@ -469,15 +501,19 @@ public final class StringHelper {
             return text;
         }
 
-        StringBuilder sb = new StringBuilder();
-
-        for (int i = 0; i < text.length(); i++) {
+        // there is at least 1 dash so the capacity can be shorter
+        StringBuilder sb = new StringBuilder(length - 1);
+        boolean upper = false;
+        for (int i = 0; i < length; i++) {
             char c = text.charAt(i);
             if (c == '-') {
-                i++;
-                sb.append(Character.toUpperCase(text.charAt(i)));
+                upper = true;
             } else {
+                if (upper) {
+                    c = Character.toUpperCase(c);
+                }
                 sb.append(c);
+                upper = false;
             }
         }
         return sb.toString();
@@ -1030,4 +1066,49 @@ public final class StringHelper {
         return Pattern.compile(regex).splitAsStream(text);
     }
 
+    /**
+     * Returns the occurrence of a search string in to a string.
+     *
+     * @param  text   the text
+     * @param  search the string to search
+     * @return        an integer reporting the number of occurrence of the searched string in to the text
+     */
+    public static int countOccurrence(String text, String search) {
+        int lastIndex = 0;
+        int count = 0;
+        while (lastIndex != -1) {
+            lastIndex = text.indexOf(search, lastIndex);
+            if (lastIndex != -1) {
+                count++;
+                lastIndex += search.length();
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Replaces a string in to a text starting from his second occurrence.
+     *
+     * @param  text        the text
+     * @param  search      the string to search
+     * @param  replacement the replacement for the string
+     * @return             the string with the replacement
+     */
+    public static String replaceFromSecondOccurrence(String text, String search, String replacement) {
+        int index = text.indexOf(search);
+        boolean replace = false;
+
+        while (index != -1) {
+            String tempString = text.substring(index);
+            if (replace) {
+                tempString = tempString.replaceFirst(search, replacement);
+                text = text.substring(0, index) + tempString;
+                replace = false;
+            } else {
+                replace = true;
+            }
+            index = text.indexOf(search, index + 1);
+        }
+        return text;
+    }
 }

@@ -54,7 +54,7 @@ import org.yaml.snakeyaml.resolver.Resolver;
 /**
  * Marshal and unmarshal Java objects to and from YAML using <a href="http://www.snakeyaml.org">SnakeYAML</a>
  */
-@Dataformat("yaml-snakeyaml")
+@Dataformat("snakeYaml")
 public final class SnakeYAMLDataFormat extends ServiceSupport implements DataFormat, DataFormatName, CamelContextAware {
 
     private CamelContext camelContext;
@@ -68,7 +68,7 @@ public final class SnakeYAMLDataFormat extends ServiceSupport implements DataFor
     private Class<?> unmarshalType;
     private List<TypeDescription> typeDescriptions;
     private ConcurrentMap<Class<?>, Tag> classTags;
-    private boolean useApplicationContextClassLoader;
+    private boolean useApplicationContextClassLoader = true;
     private boolean prettyFlow;
     private boolean allowAnyType;
     private List<TypeFilter> typeFilters;
@@ -81,9 +81,6 @@ public final class SnakeYAMLDataFormat extends ServiceSupport implements DataFor
 
     public SnakeYAMLDataFormat(Class<?> type) {
         this.yamlCache = new ThreadLocal<>();
-        this.useApplicationContextClassLoader = true;
-        this.prettyFlow = false;
-        this.allowAnyType = false;
         this.constructor = this::defaultConstructor;
         this.representer = this::defaultRepresenter;
         this.dumperOptions = this::defaultDumperOptions;
@@ -98,7 +95,7 @@ public final class SnakeYAMLDataFormat extends ServiceSupport implements DataFor
 
     @Override
     public String getDataFormatName() {
-        return "yaml-snakeyaml";
+        return "snakeYaml";
     }
 
     @Override
@@ -130,7 +127,7 @@ public final class SnakeYAMLDataFormat extends ServiceSupport implements DataFor
     protected void doInit() throws Exception {
         super.doInit();
 
-        if (unmarshalTypeName != null && (unmarshalType == null)) {
+        if (unmarshalTypeName != null && unmarshalType == null) {
             setUnmarshalType(camelContext.getClassResolver().resolveClass(unmarshalTypeName));
         }
     }

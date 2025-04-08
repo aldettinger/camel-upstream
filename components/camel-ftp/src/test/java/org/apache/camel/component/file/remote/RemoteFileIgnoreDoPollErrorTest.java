@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
@@ -27,6 +28,7 @@ import org.apache.camel.component.file.GenericFile;
 import org.apache.camel.component.file.GenericFileOperationFailedException;
 import org.apache.camel.component.file.GenericFileProcessStrategy;
 import org.apache.camel.component.file.GenericFileProducer;
+import org.apache.camel.impl.DefaultCamelContext;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,6 +37,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class RemoteFileIgnoreDoPollErrorTest {
+
+    private final CamelContext camelContext = new DefaultCamelContext();
+
     private final RemoteFileEndpoint<Object> remoteFileEndpoint = new RemoteFileEndpoint<Object>() {
         @Override
         protected RemoteFileConsumer<Object> buildConsumer(Processor processor) {
@@ -47,7 +52,7 @@ public class RemoteFileIgnoreDoPollErrorTest {
         }
 
         @Override
-        public RemoteFileOperations<Object> createRemoteFileOperations() throws Exception {
+        public RemoteFileOperations<Object> createRemoteFileOperations() {
             return null;
         }
 
@@ -63,21 +68,21 @@ public class RemoteFileIgnoreDoPollErrorTest {
     };
 
     @Test
-    public void testReadDirErrorIsHandled() throws Exception {
+    public void testReadDirErrorIsHandled() {
         RemoteFileConsumer<Object> consumer = getRemoteFileConsumer("true", true);
         boolean result = consumer.doSafePollSubDirectory("anyPath", "adir", new ArrayList<GenericFile<Object>>(), 0);
         assertTrue(result);
     }
 
     @Test
-    public void testReadDirErrorIsHandledWithNoMorePoll() throws Exception {
+    public void testReadDirErrorIsHandledWithNoMorePoll() {
         RemoteFileConsumer<Object> consumer = getRemoteFileConsumer("false", true);
         boolean result = consumer.doSafePollSubDirectory("anyPath", "adir", new ArrayList<GenericFile<Object>>(), 0);
         assertFalse(result);
     }
 
     @Test
-    public void testReadDirErrorNotHandled() throws Exception {
+    public void testReadDirErrorNotHandled() {
         RemoteFileConsumer<Object> consumer = getRemoteFileConsumer("IllegalStateException", false);
         List<GenericFile<Object>> list = Collections.emptyList();
 
@@ -88,7 +93,7 @@ public class RemoteFileIgnoreDoPollErrorTest {
     }
 
     @Test
-    public void testReadDirErrorNotHandledForGenericFileOperationException() throws Exception {
+    public void testReadDirErrorNotHandledForGenericFileOperationException() {
         RemoteFileConsumer<Object> consumer = getRemoteFileConsumer("GenericFileOperationFailedException", false);
         List<GenericFile<Object>> list = Collections.emptyList();
 
@@ -100,6 +105,9 @@ public class RemoteFileIgnoreDoPollErrorTest {
 
     private RemoteFileConsumer<Object> getRemoteFileConsumer(
             final String doPollResult, final boolean ignoreCannotRetrieveFile) {
+
+        remoteFileEndpoint.setCamelContext(camelContext);
+
         return new RemoteFileConsumer<Object>(remoteFileEndpoint, null, null, null) {
             @Override
             protected boolean doPollDirectory(
@@ -119,7 +127,7 @@ public class RemoteFileIgnoreDoPollErrorTest {
             }
 
             @Override
-            protected boolean isMatched(GenericFile<Object> file, String doneFileName, List<Object> files) {
+            protected boolean isMatched(GenericFile<Object> file, String doneFileName, Object[] files) {
                 return false;
             }
 

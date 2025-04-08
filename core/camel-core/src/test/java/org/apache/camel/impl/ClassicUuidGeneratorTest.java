@@ -36,6 +36,7 @@ public class ClassicUuidGeneratorTest {
 
         String firstUUID = uuidGenerator.generateUuid();
         String secondUUID = uuidGenerator.generateUuid();
+        System.out.println(firstUUID);
 
         assertNotSame(firstUUID, secondUUID);
     }
@@ -51,7 +52,7 @@ public class ClassicUuidGeneratorTest {
         }
         LOG.info("Last id:  " + uuidGenerator.generateUuid());
 
-        LOG.info("Took " + TimeUtils.printDuration(watch.taken()));
+        LOG.info("Took " + TimeUtils.printDuration(watch.taken(), true));
     }
 
     @Test

@@ -26,11 +26,11 @@ import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.fhir.api.ExtraParameters;
 import org.apache.camel.component.fhir.internal.FhirApiCollection;
 import org.apache.camel.component.fhir.internal.FhirLoadPageApiMethod;
-import org.hl7.fhir.dstu3.model.Bundle;
-import org.hl7.fhir.dstu3.model.HumanName;
-import org.hl7.fhir.dstu3.model.Patient;
 import org.hl7.fhir.instance.model.api.IBaseBundle;
 import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.r4.model.Bundle;
+import org.hl7.fhir.r4.model.HumanName;
+import org.hl7.fhir.r4.model.Patient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -50,7 +50,7 @@ public class FhirLoadPageIT extends AbstractFhirTestSupport {
             = FhirApiCollection.getCollection().getApiName(FhirLoadPageApiMethod.class).getName();
 
     @Test
-    public void testByUrl() throws Exception {
+    public void testByUrl() {
         String url = "Patient?_count=2";
         Bundle bundle = this.fhirClient.search()
                 .byUrl(url)
@@ -72,7 +72,7 @@ public class FhirLoadPageIT extends AbstractFhirTestSupport {
     }
 
     @Test
-    public void testNext() throws Exception {
+    public void testNext() {
         String url = "Patient?_count=2";
         Bundle bundle = this.fhirClient.search()
                 .byUrl(url)
@@ -87,7 +87,7 @@ public class FhirLoadPageIT extends AbstractFhirTestSupport {
     }
 
     @Test
-    public void testPrevious() throws Exception {
+    public void testPrevious() {
         String url = "Patient?_count=2";
         Bundle bundle = this.fhirClient.search()
                 .byUrl(url)
@@ -106,7 +106,7 @@ public class FhirLoadPageIT extends AbstractFhirTestSupport {
     }
 
     @Test
-    public void testPreviousWithEncodingEnum() throws Exception {
+    public void testPreviousWithEncodingEnum() {
         String url = "Patient?_count=2";
         Bundle bundle = this.fhirClient.search()
                 .byUrl(url)
@@ -148,7 +148,7 @@ public class FhirLoadPageIT extends AbstractFhirTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             public void configure() {
                 // test route for byUrl

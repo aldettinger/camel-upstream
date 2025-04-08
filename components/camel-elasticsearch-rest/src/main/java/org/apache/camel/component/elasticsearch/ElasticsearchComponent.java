@@ -16,7 +16,6 @@
  */
 package org.apache.camel.component.elasticsearch;
 
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -38,22 +37,21 @@ public class ElasticsearchComponent extends DefaultComponent {
 
     @Metadata(label = "advanced", autowired = true)
     private RestClient client;
-    @Metadata(label = "advanced")
+    @Metadata
     private String hostAddresses;
-    @Metadata(label = "advanced", defaultValue = "" + ElasticsearchConstants.DEFAULT_SOCKET_TIMEOUT)
+    @Metadata(defaultValue = "" + ElasticsearchConstants.DEFAULT_SOCKET_TIMEOUT)
     private int socketTimeout = ElasticsearchConstants.DEFAULT_SOCKET_TIMEOUT;
-    @Metadata(label = "advanced", defaultValue = "" + ElasticsearchConstants.MAX_RETRY_TIMEOUT)
+    @Metadata(defaultValue = "" + ElasticsearchConstants.MAX_RETRY_TIMEOUT)
     private int maxRetryTimeout = ElasticsearchConstants.MAX_RETRY_TIMEOUT;
-    @Metadata(label = "advanced", defaultValue = "" + ElasticsearchConstants.DEFAULT_CONNECTION_TIMEOUT)
+    @Metadata(defaultValue = "" + ElasticsearchConstants.DEFAULT_CONNECTION_TIMEOUT)
     private int connectionTimeout = ElasticsearchConstants.DEFAULT_CONNECTION_TIMEOUT;
-
-    @Metadata(label = "security")
+    @Metadata(label = "security", secret = true)
     private String user;
     @Metadata(label = "security", secret = true)
     private String password;
-    @Metadata(label = "security", defaultValue = "false")
+    @Metadata(label = "security")
     private boolean enableSSL;
-    @Metadata(label = "advanced", defaultValue = "false")
+    @Metadata(label = "advanced")
     private boolean enableSniffer;
     @Metadata(label = "advanced", defaultValue = "" + ElasticsearchConstants.DEFAULT_SNIFFER_INTERVAL)
     private int snifferInterval = ElasticsearchConstants.DEFAULT_SNIFFER_INTERVAL;
@@ -77,9 +75,9 @@ public class ElasticsearchComponent extends DefaultComponent {
         config.setMaxRetryTimeout(this.getMaxRetryTimeout());
         config.setConnectionTimeout(this.getConnectionTimeout());
         config.setUser(this.getUser());
-        config.setEnableSSL(this.getEnableSSL());
+        config.setEnableSSL(this.isEnableSSL());
         config.setPassword(this.getPassword());
-        config.setEnableSniffer(this.getEnableSniffer());
+        config.setEnableSniffer(this.isEnableSniffer());
         config.setSnifferInterval(this.getSnifferInterval());
         config.setSniffAfterFailureDelay(this.getSniffAfterFailureDelay());
         config.setClusterName(remaining);
@@ -91,7 +89,7 @@ public class ElasticsearchComponent extends DefaultComponent {
         return endpoint;
     }
 
-    private List<HttpHost> parseHostAddresses(String ipsString, ElasticsearchConfiguration config) throws UnknownHostException {
+    private List<HttpHost> parseHostAddresses(String ipsString, ElasticsearchConfiguration config) {
         if (ipsString == null || ipsString.isEmpty()) {
             return null;
         }
@@ -179,14 +177,14 @@ public class ElasticsearchComponent extends DefaultComponent {
         this.password = password;
     }
 
-    /**
-     * Enable SSL
-     */
-    public Boolean getEnableSSL() {
+    public boolean isEnableSSL() {
         return enableSSL;
     }
 
-    public void setEnableSSL(Boolean enableSSL) {
+    /**
+     * Enable SSL
+     */
+    public void setEnableSSL(boolean enableSSL) {
         this.enableSSL = enableSSL;
     }
 
@@ -201,14 +199,15 @@ public class ElasticsearchComponent extends DefaultComponent {
         this.maxRetryTimeout = maxRetryTimeout;
     }
 
-    /**
-     * Enable automatically discover nodes from a running Elasticsearch cluster
-     */
-    public Boolean getEnableSniffer() {
+    public boolean isEnableSniffer() {
         return enableSniffer;
     }
 
-    public void setEnableSniffer(Boolean enableSniffer) {
+    /**
+     * Enable automatically discover nodes from a running Elasticsearch cluster. If this option is used in conjunction
+     * with Spring Boot then it's managed by the Spring Boot configuration (see: Disable Sniffer in Spring Boot).
+     */
+    public void setEnableSniffer(boolean enableSniffer) {
         this.enableSniffer = enableSniffer;
     }
 

@@ -35,6 +35,8 @@ import javax.xml.bind.annotation.XmlTransient;
 
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.BeanScope;
+import org.apache.camel.CamelContext;
+import org.apache.camel.CamelContextAware;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangePattern;
@@ -43,6 +45,7 @@ import org.apache.camel.LoggingLevel;
 import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.DataFormatClause;
+import org.apache.camel.builder.EndpointConsumerBuilder;
 import org.apache.camel.builder.EndpointProducerBuilder;
 import org.apache.camel.builder.EnrichClause;
 import org.apache.camel.builder.ExpressionBuilder;
@@ -53,17 +56,20 @@ import org.apache.camel.model.dataformat.CustomDataFormat;
 import org.apache.camel.model.language.ConstantExpression;
 import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.model.language.LanguageExpression;
-import org.apache.camel.model.rest.RestDefinition;
+import org.apache.camel.model.language.SimpleExpression;
 import org.apache.camel.processor.loadbalancer.LoadBalancer;
+import org.apache.camel.resume.ConsumerListener;
+import org.apache.camel.resume.ResumeStrategy;
 import org.apache.camel.spi.AsEndpointUri;
 import org.apache.camel.spi.AsPredicate;
 import org.apache.camel.spi.DataFormat;
 import org.apache.camel.spi.IdempotentRepository;
 import org.apache.camel.spi.InterceptStrategy;
 import org.apache.camel.spi.Policy;
+import org.apache.camel.spi.Resource;
+import org.apache.camel.spi.ResourceAware;
 import org.apache.camel.support.ExpressionAdapter;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Base class for processor types that most XML types extend.
@@ -74,8 +80,6 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         implements Block {
     @XmlTransient
     private static final AtomicInteger COUNTER = new AtomicInteger();
-    @XmlTransient
-    protected final Logger log = LoggerFactory.getLogger(getClass());
     @XmlAttribute
     protected Boolean inheritErrorHandler;
     @XmlTransient
@@ -83,12 +87,14 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     @XmlTransient
     private ProcessorDefinition<?> parent;
     @XmlTransient
+    private RouteConfigurationDefinition routeConfiguration;
+    @XmlTransient
     private final List<InterceptStrategy> interceptStrategies = new ArrayList<>();
     @XmlTransient
     private final int index;
 
     protected ProcessorDefinition() {
-        // every time we create a definition we should inc the COUNTER counter
+        // every time we create a definition we should inc the counter
         index = COUNTER.getAndIncrement();
     }
 
@@ -158,6 +164,28 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
 
     @Override
     public void addOutput(ProcessorDefinition<?> output) {
+        // grab camel context depends on if this is a regular route or a route configuration
+        CamelContext context = this.getCamelContext();
+        if (context == null) {
+            RouteDefinition route = ProcessorDefinitionHelper.getRoute(this);
+            if (route != null) {
+                context = route.getCamelContext();
+            } else {
+                RouteConfigurationDefinition rc = this.getRouteConfiguration();
+                if (rc != null) {
+                    context = rc.getCamelContext();
+                }
+            }
+        }
+        if (context != null && (context.isSourceLocationEnabled() || context.isDebugging() || context.isTracing())) {
+            // we want to capture source location:line for every output
+            Resource resource = this instanceof ResourceAware ? ((ResourceAware) this).getResource() : null;
+            ProcessorDefinitionHelper.prepareSourceLocation(resource, output);
+        }
+
+        // inject context
+        CamelContextAware.trySetCamelContext(output, context);
+
         if (!(this instanceof OutputNode)) {
             getParent().addOutput(output);
             return;
@@ -1085,22 +1113,6 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     }
 
     /**
-     * Ends the current block and returns back to the {@link org.apache.camel.model.rest.RestDefinition rest()} DSL.
-     *
-     * @return the builder
-     */
-    public RestDefinition endRest() {
-        ProcessorDefinition<?> def = this;
-
-        RouteDefinition route = ProcessorDefinitionHelper.getRoute(def);
-        if (route != null) {
-            return route.getRestDefinition();
-        }
-
-        throw new IllegalArgumentException("Cannot find RouteDefinition to allow endRest");
-    }
-
-    /**
      * Ends the current block and returns back to the {@link TryDefinition doTry()} DSL.
      *
      * @return the builder
@@ -1110,12 +1122,32 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
 
         // are we already a try?
         if (def instanceof TryDefinition) {
-            return (TryDefinition) def;
+            // then we need special logic to end
+            TryDefinition td = (TryDefinition) def;
+            return (TryDefinition) td.onEndDoTry();
         }
 
         // okay end this and get back to the try
         def = end();
         return (TryDefinition) def;
+    }
+
+    /**
+     * Ends the current block and returns back to the {@link CatchDefinition doCatch()} DSL.
+     *
+     * @return the builder
+     */
+    public CatchDefinition endDoCatch() {
+        ProcessorDefinition<?> def = this;
+
+        // are we already a doCatch?
+        if (def instanceof CatchDefinition) {
+            return (CatchDefinition) def;
+        }
+
+        // okay end this and get back to the try
+        def = end();
+        return (CatchDefinition) def;
     }
 
     /**
@@ -1268,13 +1300,26 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     /**
      * Creates a Circuit Breaker EIP.
      * <p/>
-     * This requires having an implementation on the classpath such as camel-hystrix, or
-     * camel-microprofile-fault-tolerance.
+     * This requires having an implementation on the classpath such as camel-microprofile-fault-tolerance.
      *
      * @return the builder
      */
     public CircuitBreakerDefinition circuitBreaker() {
         CircuitBreakerDefinition answer = new CircuitBreakerDefinition();
+        addOutput(answer);
+        return answer;
+    }
+
+    /**
+     * Creates a Kamelet EIP.
+     * <p/>
+     * This requires having camel-kamelet on the classpath.
+     *
+     * @return the builder
+     */
+    public KameletDefinition kamelet(String name) {
+        KameletDefinition answer = new KameletDefinition();
+        answer.setName(name);
         addOutput(answer);
         return answer;
     }
@@ -1600,9 +1645,24 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * which only a single exchange is allowed to pass through. All other exchanges will be stopped.
      *
      * @param  samplePeriod this is the sample interval, only one exchange is allowed through in this interval
+     * @return              the builder
+     */
+    public SamplingDefinition sample(String samplePeriod) {
+        SamplingDefinition answer = new SamplingDefinition(samplePeriod);
+        addOutput(answer);
+        return answer;
+    }
+
+    /**
+     * <a href="http://camel.apache.org/sampling.html">Sampling Throttler</a> Creates a sampling throttler allowing you
+     * to extract a sample of exchanges from the traffic through a route. It is configured with a sampling period during
+     * which only a single exchange is allowed to pass through. All other exchanges will be stopped.
+     *
+     * @param  samplePeriod this is the sample interval, only one exchange is allowed through in this interval
      * @param  unit         this is the units for the samplePeriod e.g. Seconds
      * @return              the builder
      */
+    @Deprecated
     public SamplingDefinition sample(long samplePeriod, TimeUnit unit) {
         SamplingDefinition answer = new SamplingDefinition(samplePeriod, unit);
         addOutput(answer);
@@ -2223,7 +2283,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     }
 
     /**
-     * Marks this route as participating to a saga.
+     * Marks this route as participating in a saga.
      *
      * @return the saga definition
      */
@@ -2730,8 +2790,20 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     /**
      * Converts the IN message body to the specified type
      *
+     * @param  type      the type to convert to
+     * @param  mandatory whether to use mandatory type conversion or not
+     * @return           the builder
+     */
+    public Type convertBodyTo(Class<?> type, boolean mandatory) {
+        addOutput(new ConvertBodyDefinition(type, mandatory));
+        return asType();
+    }
+
+    /**
+     * Converts the IN message body to the specified type
+     *
      * @param  type    the type to convert to
-     * @param  charset the charset to use by type converters (not all converters support specifc charset)
+     * @param  charset the charset to use by type converters (not all converters support specific charset)
      * @return         the builder
      */
     public Type convertBodyTo(Class<?> type, String charset) {
@@ -2949,7 +3021,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @see                org.apache.camel.processor.Enricher
      */
     public EnrichClause<ProcessorDefinition<Type>> enrichWith(@AsEndpointUri EndpointProducerBuilder resourceUri) {
-        return enrichWith(resourceUri.getUri());
+        return enrichWith(resourceUri.getRawUri());
     }
 
     /**
@@ -3053,7 +3125,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
             @AsEndpointUri EndpointProducerBuilder resourceUri, AggregationStrategy aggregationStrategy,
             boolean aggregateOnException, boolean shareUnitOfWork) {
         EnrichDefinition answer = new EnrichDefinition();
-        answer.setExpression(resourceUri.expr());
+        answer.setExpression(new SimpleExpression(resourceUri.getRawUri()));
         answer.setAggregationStrategy(aggregationStrategy);
         answer.setAggregateOnException(Boolean.toString(aggregateOnException));
         answer.setShareUnitOfWork(Boolean.toString(shareUnitOfWork));
@@ -3176,8 +3248,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return             the builder
      * @see                org.apache.camel.processor.PollEnricher
      */
-    public Type pollEnrich(EndpointProducerBuilder resourceUri) {
-        return pollEnrich(resourceUri.expr(), -1, (String) null, false);
+    public Type pollEnrich(EndpointConsumerBuilder resourceUri) {
+        return pollEnrich(new SimpleExpression(resourceUri.getRawUri()), -1, (String) null, false);
     }
 
     /**
@@ -3196,7 +3268,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return                     the builder
      * @see                        org.apache.camel.processor.PollEnricher
      */
-    public Type pollEnrich(EndpointProducerBuilder resourceUri, AggregationStrategy aggregationStrategy) {
+    public Type pollEnrich(EndpointConsumerBuilder resourceUri, AggregationStrategy aggregationStrategy) {
         return pollEnrich(resourceUri, -1, aggregationStrategy);
     }
 
@@ -3218,7 +3290,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return                     the builder
      * @see                        org.apache.camel.processor.PollEnricher
      */
-    public Type pollEnrich(EndpointProducerBuilder resourceUri, long timeout, AggregationStrategy aggregationStrategy) {
+    public Type pollEnrich(EndpointConsumerBuilder resourceUri, long timeout, AggregationStrategy aggregationStrategy) {
         return pollEnrich(resourceUri, timeout, aggregationStrategy, false);
     }
 
@@ -3240,7 +3312,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return                        the builder
      * @see                           org.apache.camel.processor.PollEnricher
      */
-    public Type pollEnrich(EndpointProducerBuilder resourceUri, long timeout, String aggregationStrategyRef) {
+    public Type pollEnrich(EndpointConsumerBuilder resourceUri, long timeout, String aggregationStrategyRef) {
         return pollEnrich(resourceUri, timeout, aggregationStrategyRef, false);
     }
 
@@ -3279,7 +3351,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * additional data obtained from a <code>resourceUri</code> and with an aggregation strategy created using a fluent
      * builder using a {@link org.apache.camel.PollingConsumer} to poll the endpoint.
      */
-    public EnrichClause<ProcessorDefinition<Type>> pollEnrichWith(EndpointProducerBuilder resourceUri) {
+    public EnrichClause<ProcessorDefinition<Type>> pollEnrichWith(EndpointConsumerBuilder resourceUri) {
         return pollEnrichWith(resourceUri, -1);
     }
 
@@ -3288,7 +3360,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * additional data obtained from a <code>resourceUri</code> and with an aggregation strategy created using a fluent
      * builder using a {@link org.apache.camel.PollingConsumer} to poll the endpoint.
      */
-    public EnrichClause<ProcessorDefinition<Type>> pollEnrichWith(EndpointProducerBuilder resourceUri, long timeout) {
+    public EnrichClause<ProcessorDefinition<Type>> pollEnrichWith(EndpointConsumerBuilder resourceUri, long timeout) {
         return pollEnrichWith(resourceUri, timeout, false);
     }
 
@@ -3298,7 +3370,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * builder using a {@link org.apache.camel.PollingConsumer} to poll the endpoint.
      */
     public EnrichClause<ProcessorDefinition<Type>> pollEnrichWith(
-            EndpointProducerBuilder resourceUri, long timeout, boolean aggregateOnException) {
+            EndpointConsumerBuilder resourceUri, long timeout, boolean aggregateOnException) {
         EnrichClause<ProcessorDefinition<Type>> clause = new EnrichClause<>(this);
         pollEnrich(resourceUri, timeout, clause, aggregateOnException);
         return clause;
@@ -3400,9 +3472,9 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @see                         org.apache.camel.processor.PollEnricher
      */
     public Type pollEnrich(
-            @AsEndpointUri EndpointProducerBuilder resourceUri, long timeout, AggregationStrategy aggregationStrategy,
+            @AsEndpointUri EndpointConsumerBuilder resourceUri, long timeout, AggregationStrategy aggregationStrategy,
             boolean aggregateOnException) {
-        return pollEnrich(resourceUri.expr(), timeout, aggregationStrategy, aggregateOnException);
+        return pollEnrich(new SimpleExpression(resourceUri.getRawUri()), timeout, aggregationStrategy, aggregateOnException);
     }
 
     /**
@@ -3427,9 +3499,9 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @see                           org.apache.camel.processor.PollEnricher
      */
     public Type pollEnrich(
-            @AsEndpointUri EndpointProducerBuilder resourceUri, long timeout, String aggregationStrategyRef,
+            @AsEndpointUri EndpointConsumerBuilder resourceUri, long timeout, String aggregationStrategyRef,
             boolean aggregateOnException) {
-        return pollEnrich(resourceUri.expr(), timeout, aggregationStrategyRef, aggregateOnException);
+        return pollEnrich(new SimpleExpression(resourceUri.getRawUri()), timeout, aggregationStrategyRef, aggregateOnException);
     }
 
     /**
@@ -3449,7 +3521,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return             the builder
      * @see                org.apache.camel.processor.PollEnricher
      */
-    public Type pollEnrich(@AsEndpointUri EndpointProducerBuilder resourceUri, long timeout) {
+    public Type pollEnrich(@AsEndpointUri EndpointConsumerBuilder resourceUri, long timeout) {
         return pollEnrich(resourceUri, timeout, (String) null);
     }
 
@@ -3479,7 +3551,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         PollEnrichDefinition pollEnrich = new PollEnrichDefinition();
         pollEnrich.setExpression(expression);
         pollEnrich.setTimeout(Long.toString(timeout));
-        pollEnrich.setAggregationStrategyRef(aggregationStrategyRef);
+        pollEnrich.setAggregationStrategy(aggregationStrategyRef);
         pollEnrich.setAggregateOnException(Boolean.toString(aggregateOnException));
         addOutput(pollEnrich);
         return asType();
@@ -3556,11 +3628,12 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      */
     public OnCompletionDefinition onCompletion() {
         OnCompletionDefinition answer = new OnCompletionDefinition();
-        // we must remove all existing on completion definition (as they are
-        // global)
-        // and thus we are the only one as route scoped should override any
-        // global scoped
+
+        // remove all on completions if they are global scoped and we add a route scoped which
+        // should override the global
         answer.removeAllOnCompletionDefinition(this);
+
+        // create new block with the onCompletion
         popBlock();
         addOutput(answer);
         pushBlock(answer);
@@ -3589,7 +3662,20 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return                the builder
      */
     public Type unmarshal(DataFormatDefinition dataFormatType) {
-        addOutput(new UnmarshalDefinition(dataFormatType));
+        return unmarshal(dataFormatType, false);
+    }
+
+    /**
+     * <a href="http://camel.apache.org/data-format.html">DataFormat:</a> Unmarshals the in body using the specified
+     * {@link DataFormat} and sets the output on the out message body.
+     *
+     * @param  dataFormatType the dataformat
+     * @param  allowNullBody  {@code true} if {@code null} is allowed as value of a body to unmarshall, {@code false}
+     *                        otherwise
+     * @return                the builder
+     */
+    public Type unmarshal(DataFormatDefinition dataFormatType, boolean allowNullBody) {
+        addOutput(new UnmarshalDefinition(dataFormatType).allowNullBody(allowNullBody));
         return asType();
     }
 
@@ -3601,7 +3687,20 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return            the builder
      */
     public Type unmarshal(DataFormat dataFormat) {
-        return unmarshal(new DataFormatDefinition(dataFormat));
+        return unmarshal(dataFormat, false);
+    }
+
+    /**
+     * <a href="http://camel.apache.org/data-format.html">DataFormat:</a> Unmarshals the in body using the specified
+     * {@link DataFormat} and sets the output on the out message body.
+     *
+     * @param  dataFormat    the dataformat
+     * @param  allowNullBody {@code true} if {@code null} is allowed as value of a body to unmarshall, {@code false}
+     *                       otherwise
+     * @return               the builder
+     */
+    public Type unmarshal(DataFormat dataFormat, boolean allowNullBody) {
+        return unmarshal(new DataFormatDefinition(dataFormat), allowNullBody);
     }
 
     /**
@@ -3613,7 +3712,19 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return             the builder
      */
     public Type unmarshal(String dataTypeRef) {
-        return unmarshal(new CustomDataFormat(dataTypeRef));
+        return unmarshal(dataTypeRef, false);
+    }
+
+    /**
+     * <a href="http://camel.apache.org/data-format.html">DataFormat:</a> Unmarshals the in body using the specified
+     * {@link DataFormat} reference in the {@link org.apache.camel.spi.Registry} and sets the output on the out message
+     * body.
+     *
+     * @param  dataTypeRef reference to a {@link DataFormat} to lookup in the registry
+     * @return             the builder
+     */
+    public Type unmarshal(String dataTypeRef, boolean allowNullBody) {
+        return unmarshal(new CustomDataFormat(dataTypeRef), allowNullBody);
     }
 
     /**
@@ -3693,8 +3804,106 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         return (Type) this;
     }
 
+    /**
+     * This defines the route as resumable, which allows the route to work with the endpoints and components to manage
+     * the state of consumers and resume upon restart.
+     *
+     * @return the builder
+     */
+    public ResumableDefinition resumable() {
+        ResumableDefinition answer = new ResumableDefinition();
+        addOutput(answer);
+        return answer;
+    }
+
+    /**
+     * This defines the route as resumable, which allows the route to work with the endpoints and components to manage
+     * the state of consumers and resume upon restart.
+     *
+     * @param  resumeStrategy the resume strategy
+     * @return                the builder
+     */
+    public Type resumable(ResumeStrategy resumeStrategy) {
+        ResumableDefinition answer = new ResumableDefinition();
+        answer.setResumeStrategy(resumeStrategy);
+        addOutput(answer);
+        return asType();
+    }
+
+    /**
+     * This defines the route as resumable, which allows the route to work with the endpoints and components to manage
+     * the state of consumers and resume upon restart.
+     *
+     * @param  resumeStrategy the resume strategy
+     * @return                the builder
+     */
+    public Type resumable(String resumeStrategy) {
+        ResumableDefinition answer = new ResumableDefinition();
+        answer.setResumeStrategy(resumeStrategy);
+        addOutput(answer);
+        return asType();
+    }
+
+    /**
+     * This enables pausable consumers, which allows the consumer to pause work until a certain condition allows it to
+     * resume operation
+     *
+     * @return the builder
+     */
+    public PausableDefinition pausable() {
+        PausableDefinition answer = new PausableDefinition();
+        addOutput(answer);
+        return answer;
+    }
+
+    /**
+     * This enables pausable consumers, which allows the consumer to pause work until a certain condition allows it to
+     * resume operation
+     *
+     * @param  consumerListener the consumer listener to use for consumer events
+     * @return                  the builder
+     */
+    public Type pausable(ConsumerListener consumerListener, java.util.function.Predicate<?> untilCheck) {
+        PausableDefinition answer = new PausableDefinition();
+        answer.setConsumerListener(consumerListener);
+        answer.setUntilCheck(untilCheck);
+        addOutput(answer);
+        return asType();
+    }
+
+    /**
+     * This enables pausable consumers, which allows the consumer to pause work until a certain condition allows it to
+     * resume operation
+     *
+     * @param  consumerListenerRef the resume strategy
+     * @return                     the builder
+     */
+    public Type pausable(String consumerListenerRef, java.util.function.Predicate<?> untilCheck) {
+        PausableDefinition answer = new PausableDefinition();
+        answer.setConsumerListener(consumerListenerRef);
+        answer.setUntilCheck(untilCheck);
+        addOutput(answer);
+        return asType();
+    }
+
+    /**
+     * This enables pausable consumers, which allows the consumer to pause work until a certain condition allows it to
+     * resume operation
+     *
+     * @param  consumerListenerRef the resume strategy
+     * @return                     the builder
+     */
+    public Type pausable(String consumerListenerRef, String untilCheck) {
+        PausableDefinition answer = new PausableDefinition();
+        answer.setConsumerListener(consumerListenerRef);
+        answer.setUntilCheck(untilCheck);
+        addOutput(answer);
+        return asType();
+    }
+
     // Properties
     // -------------------------------------------------------------------------
+
     @Override
     public ProcessorDefinition<?> getParent() {
         return parent;
@@ -3702,6 +3911,14 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
 
     public void setParent(ProcessorDefinition<?> parent) {
         this.parent = parent;
+    }
+
+    public RouteConfigurationDefinition getRouteConfiguration() {
+        return routeConfiguration;
+    }
+
+    public void setRouteConfiguration(RouteConfigurationDefinition routeConfiguration) {
+        this.routeConfiguration = routeConfiguration;
     }
 
     public List<InterceptStrategy> getInterceptStrategies() {

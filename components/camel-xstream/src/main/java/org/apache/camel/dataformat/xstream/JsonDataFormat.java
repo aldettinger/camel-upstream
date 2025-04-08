@@ -42,7 +42,7 @@ import org.codehaus.jettison.mapped.MappedXMLOutputFactory;
 /**
  * Marshal POJOs to JSON and back using <a href="http://x-stream.github.io/">XStream</a>
  */
-@Dataformat("json-xstream")
+@Dataformat("xstreamJson")
 @Metadata(includeProperties = "prettyPrint,dropRootNode,contentTypeHeader")
 public class JsonDataFormat extends AbstractXStreamWrapper {
     private MappedXMLOutputFactory mof;
@@ -55,7 +55,7 @@ public class JsonDataFormat extends AbstractXStreamWrapper {
 
     @Override
     public String getDataFormatName() {
-        return "json-xstream";
+        return "xstreamJson";
     }
 
     public boolean isPrettyPrint() {
@@ -79,11 +79,7 @@ public class JsonDataFormat extends AbstractXStreamWrapper {
         super.marshal(exchange, body, stream);
 
         if (isContentTypeHeader()) {
-            if (exchange.hasOut()) {
-                exchange.getOut().setHeader(Exchange.CONTENT_TYPE, "application/json");
-            } else {
-                exchange.getIn().setHeader(Exchange.CONTENT_TYPE, "application/json");
-            }
+            exchange.getMessage().setHeader(Exchange.CONTENT_TYPE, "application/json");
         }
     }
 

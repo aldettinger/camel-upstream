@@ -16,7 +16,6 @@
  */
 package org.apache.camel.component.kafka;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +25,7 @@ import java.util.stream.Collectors;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.RuntimeCamelException;
+import org.apache.camel.component.kafka.consumer.KafkaManualCommit;
 import org.apache.camel.component.kafka.serde.DefaultKafkaHeaderDeserializer;
 import org.apache.camel.component.kafka.serde.DefaultKafkaHeaderSerializer;
 import org.apache.camel.component.kafka.serde.KafkaHeaderDeserializer;
@@ -50,6 +50,8 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.config.SslConfigs;
+import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
+import org.apache.kafka.common.security.auth.SecurityProtocol;
 
 @UriParams
 public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware {
@@ -70,8 +72,9 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     private boolean topicIsPattern;
     @UriParam(label = "consumer")
     private String groupId;
-    @UriParam(label = "consumer", defaultValue = "10")
-    private int consumerStreams = 10;
+    @UriParam(label = "consumer")
+    private String groupInstanceId;
+
     @UriParam(label = "consumer", defaultValue = "1")
     private int consumersCount = 1;
     @UriParam(label = "consumer", description = "To use a custom KafkaHeaderDeserializer to deserialize kafka headers values")
@@ -126,20 +129,24 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     // fetch.max.wait.ms
     @UriParam(label = "consumer", defaultValue = "500")
     private Integer fetchWaitMaxMs = 500;
-    @UriParam(label = "consumer", enums = "beginning,end")
-    private String seekTo;
+    @UriParam(label = "consumer")
+    private SeekPolicy seekTo;
 
     // Consumer configuration properties
     @UriParam(label = "consumer", defaultValue = "true")
-    private Boolean autoCommitEnable = true;
+    private boolean autoCommitEnable = true;
     @UriParam(label = "consumer")
     private boolean allowManualCommit;
-    @UriParam(label = "consumer", defaultValue = "sync", enums = "sync,async,none")
-    private String autoCommitOnStop = "sync";
     @UriParam(label = "consumer")
     private boolean breakOnFirstError;
     @UriParam(label = "consumer")
     private StateRepository<String, String> offsetRepository;
+    @UriParam(label = "consumer", defaultValue = "ERROR_HANDLER")
+    private PollOnError pollOnError = PollOnError.ERROR_HANDLER;
+    @UriParam(label = "consumer", defaultValue = "5000", javaType = "java.time.Duration")
+    private Long commitTimeoutMs = 5000L;
+    @UriParam(label = "consumer,advanced", defaultValue = "read_uncommitted", enums = "read_uncommitted,read_committed")
+    private String isolationLevel;
 
     // Producer configuration properties
     @UriParam(label = "producer", defaultValue = KafkaConstants.KAFKA_DEFAULT_PARTITIONER)
@@ -198,6 +205,9 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     // request.timeout.ms
     @UriParam(label = "producer", defaultValue = "30000")
     private Integer requestTimeoutMs = 30000;
+    // delivery.timeout.ms
+    @UriParam(label = "producer", defaultValue = "120000")
+    private Integer deliveryTimeoutMs = 120000;
     // send.buffer.bytes
     @UriParam(label = "producer", defaultValue = "131072")
     private Integer sendBufferBytes = 131072;
@@ -238,19 +248,19 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
 
     // SSL
     // ssl.key.password
-    @UriParam(label = "producer,security", secret = true)
+    @UriParam(label = "common,security", secret = true)
     private String sslKeyPassword;
     // ssl.keystore.location
-    @UriParam(label = "producer,security")
+    @UriParam(label = "common,security")
     private String sslKeystoreLocation;
     // ssl.keystore.password
-    @UriParam(label = "producer,security", secret = true)
+    @UriParam(label = "common,security", secret = true)
     private String sslKeystorePassword;
     // ssl.truststore.location
-    @UriParam(label = "producer,security")
+    @UriParam(label = "common,security")
     private String sslTruststoreLocation;
     // ssl.truststore.password
-    @UriParam(label = "producer,security", secret = true)
+    @UriParam(label = "common,security", secret = true)
     private String sslTruststorePassword;
     // SSL
     // ssl.enabled.protocols
@@ -289,7 +299,7 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     @UriParam(label = "common,security", defaultValue = CommonClientConfigs.DEFAULT_SECURITY_PROTOCOL)
     private String securityProtocol = CommonClientConfigs.DEFAULT_SECURITY_PROTOCOL;
     // SASL
-    // sasl.kerberos.kinit.cmd
+    // sasl.mechanism
     @UriParam(label = "common,security", defaultValue = SaslConfigs.DEFAULT_SASL_MECHANISM)
     private String saslMechanism = SaslConfigs.DEFAULT_SASL_MECHANISM;
     // sasl.kerberos.kinit.cmd
@@ -336,6 +346,7 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     public KafkaConfiguration copy() {
         try {
             KafkaConfiguration copy = (KafkaConfiguration) clone();
+            copy.additionalProperties = new HashMap<>(this.additionalProperties);
             return copy;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeCamelException(e);
@@ -344,60 +355,49 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
 
     public Properties createProducerProperties() {
         Properties props = new Properties();
-        addPropertyIfNotNull(props, ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, getKeySerializer());
-        addPropertyIfNotNull(props, ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, getValueSerializer());
-        addPropertyIfNotNull(props, ProducerConfig.ACKS_CONFIG, getRequestRequiredAcks());
-        addPropertyIfNotNull(props, ProducerConfig.BUFFER_MEMORY_CONFIG, getBufferMemorySize());
-        addPropertyIfNotNull(props, ProducerConfig.COMPRESSION_TYPE_CONFIG, getCompressionCodec());
-        addPropertyIfNotNull(props, ProducerConfig.RETRIES_CONFIG, getRetries());
-        addPropertyIfNotNull(props, ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, getInterceptorClasses());
-        addPropertyIfNotNull(props, ProducerConfig.BATCH_SIZE_CONFIG, getProducerBatchSize());
-        addPropertyIfNotNull(props, ProducerConfig.CLIENT_ID_CONFIG, getClientId());
-        addPropertyIfNotNull(props, ProducerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG, getConnectionMaxIdleMs());
-        addPropertyIfNotNull(props, ProducerConfig.LINGER_MS_CONFIG, getLingerMs());
-        addPropertyIfNotNull(props, ProducerConfig.MAX_BLOCK_MS_CONFIG, getMaxBlockMs());
-        addPropertyIfNotNull(props, ProducerConfig.MAX_REQUEST_SIZE_CONFIG, getMaxRequestSize());
-        addPropertyIfNotNull(props, ProducerConfig.PARTITIONER_CLASS_CONFIG, getPartitioner());
-        addPropertyIfNotNull(props, ProducerConfig.RECEIVE_BUFFER_CONFIG, getReceiveBufferBytes());
-        addPropertyIfNotNull(props, ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, getRequestTimeoutMs());
-        addPropertyIfNotNull(props, ProducerConfig.SEND_BUFFER_CONFIG, getSendBufferBytes());
-        addPropertyIfNotNull(props, ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, getMaxInFlightRequest());
-        addPropertyIfNotNull(props, ProducerConfig.METADATA_MAX_AGE_CONFIG, getMetadataMaxAgeMs());
-        addPropertyIfNotNull(props, ProducerConfig.METRIC_REPORTER_CLASSES_CONFIG, getMetricReporters());
-        addPropertyIfNotNull(props, ProducerConfig.METRICS_NUM_SAMPLES_CONFIG, getNoOfMetricsSample());
-        addPropertyIfNotNull(props, ProducerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG, getMetricsSampleWindowMs());
-        addPropertyIfNotNull(props, ProducerConfig.RECONNECT_BACKOFF_MS_CONFIG, getReconnectBackoffMs());
-        addPropertyIfNotNull(props, ProducerConfig.RETRY_BACKOFF_MS_CONFIG, getRetryBackoffMs());
-        addPropertyIfNotNull(props, ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, isEnableIdempotence());
-        addPropertyIfNotNull(props, ProducerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG, getReconnectBackoffMaxMs());
-        addPropertyIfNotNull(props, "schema.registry.url", getSchemaRegistryURL());
+        addPropertyIfNotEmpty(props, ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, getKeySerializer());
+        addPropertyIfNotEmpty(props, ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, getValueSerializer());
+        addPropertyIfNotEmpty(props, ProducerConfig.ACKS_CONFIG, getRequestRequiredAcks());
+        addPropertyIfNotEmpty(props, ProducerConfig.BUFFER_MEMORY_CONFIG, getBufferMemorySize());
+        addPropertyIfNotEmpty(props, ProducerConfig.COMPRESSION_TYPE_CONFIG, getCompressionCodec());
+        addPropertyIfNotEmpty(props, ProducerConfig.RETRIES_CONFIG, getRetries());
+        addPropertyIfNotEmpty(props, ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, getInterceptorClasses());
+        addPropertyIfNotEmpty(props, ProducerConfig.BATCH_SIZE_CONFIG, getProducerBatchSize());
+        addPropertyIfNotEmpty(props, ProducerConfig.CLIENT_ID_CONFIG, getClientId());
+        addPropertyIfNotEmpty(props, ProducerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG, getConnectionMaxIdleMs());
+        addPropertyIfNotEmpty(props, ProducerConfig.LINGER_MS_CONFIG, getLingerMs());
+        addPropertyIfNotEmpty(props, ProducerConfig.MAX_BLOCK_MS_CONFIG, getMaxBlockMs());
+        addPropertyIfNotEmpty(props, ProducerConfig.MAX_REQUEST_SIZE_CONFIG, getMaxRequestSize());
+        addPropertyIfNotEmpty(props, ProducerConfig.PARTITIONER_CLASS_CONFIG, getPartitioner());
+        addPropertyIfNotEmpty(props, ProducerConfig.RECEIVE_BUFFER_CONFIG, getReceiveBufferBytes());
+        addPropertyIfNotEmpty(props, ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, getRequestTimeoutMs());
+        addPropertyIfNotEmpty(props, ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, getDeliveryTimeoutMs());
+        addPropertyIfNotEmpty(props, ProducerConfig.SEND_BUFFER_CONFIG, getSendBufferBytes());
+        addPropertyIfNotEmpty(props, ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, getMaxInFlightRequest());
+        addPropertyIfNotEmpty(props, ProducerConfig.METADATA_MAX_AGE_CONFIG, getMetadataMaxAgeMs());
+        addPropertyIfNotEmpty(props, ProducerConfig.METRIC_REPORTER_CLASSES_CONFIG, getMetricReporters());
+        addPropertyIfNotEmpty(props, ProducerConfig.METRICS_NUM_SAMPLES_CONFIG, getNoOfMetricsSample());
+        addPropertyIfNotEmpty(props, ProducerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG, getMetricsSampleWindowMs());
+        addPropertyIfNotEmpty(props, ProducerConfig.RECONNECT_BACKOFF_MS_CONFIG, getReconnectBackoffMs());
+        addPropertyIfNotEmpty(props, ProducerConfig.RETRY_BACKOFF_MS_CONFIG, getRetryBackoffMs());
+        addPropertyIfNotEmpty(props, ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, isEnableIdempotence());
+        addPropertyIfNotEmpty(props, ProducerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG, getReconnectBackoffMaxMs());
+        addPropertyIfNotEmpty(props, "schema.registry.url", getSchemaRegistryURL());
 
         // SSL
-        applySslConfiguration(props, getSslContextParameters());
-        addPropertyIfNotNull(props, CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, getSecurityProtocol());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, getSslKeyPassword());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, getSslKeystoreLocation());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, getSslKeystorePassword());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, getSslTruststoreLocation());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, getSslTruststorePassword());
-        addPropertyIfNotNull(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, getSslEnabledProtocols());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
-        addPropertyIfNotNull(props, SslConfigs.SSL_PROTOCOL_CONFIG, getSslProtocol());
-        addPropertyIfNotNull(props, SslConfigs.SSL_PROVIDER_CONFIG, getSslProvider());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
-        addPropertyIfNotNull(props, SslConfigs.SSL_CIPHER_SUITES_CONFIG, getSslCipherSuites());
-        addPropertyIfNotNull(props, SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, getSslEndpointAlgorithm());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG, getSslKeymanagerAlgorithm());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, getSslTrustmanagerAlgorithm());
+        if (sslContextParameters != null) {
+            applySslConfigurationFromContext(props, sslContextParameters);
+        } else {
+            applyProducerSslConfiguration(props);
+        }
+
+        final String securityProtocol = getSecurityProtocol();
+        addPropertyIfNotEmpty(props, CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, securityProtocol);
+
         // SASL
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_SERVICE_NAME, getSaslKerberosServiceName());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_KINIT_CMD, getKerberosInitCmd());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_MIN_TIME_BEFORE_RELOGIN, getKerberosBeforeReloginMinTime());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_JITTER, getKerberosRenewJitter());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_WINDOW_FACTOR, getKerberosRenewWindowFactor());
-        addListPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_PRINCIPAL_TO_LOCAL_RULES, getKerberosPrincipalToLocalRules());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_MECHANISM, getSaslMechanism());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_JAAS_CONFIG, getSaslJaasConfig());
+        if (isSasl(securityProtocol)) {
+            applySaslConfiguration(props);
+        }
 
         // additional properties
         applyAdditionalProperties(props, getAdditionalProperties());
@@ -405,71 +405,126 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
         return props;
     }
 
+    private void applySaslConfiguration(Properties props) {
+        addPropertyIfNotEmpty(props, SaslConfigs.SASL_KERBEROS_SERVICE_NAME, getSaslKerberosServiceName());
+        addPropertyIfNotEmpty(props, SaslConfigs.SASL_KERBEROS_KINIT_CMD, getKerberosInitCmd());
+        addPropertyIfNotEmpty(props, SaslConfigs.SASL_KERBEROS_MIN_TIME_BEFORE_RELOGIN, getKerberosBeforeReloginMinTime());
+        addPropertyIfNotEmpty(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_JITTER, getKerberosRenewJitter());
+        addPropertyIfNotEmpty(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_WINDOW_FACTOR, getKerberosRenewWindowFactor());
+        addPropertyIfNotEmpty(props, BrokerSecurityConfigs.SASL_KERBEROS_PRINCIPAL_TO_LOCAL_RULES_CONFIG,
+                getKerberosPrincipalToLocalRules());
+        addPropertyIfNotEmpty(props, SaslConfigs.SASL_MECHANISM, getSaslMechanism());
+        addPropertyIfNotEmpty(props, SaslConfigs.SASL_JAAS_CONFIG, getSaslJaasConfig());
+    }
+
+    private void applyProducerSslConfiguration(Properties props) {
+        final String securityProtocol = getSecurityProtocol();
+
+        if (securityProtocol.equals(SecurityProtocol.SSL.name()) || securityProtocol.equals(SecurityProtocol.SASL_SSL.name())) {
+            addPropertyIfNotEmpty(props, CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, getSecurityProtocol());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, getSslKeyPassword());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, getSslKeystoreLocation());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, getSslKeystorePassword());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, getSslTruststoreLocation());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, getSslTruststorePassword());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, getSslEnabledProtocols());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_PROTOCOL_CONFIG, getSslProtocol());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_PROVIDER_CONFIG, getSslProvider());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_CIPHER_SUITES_CONFIG, getSslCipherSuites());
+            String algo = getSslEndpointAlgorithm();
+            if (algo != null && !algo.equals("none") && !algo.equals("false")) {
+                addPropertyIfNotNull(props, SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, algo);
+            }
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG, getSslKeymanagerAlgorithm());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, getSslTrustmanagerAlgorithm());
+        }
+    }
+
     public Properties createConsumerProperties() {
         Properties props = new Properties();
-        addPropertyIfNotNull(props, ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, getKeyDeserializer());
-        addPropertyIfNotNull(props, ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, getValueDeserializer());
-        addPropertyIfNotNull(props, ConsumerConfig.FETCH_MIN_BYTES_CONFIG, getFetchMinBytes());
-        addPropertyIfNotNull(props, ConsumerConfig.FETCH_MAX_BYTES_CONFIG, getFetchMaxBytes());
-        addPropertyIfNotNull(props, ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, getHeartbeatIntervalMs());
-        addPropertyIfNotNull(props, ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, getMaxPartitionFetchBytes());
-        addPropertyIfNotNull(props, ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, getSessionTimeoutMs());
-        addPropertyIfNotNull(props, ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, getMaxPollIntervalMs());
-        addPropertyIfNotNull(props, ConsumerConfig.MAX_POLL_RECORDS_CONFIG, getMaxPollRecords());
-        addPropertyIfNotNull(props, ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG, getInterceptorClasses());
-        addPropertyIfNotNull(props, ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, getAutoOffsetReset());
-        addPropertyIfNotNull(props, ConsumerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG, getConnectionMaxIdleMs());
-        addPropertyIfNotNull(props, ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, getAutoCommitEnable());
-        addPropertyIfNotNull(props, ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, getPartitionAssignor());
-        addPropertyIfNotNull(props, ConsumerConfig.RECEIVE_BUFFER_CONFIG, getReceiveBufferBytes());
-        addPropertyIfNotNull(props, ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG, getConsumerRequestTimeoutMs());
-        addPropertyIfNotNull(props, ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, getAutoCommitIntervalMs());
-        addPropertyIfNotNull(props, ConsumerConfig.CHECK_CRCS_CONFIG, getCheckCrcs());
-        addPropertyIfNotNull(props, ConsumerConfig.CLIENT_ID_CONFIG, getClientId());
-        addPropertyIfNotNull(props, ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, getFetchWaitMaxMs());
-        addPropertyIfNotNull(props, ConsumerConfig.METADATA_MAX_AGE_CONFIG, getMetadataMaxAgeMs());
-        addPropertyIfNotNull(props, ConsumerConfig.METRIC_REPORTER_CLASSES_CONFIG, getMetricReporters());
-        addPropertyIfNotNull(props, ConsumerConfig.METRICS_NUM_SAMPLES_CONFIG, getNoOfMetricsSample());
-        addPropertyIfNotNull(props, ConsumerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG, getMetricsSampleWindowMs());
-        addPropertyIfNotNull(props, ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG, getReconnectBackoffMs());
-        addPropertyIfNotNull(props, ConsumerConfig.RETRY_BACKOFF_MS_CONFIG, getRetryBackoffMs());
-        addPropertyIfNotNull(props, ConsumerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG, getReconnectBackoffMaxMs());
-        addPropertyIfNotNull(props, "schema.registry.url", getSchemaRegistryURL());
-        addPropertyIfNotNull(props, "specific.avro.reader", isSpecificAvroReader());
+        addPropertyIfNotEmpty(props, ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, getKeyDeserializer());
+        addPropertyIfNotEmpty(props, ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, getValueDeserializer());
+        addPropertyIfNotEmpty(props, ConsumerConfig.FETCH_MIN_BYTES_CONFIG, getFetchMinBytes());
+        addPropertyIfNotEmpty(props, ConsumerConfig.FETCH_MAX_BYTES_CONFIG, getFetchMaxBytes());
+        addPropertyIfNotEmpty(props, ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, getHeartbeatIntervalMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, getMaxPartitionFetchBytes());
+        addPropertyIfNotEmpty(props, ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, getSessionTimeoutMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, getMaxPollIntervalMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.MAX_POLL_RECORDS_CONFIG, getMaxPollRecords());
+        addPropertyIfNotEmpty(props, ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG, getInterceptorClasses());
+        addPropertyIfNotEmpty(props, ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, getAutoOffsetReset());
+        addPropertyIfNotEmpty(props, ConsumerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG, getConnectionMaxIdleMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, getAutoCommitEnable());
+        addPropertyIfNotEmpty(props, ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, getPartitionAssignor());
+        addPropertyIfNotEmpty(props, ConsumerConfig.RECEIVE_BUFFER_CONFIG, getReceiveBufferBytes());
+        addPropertyIfNotEmpty(props, ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG, getConsumerRequestTimeoutMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, getAutoCommitIntervalMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.CHECK_CRCS_CONFIG, getCheckCrcs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.CLIENT_ID_CONFIG, getClientId());
+        addPropertyIfNotEmpty(props, ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, getFetchWaitMaxMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.METADATA_MAX_AGE_CONFIG, getMetadataMaxAgeMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.METRIC_REPORTER_CLASSES_CONFIG, getMetricReporters());
+        addPropertyIfNotEmpty(props, ConsumerConfig.METRICS_NUM_SAMPLES_CONFIG, getNoOfMetricsSample());
+        addPropertyIfNotEmpty(props, ConsumerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG, getMetricsSampleWindowMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG, getReconnectBackoffMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.RETRY_BACKOFF_MS_CONFIG, getRetryBackoffMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG, getReconnectBackoffMaxMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.ISOLATION_LEVEL_CONFIG, getIsolationLevel());
+        addPropertyIfNotEmpty(props, "schema.registry.url", getSchemaRegistryURL());
+        addPropertyIfNotFalse(props, "specific.avro.reader", isSpecificAvroReader());
 
         // SSL
-        applySslConfiguration(props, getSslContextParameters());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, getSslKeyPassword());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, getSslKeystoreLocation());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, getSslKeystorePassword());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, getSslTruststoreLocation());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, getSslTruststorePassword());
-        addPropertyIfNotNull(props, SslConfigs.SSL_CIPHER_SUITES_CONFIG, getSslCipherSuites());
-        addPropertyIfNotNull(props, SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, getSslEndpointAlgorithm());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG, getSslKeymanagerAlgorithm());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, getSslTrustmanagerAlgorithm());
-        addPropertyIfNotNull(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, getSslEnabledProtocols());
-        addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
-        addPropertyIfNotNull(props, SslConfigs.SSL_PROTOCOL_CONFIG, getSslProtocol());
-        addPropertyIfNotNull(props, SslConfigs.SSL_PROVIDER_CONFIG, getSslProvider());
-        addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
+        if (sslContextParameters != null) {
+            applySslConfigurationFromContext(props, sslContextParameters);
+        } else {
+            applySslConsumerConfigurationFromOptions(props);
+        }
+
         // Security protocol
-        addPropertyIfNotNull(props, CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, getSecurityProtocol());
-        addPropertyIfNotNull(props, ProducerConfig.SEND_BUFFER_CONFIG, getSendBufferBytes());
+        final String securityProtocol = getSecurityProtocol();
+        addPropertyIfNotEmpty(props, CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, securityProtocol);
+
         // SASL
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_SERVICE_NAME, getSaslKerberosServiceName());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_KINIT_CMD, getKerberosInitCmd());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_MIN_TIME_BEFORE_RELOGIN, getKerberosBeforeReloginMinTime());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_JITTER, getKerberosRenewJitter());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_TICKET_RENEW_WINDOW_FACTOR, getKerberosRenewWindowFactor());
-        addListPropertyIfNotNull(props, SaslConfigs.SASL_KERBEROS_PRINCIPAL_TO_LOCAL_RULES, getKerberosPrincipalToLocalRules());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_MECHANISM, getSaslMechanism());
-        addPropertyIfNotNull(props, SaslConfigs.SASL_JAAS_CONFIG, getSaslJaasConfig());
+        if (isSasl(securityProtocol)) {
+            applySaslConfiguration(props);
+        }
 
         // additional properties
         applyAdditionalProperties(props, getAdditionalProperties());
 
         return props;
+    }
+
+    private boolean isSasl(String securityProtocol) {
+        return securityProtocol.equals(SecurityProtocol.SASL_PLAINTEXT.name())
+                || securityProtocol.equals(SecurityProtocol.SASL_SSL.name());
+    }
+
+    private void applySslConsumerConfigurationFromOptions(Properties props) {
+        final String securityProtocol = getSecurityProtocol();
+
+        if (securityProtocol.equals(SecurityProtocol.SSL.name()) || securityProtocol.equals(SecurityProtocol.SASL_SSL.name())) {
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, getSslKeyPassword());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, getSslKeystoreLocation());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, getSslKeystorePassword());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, getSslTruststoreLocation());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, getSslTruststorePassword());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_CIPHER_SUITES_CONFIG, getSslCipherSuites());
+            String algo = getSslEndpointAlgorithm();
+            if (algo != null && !algo.equals("none") && !algo.equals("false")) {
+                addPropertyIfNotNull(props, SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, algo);
+            }
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG, getSslKeymanagerAlgorithm());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, getSslTrustmanagerAlgorithm());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, getSslEnabledProtocols());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_PROTOCOL_CONFIG, getSslProtocol());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_PROVIDER_CONFIG, getSslProvider());
+            addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
+            addPropertyIfNotEmpty(props, ProducerConfig.SEND_BUFFER_CONFIG, getSendBufferBytes());
+        }
     }
 
     /**
@@ -478,46 +533,43 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
      * @param props                Kafka properties
      * @param sslContextParameters SSL configuration
      */
-    private void applySslConfiguration(Properties props, SSLContextParameters sslContextParameters) {
+    private void applySslConfigurationFromContext(Properties props, SSLContextParameters sslContextParameters) {
+        addPropertyIfNotNull(props, SslConfigs.SSL_PROTOCOL_CONFIG, sslContextParameters.getSecureSocketProtocol());
+        addPropertyIfNotNull(props, SslConfigs.SSL_PROVIDER_CONFIG, sslContextParameters.getProvider());
 
-        if (sslContextParameters != null) {
-            addPropertyIfNotNull(props, SslConfigs.SSL_PROTOCOL_CONFIG, sslContextParameters.getSecureSocketProtocol());
-            addPropertyIfNotNull(props, SslConfigs.SSL_PROVIDER_CONFIG, sslContextParameters.getProvider());
+        CipherSuitesParameters cipherSuites = sslContextParameters.getCipherSuites();
+        if (cipherSuites != null) {
+            addCommaSeparatedList(props, SslConfigs.SSL_CIPHER_SUITES_CONFIG, cipherSuites.getCipherSuite());
+        }
 
-            CipherSuitesParameters cipherSuites = sslContextParameters.getCipherSuites();
-            if (cipherSuites != null) {
-                addCommaSeparatedList(props, SslConfigs.SSL_CIPHER_SUITES_CONFIG, cipherSuites.getCipherSuite());
+        SecureSocketProtocolsParameters secureSocketProtocols = sslContextParameters.getSecureSocketProtocols();
+        if (secureSocketProtocols != null) {
+            addCommaSeparatedList(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG,
+                    secureSocketProtocols.getSecureSocketProtocol());
+        }
+
+        KeyManagersParameters keyManagers = sslContextParameters.getKeyManagers();
+        if (keyManagers != null) {
+            addPropertyIfNotNull(props, SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG, keyManagers.getAlgorithm());
+            addPropertyIfNotNull(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, keyManagers.getKeyPassword());
+
+            KeyStoreParameters keyStore = keyManagers.getKeyStore();
+            if (keyStore != null) {
+                addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, keyStore.getType());
+                addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, keyStore.getResource());
+                addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, keyStore.getPassword());
             }
+        }
 
-            SecureSocketProtocolsParameters secureSocketProtocols = sslContextParameters.getSecureSocketProtocols();
-            if (secureSocketProtocols != null) {
-                addCommaSeparatedList(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG,
-                        secureSocketProtocols.getSecureSocketProtocol());
-            }
+        TrustManagersParameters trustManagers = sslContextParameters.getTrustManagers();
+        if (trustManagers != null) {
+            addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, trustManagers.getAlgorithm());
 
-            KeyManagersParameters keyManagers = sslContextParameters.getKeyManagers();
-            if (keyManagers != null) {
-                addPropertyIfNotNull(props, SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG, keyManagers.getAlgorithm());
-                addPropertyIfNotNull(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, keyManagers.getKeyPassword());
-
-                KeyStoreParameters keyStore = keyManagers.getKeyStore();
-                if (keyStore != null) {
-                    addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, keyStore.getType());
-                    addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, keyStore.getResource());
-                    addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, keyStore.getPassword());
-                }
-            }
-
-            TrustManagersParameters trustManagers = sslContextParameters.getTrustManagers();
-            if (trustManagers != null) {
-                addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, trustManagers.getAlgorithm());
-
-                KeyStoreParameters keyStore = trustManagers.getKeyStore();
-                if (keyStore != null) {
-                    addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, keyStore.getType());
-                    addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, keyStore.getResource());
-                    addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, keyStore.getPassword());
-                }
+            KeyStoreParameters keyStore = trustManagers.getKeyStore();
+            if (keyStore != null) {
+                addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, keyStore.getType());
+                addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, keyStore.getResource());
+                addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, keyStore.getPassword());
             }
         }
     }
@@ -528,19 +580,24 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
         }
     }
 
-    private static <T> void addPropertyIfNotNull(Properties props, String key, T value) {
-        if (value != null) {
+    private static void addPropertyIfNotFalse(Properties props, String key, boolean value) {
+        if (value) {
+            // Kafka expects all properties as String
+            props.put(key, value);
+        }
+    }
+
+    private static <T> void addPropertyIfNotEmpty(Properties props, String key, T value) {
+        if (ObjectHelper.isNotEmpty(value)) {
             // Kafka expects all properties as String
             props.put(key, value.toString());
         }
     }
 
-    private static <T> void addListPropertyIfNotNull(Properties props, String key, T value) {
+    private static <T> void addPropertyIfNotNull(Properties props, String key, T value) {
         if (value != null) {
             // Kafka expects all properties as String
-            String[] values = value.toString().split(",");
-            List<String> list = Arrays.asList(values);
-            props.put(key, list);
+            props.put(key, value.toString());
         }
     }
 
@@ -575,6 +632,21 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
         this.groupId = groupId;
     }
 
+    public String getGroupInstanceId() {
+        return groupInstanceId;
+    }
+
+    /**
+     * A unique identifier of the consumer instance provided by the end user. Only non-empty strings are permitted. If
+     * set, the consumer is treated as a static member, which means that only one instance with this ID is allowed in
+     * the consumer group at any time. This can be used in combination with a larger session timeout to avoid group
+     * rebalances caused by transient unavailability (e.g. process restarts). If not set, the consumer will join the
+     * group as a dynamic member, which is the traditional behavior.
+     */
+    public void setGroupInstanceId(String groupInstanceId) {
+        this.groupInstanceId = groupInstanceId;
+    }
+
     public String getPartitioner() {
         return partitioner;
     }
@@ -599,23 +671,13 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
         this.topic = topic;
     }
 
-    public int getConsumerStreams() {
-        return consumerStreams;
-    }
-
-    /**
-     * Number of concurrent consumers on the consumer
-     */
-    public void setConsumerStreams(int consumerStreams) {
-        this.consumerStreams = consumerStreams;
-    }
-
     public int getConsumersCount() {
         return consumersCount;
     }
 
     /**
-     * The number of consumers that connect to kafka server
+     * The number of consumers that connect to kafka server. Each consumer is run on a separate thread, that retrieves
+     * and process the incoming data.
      */
     public void setConsumersCount(int consumersCount) {
         this.consumersCount = consumersCount;
@@ -637,7 +699,7 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
         return offsetRepository == null ? autoCommitEnable : false;
     }
 
-    public Boolean getAutoCommitEnable() {
+    public boolean getAutoCommitEnable() {
         return autoCommitEnable;
     }
 
@@ -645,7 +707,7 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
      * If true, periodically commit to ZooKeeper the offset of messages already fetched by the consumer. This committed
      * offset will be used when the process fails as the position from which the new consumer will begin.
      */
-    public void setAutoCommitEnable(Boolean autoCommitEnable) {
+    public void setAutoCommitEnable(boolean autoCommitEnable) {
         this.autoCommitEnable = autoCommitEnable;
     }
 
@@ -668,7 +730,7 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     }
 
     /**
-     * Timeout in milli seconds to wait gracefully for the consumer or producer to shutdown and terminate its worker
+     * Timeout in milliseconds to wait gracefully for the consumer or producer to shutdown and terminate its worker
      * threads.
      */
     public void setShutdownTimeout(int shutdownTimeout) {
@@ -748,19 +810,6 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
      */
     public void setAutoOffsetReset(String autoOffsetReset) {
         this.autoOffsetReset = autoOffsetReset;
-    }
-
-    public String getAutoCommitOnStop() {
-        return autoCommitOnStop;
-    }
-
-    /**
-     * Whether to perform an explicit auto commit when the consumer stops to ensure the broker has a commit from the
-     * last consumed message. This requires the option autoCommitEnable is turned on. The possible values are: sync,
-     * async, or none. And sync is the default value.
-     */
-    public void setAutoCommitOnStop(String autoCommitOnStop) {
-        this.autoCommitOnStop = autoCommitOnStop;
     }
 
     public boolean isBreakOnFirstError() {
@@ -865,6 +914,19 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
      */
     public void setRequestTimeoutMs(Integer requestTimeoutMs) {
         this.requestTimeoutMs = requestTimeoutMs;
+    }
+
+    public Integer getDeliveryTimeoutMs() {
+        return deliveryTimeoutMs;
+    }
+
+    /**
+     * An upper bound on the time to report success or failure after a call to send() returns. This limits the total
+     * time that a record will be delayed prior to sending, the time to await acknowledgement from the broker (if
+     * expected), and the time allowed for retriable send failures.
+     */
+    public void setDeliveryTimeoutMs(Integer deliveryTimeoutMs) {
+        this.deliveryTimeoutMs = deliveryTimeoutMs;
     }
 
     public Integer getQueueBufferingMaxMessages() {
@@ -981,7 +1043,8 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     }
 
     /**
-     * The endpoint identification algorithm to validate server hostname using server certificate.
+     * The endpoint identification algorithm to validate server hostname using server certificate. Use none or false to
+     * disable server hostname verification.
      */
     public void setSslEndpointAlgorithm(String sslEndpointAlgorithm) {
         this.sslEndpointAlgorithm = sslEndpointAlgorithm;
@@ -1101,8 +1164,8 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
      * Expose the kafka sasl.jaas.config parameter Example: org.apache.kafka.common.security.plain.PlainLoginModule
      * required username="USERNAME" password="PASSWORD";
      */
-    public void setSaslJaasConfig(String saslMechanism) {
-        this.saslJaasConfig = saslMechanism;
+    public void setSaslJaasConfig(String saslJaasConfig) {
+        this.saslJaasConfig = saslJaasConfig;
     }
 
     public String getSecurityProtocol() {
@@ -1559,15 +1622,15 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
         this.valueDeserializer = valueDeserializer;
     }
 
-    public String getSeekTo() {
+    public SeekPolicy getSeekTo() {
         return seekTo;
     }
 
     /**
-     * Set if KafkaConsumer will read from beginning or end on startup: beginning : read from beginning end : read from
-     * end This is replacing the earlier property seekToBeginning
+     * Set if KafkaConsumer will read from beginning or end on startup: SeekPolicy.BEGINNING: read from beginning.
+     * SeekPolicy.END: read from end.
      */
-    public void setSeekTo(String seekTo) {
+    public void setSeekTo(SeekPolicy seekTo) {
         this.seekTo = seekTo;
     }
 
@@ -1724,5 +1787,54 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
 
     public void setSynchronous(boolean synchronous) {
         this.synchronous = synchronous;
+    }
+
+    public PollOnError getPollOnError() {
+        return pollOnError;
+    }
+
+    /**
+     * What to do if kafka threw an exception while polling for new messages.
+     *
+     * Will by default use the value from the component configuration unless an explicit value has been configured on
+     * the endpoint level.
+     *
+     * DISCARD will discard the message and continue to poll next message. ERROR_HANDLER will use Camel's error handler
+     * to process the exception, and afterwards continue to poll next message. RECONNECT will re-connect the consumer
+     * and try poll the message again RETRY will let the consumer retry polling the same message again STOP will stop
+     * the consumer (have to be manually started/restarted if the consumer should be able to consume messages again)
+     */
+    public void setPollOnError(PollOnError pollOnError) {
+        this.pollOnError = pollOnError;
+    }
+
+    public Long getCommitTimeoutMs() {
+        return commitTimeoutMs;
+    }
+
+    /**
+     * The maximum time, in milliseconds, that the code will wait for a synchronous commit to complete
+     */
+    public void setCommitTimeoutMs(Long commitTimeoutMs) {
+        this.commitTimeoutMs = commitTimeoutMs;
+    }
+
+    public String getIsolationLevel() {
+        return isolationLevel;
+    }
+
+    /**
+     * Controls how to read messages written transactionally. If set to read_committed, consumer.poll() will only return
+     * transactional messages which have been committed. If set to read_uncommitted (the default), consumer.poll() will
+     * return all messages, even transactional messages which have been aborted. Non-transactional messages will be
+     * returned unconditionally in either mode. Messages will always be returned in offset order. Hence, in
+     * read_committed mode, consumer.poll() will only return messages up to the last stable offset (LSO), which is the
+     * one less than the offset of the first open transaction. In particular any messages appearing after messages
+     * belonging to ongoing transactions will be withheld until the relevant transaction has been completed. As a
+     * result, read_committed</code> consumers will not be able to read up to the high watermark when there are in
+     * flight transactions. Further, when in read_committed the seekToEnd method will return the LSO
+     */
+    public void setIsolationLevel(String isolationLevel) {
+        this.isolationLevel = isolationLevel;
     }
 }

@@ -17,9 +17,11 @@
 package org.apache.camel.component.milo.client;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.component.milo.client.internal.SubscriptionManager;
 import org.eclipse.milo.opcua.stack.core.Stack;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
@@ -27,6 +29,8 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.ExpandedNodeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.StatusCode;
 import org.eclipse.milo.opcua.stack.core.types.builtin.Variant;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
+import org.eclipse.milo.opcua.stack.core.types.enumerated.BrowseDirection;
+import org.eclipse.milo.opcua.stack.core.types.structured.BrowseResult;
 import org.eclipse.milo.opcua.stack.core.types.structured.CallMethodResult;
 
 import static java.util.Objects.requireNonNull;
@@ -51,7 +55,7 @@ public class MiloClientConnection implements AutoCloseable {
         return configuration;
     }
 
-    protected void init() throws Exception {
+    protected void init() {
         this.manager = new SubscriptionManager(this.configuration, Stack.sharedScheduledExecutor(), 10_000);
     }
 
@@ -71,7 +75,7 @@ public class MiloClientConnection implements AutoCloseable {
         try {
             init();
         } catch (final Exception e) {
-            throw new RuntimeException(e);
+            throw new RuntimeCamelException(e);
         }
         this.initialized = true;
     }
@@ -155,4 +159,12 @@ public class MiloClientConnection implements AutoCloseable {
         return new DataValue(new Variant(value), StatusCode.GOOD, null, null);
     }
 
+    public CompletableFuture<Map<ExpandedNodeId, BrowseResult>> browse(
+            final List<ExpandedNodeId> expandedNodeIds, final BrowseDirection direction, final int nodeClasses,
+            final int maxDepth, String filter, boolean includeSubTypes, int maxNodesPerRequest) {
+        checkInit();
+
+        return this.manager.browse(expandedNodeIds, direction, nodeClasses, maxDepth, filter, includeSubTypes,
+                maxNodesPerRequest);
+    }
 }

@@ -45,10 +45,10 @@ public class RestOpenApiReaderEnableVendorExtensionTest extends CamelTestSupport
     private Object dummy = new Object();
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 // enable vendor extensions
                 restConfiguration().apiVendorExtension(true);
 
@@ -84,7 +84,7 @@ public class RestOpenApiReaderEnableVendorExtensionTest extends CamelTestSupport
         config.setLicenseUrl("http://www.apache.org/licenses/LICENSE-2.0.html");
         RestOpenApiReader reader = new RestOpenApiReader();
 
-        OasDocument openApi = reader.read(context, context.getRestDefinitions(), null, config, context.getName(),
+        OasDocument openApi = reader.read(context, context.getRestDefinitions(), config, context.getName(),
                 new DefaultClassResolver());
         assertNotNull(openApi);
 
@@ -97,14 +97,12 @@ public class RestOpenApiReaderEnableVendorExtensionTest extends CamelTestSupport
         log.info(json);
 
         String camelId = context.getName();
-        String routeId = context.getRouteDefinitions().get(0).getId();
 
         assertTrue(json.contains("\"host\" : \"localhost:8080\""));
         assertTrue(json.contains("\"description\" : \"The user returned\""));
         assertTrue(json.contains("\"$ref\" : \"#/definitions/User\""));
         assertFalse(json.contains("\"enum\""));
         assertTrue(json.contains("\"x-camelContextId\" : \"" + camelId + "\""));
-        assertTrue(json.contains("\"x-routeId\" : \"" + routeId + "\""));
         context.stop();
     }
 
@@ -120,7 +118,7 @@ public class RestOpenApiReaderEnableVendorExtensionTest extends CamelTestSupport
         config.setLicenseUrl("http://www.apache.org/licenses/LICENSE-2.0.html");
         RestOpenApiReader reader = new RestOpenApiReader();
 
-        OasDocument openApi = reader.read(context, context.getRestDefinitions(), null, config, context.getName(),
+        OasDocument openApi = reader.read(context, context.getRestDefinitions(), config, context.getName(),
                 new DefaultClassResolver());
         assertNotNull(openApi);
 
@@ -133,14 +131,12 @@ public class RestOpenApiReaderEnableVendorExtensionTest extends CamelTestSupport
         log.info(json);
 
         String camelId = context.getName();
-        String routeId = context.getRouteDefinitions().get(0).getId();
 
         assertTrue(json.contains("\"url\" : \"http://localhost:8080/api\""));
         assertTrue(json.contains("\"description\" : \"The user returned\""));
         assertTrue(json.contains("\"$ref\" : \"#/components/schemas/User\""));
         assertFalse(json.contains("\"enum\""));
         assertTrue(json.contains("\"x-camelContextId\" : \"" + camelId + "\""));
-        assertTrue(json.contains("\"x-routeId\" : \"" + routeId + "\""));
         context.stop();
     }
 }

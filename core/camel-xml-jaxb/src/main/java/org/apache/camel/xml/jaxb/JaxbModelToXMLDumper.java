@@ -20,6 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +35,7 @@ import javax.xml.transform.TransformerException;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.DelegateEndpoint;
@@ -46,13 +49,18 @@ import org.apache.camel.model.RouteTemplateDefinition;
 import org.apache.camel.model.RouteTemplatesDefinition;
 import org.apache.camel.model.RoutesDefinition;
 import org.apache.camel.spi.ModelToXMLDumper;
+import org.apache.camel.spi.PropertiesComponent;
 import org.apache.camel.spi.annotations.JdkService;
+import org.apache.camel.support.ObjectHelper;
+import org.apache.camel.util.KeyValueHolder;
 import org.apache.camel.util.xml.XmlLineNumberParser;
 
 import static org.apache.camel.xml.jaxb.JaxbHelper.extractNamespaces;
+import static org.apache.camel.xml.jaxb.JaxbHelper.extractSourceLocations;
 import static org.apache.camel.xml.jaxb.JaxbHelper.getJAXBContext;
 import static org.apache.camel.xml.jaxb.JaxbHelper.modelToXml;
 import static org.apache.camel.xml.jaxb.JaxbHelper.newXmlConverter;
+import static org.apache.camel.xml.jaxb.JaxbHelper.resolveEndpointDslUris;
 
 /**
  * JAXB based {@link ModelToXMLDumper}.
@@ -64,6 +72,7 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
     public String dumpModelAsXml(CamelContext context, NamedNode definition) throws Exception {
         final JAXBContext jaxbContext = getJAXBContext(context);
         final Map<String, String> namespaces = new LinkedHashMap<>();
+        final Map<String, KeyValueHolder<Integer, String>> locations = new HashMap<>();
 
         // gather all namespaces from the routes or route which is stored on the
         // expression nodes
@@ -71,18 +80,34 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
             List<RouteTemplateDefinition> templates = ((RouteTemplatesDefinition) definition).getRouteTemplates();
             for (RouteTemplateDefinition route : templates) {
                 extractNamespaces(route.getRoute(), namespaces);
+                if (context.isDebugging()) {
+                    extractSourceLocations(route.getRoute(), locations);
+                }
+                resolveEndpointDslUris(route.getRoute());
             }
         } else if (definition instanceof RouteTemplateDefinition) {
             RouteTemplateDefinition template = (RouteTemplateDefinition) definition;
             extractNamespaces(template.getRoute(), namespaces);
+            if (context.isDebugging()) {
+                extractSourceLocations(template.getRoute(), locations);
+            }
+            resolveEndpointDslUris(template.getRoute());
         } else if (definition instanceof RoutesDefinition) {
             List<RouteDefinition> routes = ((RoutesDefinition) definition).getRoutes();
             for (RouteDefinition route : routes) {
                 extractNamespaces(route, namespaces);
+                if (context.isDebugging()) {
+                    extractSourceLocations(route, locations);
+                }
+                resolveEndpointDslUris(route);
             }
         } else if (definition instanceof RouteDefinition) {
             RouteDefinition route = (RouteDefinition) definition;
             extractNamespaces(route, namespaces);
+            if (context.isDebugging()) {
+                extractSourceLocations(route, locations);
+            }
+            resolveEndpointDslUris(route);
         }
 
         Marshaller marshaller = jaxbContext.createMarshaller();
@@ -100,18 +125,23 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
             throw new TypeConversionException(xml, Document.class, e);
         }
 
+        sanitizeXml(dom);
+        if (context.isDebugging()) {
+            enrichLocations(dom, locations);
+        }
+
         // Add additional namespaces to the document root element
         Element documentElement = dom.getDocumentElement();
-        for (String nsPrefix : namespaces.keySet()) {
+        for (Map.Entry<String, String> entry : namespaces.entrySet()) {
+            String nsPrefix = entry.getKey();
             String prefix = nsPrefix.equals("xmlns") ? nsPrefix : "xmlns:" + nsPrefix;
-            documentElement.setAttribute(prefix, namespaces.get(nsPrefix));
+            documentElement.setAttribute(prefix, entry.getValue());
         }
 
         // We invoke the type converter directly because we need to pass some
         // custom XML output options
         Properties outputProperties = new Properties();
-        outputProperties.put(OutputKeys.INDENT, "yes");
-        outputProperties.put(OutputKeys.STANDALONE, "yes");
+        outputProperties.put(OutputKeys.OMIT_XML_DECLARATION, "yes");
         outputProperties.put(OutputKeys.ENCODING, "UTF-8");
         try {
             return xmlConverter.toStringFromDocument(dom, outputProperties);
@@ -153,10 +183,30 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
                     }
 
                     if (resolvePlaceholders) {
+                        PropertiesComponent pc = context.getPropertiesComponent();
+                        Properties prop = new Properties();
+                        Iterator<?> it = null;
+                        if (definition instanceof RouteDefinition) {
+                            it = ObjectHelper.createIterator(definition);
+                        } else if (definition instanceof RoutesDefinition) {
+                            it = ObjectHelper.createIterator(((RoutesDefinition) definition).getRoutes());
+                        }
+                        while (it != null && it.hasNext()) {
+                            RouteDefinition routeDefinition = (RouteDefinition) it.next();
+                            // if the route definition was created via a route template then we need to prepare its parameters when the route is being created and started
+                            if (routeDefinition.isTemplate() != null && routeDefinition.isTemplate()
+                                    && routeDefinition.getTemplateParameters() != null) {
+                                prop.putAll(routeDefinition.getTemplateParameters());
+                            }
+                        }
+                        pc.setLocalProperties(prop);
                         try {
                             after = context.resolvePropertyPlaceholders(after);
                         } catch (Exception e) {
                             // ignore
+                        } finally {
+                            // clear local after the route is dumped
+                            pc.setLocalProperties(null);
                         }
                     }
 
@@ -183,6 +233,50 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
         }
 
         return xml;
+    }
+
+    private static void sanitizeXml(Node node) {
+        // we want to remove all customId="false" attributes as they are noisy
+        if (node.hasAttributes()) {
+            Node att = node.getAttributes().getNamedItem("customId");
+            if (att != null && "false".equals(att.getNodeValue())) {
+                node.getAttributes().removeNamedItem("customId");
+            }
+        }
+        if (node.hasChildNodes()) {
+            for (int i = 0; i < node.getChildNodes().getLength(); i++) {
+                Node child = node.getChildNodes().item(i);
+                sanitizeXml(child);
+            }
+        }
+    }
+
+    private static void enrichLocations(Node node, Map<String, KeyValueHolder<Integer, String>> locations) {
+        if (node instanceof Element) {
+            Element el = (Element) node;
+
+            // from should grab it from parent (route)
+            String id = el.getAttribute("id");
+            if ("from".equals(el.getNodeName())) {
+                Node parent = el.getParentNode();
+                if (parent instanceof Element) {
+                    id = ((Element) parent).getAttribute("id");
+                }
+            }
+            if (id != null) {
+                var loc = locations.get(id);
+                if (loc != null) {
+                    el.setAttribute("sourceLineNumber", loc.getKey().toString());
+                    el.setAttribute("sourceLocation", loc.getValue());
+                }
+            }
+        }
+        if (node.hasChildNodes()) {
+            for (int i = 0; i < node.getChildNodes().getLength(); i++) {
+                Node child = node.getChildNodes().item(i);
+                enrichLocations(child, locations);
+            }
+        }
     }
 
 }

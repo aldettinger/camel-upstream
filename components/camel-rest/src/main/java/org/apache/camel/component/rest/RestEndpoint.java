@@ -50,12 +50,13 @@ import static org.apache.camel.support.RestProducerFactoryHelper.setupComponent;
  * Expose REST services or call external REST services.
  */
 @UriEndpoint(firstVersion = "2.14.0", scheme = "rest", title = "REST", syntax = "rest:method:path:uriTemplate",
-             category = { Category.CORE, Category.REST }, lenientProperties = true)
+             category = { Category.CORE, Category.REST }, lenientProperties = true, headersClass = RestConstants.class)
 public class RestEndpoint extends DefaultEndpoint {
 
     public static final String[] DEFAULT_REST_CONSUMER_COMPONENTS
-            = new String[] { "coap", "netty-http", "jetty", "servlet", "spark-java", "undertow" };
-    public static final String[] DEFAULT_REST_PRODUCER_COMPONENTS = new String[] { "http", "netty-http", "undertow" };
+            = new String[] { "platform-http", "servlet", "jetty", "undertow", "netty-http", "coap" };
+    public static final String[] DEFAULT_REST_PRODUCER_COMPONENTS
+            = new String[] { "vertx-http", "http", "undertow", "netty-http" };
     public static final String DEFAULT_API_COMPONENT_NAME = "openapi";
     public static final String RESOURCE_PATH = "META-INF/services/org/apache/camel/rest/";
 
@@ -176,10 +177,10 @@ public class RestEndpoint extends DefaultEndpoint {
     }
 
     /**
-     * The Camel Rest component to use for (producer) the REST transport, such as http, undertow. If no component has
-     * been explicit configured, then Camel will lookup if there is a Camel component that integrates with the Rest DSL,
-     * or if a org.apache.camel.spi.RestProducerFactory is registered in the registry. If either one is found, then that
-     * is being used.
+     * The Camel Rest component to use for the producer REST transport, such as http, undertow. If no component has been
+     * explicitly configured, then Camel will lookup if there is a Camel component that integrates with the Rest DSL, or
+     * if a org.apache.camel.spi.RestProducerFactory is registered in the registry. If either one is found, then that is
+     * being used.
      */
     public void setProducerComponentName(String producerComponentName) {
         this.producerComponentName = producerComponentName;
@@ -190,10 +191,10 @@ public class RestEndpoint extends DefaultEndpoint {
     }
 
     /**
-     * The Camel Rest component to use for (consumer) the REST transport, such as jetty, servlet, undertow. If no
-     * component has been explicit configured, then Camel will lookup if there is a Camel component that integrates with
-     * the Rest DSL, or if a org.apache.camel.spi.RestConsumerFactory is registered in the registry. If either one is
-     * found, then that is being used.
+     * The Camel Rest component to use for the consumer REST transport, such as jetty, servlet, undertow. If no
+     * component has been explicitly configured, then Camel will lookup if there is a Camel component that integrates
+     * with the Rest DSL, or if a org.apache.camel.spi.RestConsumerFactory is registered in the registry. If either one
+     * is found, then that is being used.
      */
     public void setConsumerComponentName(String consumerComponentName) {
         this.consumerComponentName = consumerComponentName;

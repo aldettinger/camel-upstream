@@ -31,11 +31,22 @@ import org.apache.camel.spi.Metadata;
 @XmlRootElement(name = "description")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class DescriptionDefinition {
+
     @XmlAttribute
+    @Metadata(label = "advanced")
+    @Deprecated
     private String lang;
     @XmlValue
     private String text;
 
+    public DescriptionDefinition() {
+    }
+
+    public DescriptionDefinition(String text) {
+        this.text = text;
+    }
+
+    @Deprecated
     public String getLang() {
         return lang;
     }
@@ -43,6 +54,7 @@ public class DescriptionDefinition {
     /**
      * Language, such as en for english.
      */
+    @Deprecated
     public void setLang(String lang) {
         this.lang = lang;
     }

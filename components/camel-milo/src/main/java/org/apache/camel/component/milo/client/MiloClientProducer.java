@@ -23,14 +23,14 @@ import java.util.stream.Collectors;
 import org.apache.camel.AsyncCallback;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
+import org.apache.camel.component.milo.MiloConstants;
 import org.apache.camel.support.DefaultAsyncProducer;
 import org.eclipse.milo.opcua.stack.core.types.builtin.ExpandedNodeId;
 
 import static java.lang.Boolean.TRUE;
+import static org.apache.camel.component.milo.MiloConstants.HEADER_NODE_IDS;
 
 public class MiloClientProducer extends DefaultAsyncProducer {
-
-    private static final String HEADER_NODE_IDS = "CamelMiloNodeIds";
 
     private MiloClientConnection connection;
 
@@ -88,12 +88,13 @@ public class MiloClientProducer extends DefaultAsyncProducer {
             future = this.connection.call(this.nodeId, this.methodId, value);
         }
 
-        final Boolean await = msg.getHeader("await", this.defaultAwaitWrites, Boolean.class);
+        final Boolean await = msg.getHeader(MiloConstants.HEADER_AWAIT, this.defaultAwaitWrites, Boolean.class);
 
         if (TRUE.equals(await)) {
             future.whenComplete((v, ex) -> async.done(false));
             return false;
         } else {
+            async.done(true);
             return true;
         }
     }

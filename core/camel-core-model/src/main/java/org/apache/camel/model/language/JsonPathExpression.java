@@ -25,9 +25,9 @@ import javax.xml.bind.annotation.XmlTransient;
 import org.apache.camel.spi.Metadata;
 
 /**
- * Evaluate a JsonPath expression against a JSON message body.
+ * Evaluates a JSONPath expression against a JSON message body.
  */
-@Metadata(firstVersion = "2.13.0", label = "language,json", title = "JsonPath")
+@Metadata(firstVersion = "2.13.0", label = "language,json", title = "JSONPath")
 @XmlRootElement(name = "jsonpath")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class JsonPathExpression extends ExpressionDefinition {
@@ -40,18 +40,20 @@ public class JsonPathExpression extends ExpressionDefinition {
     @Metadata(defaultValue = "false", javaType = "java.lang.Boolean")
     private String suppressExceptions;
     @XmlAttribute
-    @Metadata(defaultValue = "true", javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", defaultValue = "true", javaType = "java.lang.Boolean")
     private String allowSimple;
     @XmlAttribute
-    @Metadata(defaultValue = "true", javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", defaultValue = "true", javaType = "java.lang.Boolean")
     private String allowEasyPredicate;
     @XmlAttribute
     @Metadata(defaultValue = "false", javaType = "java.lang.Boolean")
     private String writeAsString;
     @XmlAttribute
+    @Metadata(label = "advanced")
     private String headerName;
     @XmlAttribute
-    @Metadata(enums = "DEFAULT_PATH_LEAF_TO_NULL,ALWAYS_RETURN_LIST,AS_PATH_LIST,SUPPRESS_EXCEPTIONS,REQUIRE_PROPERTIES")
+    @Metadata(label = "advanced",
+              enums = "DEFAULT_PATH_LEAF_TO_NULL,ALWAYS_RETURN_LIST,AS_PATH_LIST,SUPPRESS_EXCEPTIONS,REQUIRE_PROPERTIES")
     private String option;
 
     public JsonPathExpression() {
@@ -92,7 +94,7 @@ public class JsonPathExpression extends ExpressionDefinition {
     }
 
     /**
-     * Whether to allow in inlined simple exceptions in the JsonPath expression
+     * Whether to allow in inlined Simple exceptions in the JSONPath expression
      */
     public void setAllowSimple(String allowSimple) {
         this.allowSimple = allowSimple;
@@ -143,7 +145,7 @@ public class JsonPathExpression extends ExpressionDefinition {
     }
 
     /**
-     * To configure additional options on json path. Multiple values can be separated by comma.
+     * To configure additional options on JSONPath. Multiple values can be separated by comma.
      */
     public void setOption(String option) {
         this.option = option;

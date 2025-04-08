@@ -20,11 +20,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.xml.bind.annotation.XmlElement;
+import javax.xml.bind.annotation.XmlTransient;
 import javax.xml.bind.annotation.XmlType;
 
 @XmlType
 public class PropertyDefinitions {
 
+    @XmlTransient
     private List<PropertyDefinition> properties = new ArrayList<>();
 
     @XmlElement(name = "property")

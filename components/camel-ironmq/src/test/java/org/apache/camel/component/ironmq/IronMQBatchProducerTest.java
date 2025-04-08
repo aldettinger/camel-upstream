@@ -18,6 +18,7 @@ package org.apache.camel.component.ironmq;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import io.iron.ironmq.Ids;
@@ -51,9 +52,11 @@ public class IronMQBatchProducerTest extends CamelTestSupport {
     }
 
     @Test
-    public void testProduceBatchWithIllegalPayload() throws Exception {
+    public void testProduceBatchWithIllegalPayload() {
+        final List<String> body = Arrays.asList("foo", "bar");
+
         assertThrows(CamelExecutionException.class,
-                () -> template.sendBody("direct:start", Arrays.asList("foo", "bar")));
+                () -> template.sendBody("direct:start", body));
     }
 
     @Override
@@ -71,7 +74,7 @@ public class IronMQBatchProducerTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
             public void configure() {

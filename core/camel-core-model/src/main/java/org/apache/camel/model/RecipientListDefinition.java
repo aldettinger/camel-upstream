@@ -17,7 +17,6 @@
 package org.apache.camel.model;
 
 import java.util.concurrent.ExecutorService;
-import java.util.function.Supplier;
 
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -33,60 +32,63 @@ import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.spi.Metadata;
 
 /**
- * Routes messages to a number of dynamically specified recipients (dynamic to)
+ * Route messages to a number of dynamically specified recipients
  */
-@Metadata(label = "eip,endpoint,routing")
+@Metadata(label = "eip,routing")
 @XmlRootElement(name = "recipientList")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> extends ExpressionNode
         implements ExecutorServiceAwareDefinition<RecipientListDefinition<Type>> {
+
     @XmlTransient
-    private AggregationStrategy aggregationStrategy;
+    private ExecutorService executorServiceBean;
     @XmlTransient
-    private ExecutorService executorService;
+    private AggregationStrategy aggregationStrategyBean;
+    @XmlTransient
+    private Processor onPrepareProcessor;
+
     @XmlAttribute
     @Metadata(defaultValue = ",")
     private String delimiter;
     @XmlAttribute
+    @Metadata(javaType = "org.apache.camel.AggregationStrategy")
+    private String aggregationStrategy;
+    @XmlAttribute
+    @Metadata(label = "advanced")
+    private String aggregationStrategyMethodName;
+    @XmlAttribute
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
+    private String aggregationStrategyMethodAllowNull;
+    @XmlAttribute
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
+    private String parallelAggregate;
+    @XmlAttribute
     @Metadata(javaType = "java.lang.Boolean")
     private String parallelProcessing;
-    @XmlAttribute
-    private String strategyRef;
-    @XmlAttribute
-    private String strategyMethodName;
-    @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
-    private String strategyMethodAllowNull;
-    @XmlAttribute
-    private String executorServiceRef;
-    @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
-    private String stopOnException;
-    @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
-    private String ignoreInvalidEndpoints;
-    @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
-    private String streaming;
     @XmlAttribute
     @Metadata(javaType = "java.time.Duration", defaultValue = "0")
     private String timeout;
     @XmlAttribute
-    private String onPrepareRef;
-    @XmlTransient
-    private Processor onPrepare;
+    @Metadata(label = "advanced", javaType = "java.util.concurrent.ExecutorService")
+    private String executorService;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
-    private String shareUnitOfWork;
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
+    private String stopOnException;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Integer")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
+    private String ignoreInvalidEndpoints;
+    @XmlAttribute
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
+    private String streaming;
+    @XmlAttribute
+    @Metadata(label = "advanced", javaType = "org.apache.camel.Processor")
+    private String onPrepare;
+    @XmlAttribute
+    @Metadata(label = "advanced", javaType = "java.lang.Integer")
     private String cacheSize;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
-    private String parallelAggregate;
-    @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
-    private String stopOnAggregateException;
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
+    private String shareUnitOfWork;
 
     public RecipientListDefinition() {
     }
@@ -148,22 +150,12 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
     }
 
     /**
-     * Sets the AggregationStrategy to be used to assemble the replies from the recipients, into a single outgoing
-     * message from the RecipientList. By default Camel will use the last reply as the outgoing message. You can also
-     * use a POJO as the AggregationStrategy
-     */
-    public RecipientListDefinition<Type> aggregationStrategy(Supplier<AggregationStrategy> aggregationStrategy) {
-        setAggregationStrategy(aggregationStrategy.get());
-        return this;
-    }
-
-    /**
      * Sets a reference to the AggregationStrategy to be used to assemble the replies from the recipients, into a single
      * outgoing message from the RecipientList. By default Camel will use the last reply as the outgoing message. You
      * can also use a POJO as the AggregationStrategy
      */
-    public RecipientListDefinition<Type> aggregationStrategyRef(String aggregationStrategyRef) {
-        setStrategyRef(aggregationStrategyRef);
+    public RecipientListDefinition<Type> aggregationStrategy(String aggregationStrategy) {
+        setAggregationStrategy(aggregationStrategy);
         return this;
     }
 
@@ -174,7 +166,7 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
      * @return            the builder
      */
     public RecipientListDefinition<Type> aggregationStrategyMethodName(String methodName) {
-        setStrategyMethodName(methodName);
+        setAggregationStrategyMethodName(methodName);
         return this;
     }
 
@@ -186,7 +178,7 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
      * @return the builder
      */
     public RecipientListDefinition<Type> aggregationStrategyMethodAllowNull() {
-        setStrategyMethodAllowNull(Boolean.toString(true));
+        setAggregationStrategyMethodAllowNull(Boolean.toString(true));
         return this;
     }
 
@@ -238,19 +230,6 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
     }
 
     /**
-     * If enabled, unwind exceptions occurring at aggregation time to the error handler when parallelProcessing is used.
-     * Currently, aggregation time exceptions do not stop the route processing when parallelProcessing is used. Enabling
-     * this option allows to work around this behavior. The default value is <code>false</code> for the sake of backward
-     * compatibility.
-     *
-     * @return the builder
-     */
-    public RecipientListDefinition<Type> stopOnAggregateException() {
-        setStopOnAggregateException(Boolean.toString(true));
-        return this;
-    }
-
-    /**
      * If enabled then Camel will process replies out-of-order, eg in the order they come back. If disabled, Camel will
      * process replies in the same order as defined by the recipient list.
      *
@@ -284,7 +263,7 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
      */
     @Override
     public RecipientListDefinition<Type> executorService(ExecutorService executorService) {
-        setExecutorService(executorService);
+        this.executorServiceBean = executorService;
         return this;
     }
 
@@ -293,8 +272,8 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
      * processing is automatic implied, and you do not have to enable that option as well.
      */
     @Override
-    public RecipientListDefinition<Type> executorServiceRef(String executorServiceRef) {
-        setExecutorServiceRef(executorServiceRef);
+    public RecipientListDefinition<Type> executorService(String executorService) {
+        setExecutorService(executorService);
         return this;
     }
 
@@ -306,7 +285,7 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
      * @return           the builder
      */
     public RecipientListDefinition<Type> onPrepare(Processor onPrepare) {
-        setOnPrepare(onPrepare);
+        setOnPrepareProcessor(onPrepare);
         return this;
     }
 
@@ -316,7 +295,7 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
      */
     public ProcessClause<RecipientListDefinition<Type>> onPrepare() {
         ProcessClause<RecipientListDefinition<Type>> clause = new ProcessClause<>(this);
-        setOnPrepare(clause);
+        setOnPrepareProcessor(clause);
         return clause;
     }
 
@@ -324,11 +303,11 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
      * Uses the {@link Processor} when preparing the {@link org.apache.camel.Exchange} to be send. This can be used to
      * deep-clone messages that should be send, or any custom logic needed before the exchange is send.
      *
-     * @param  onPrepareRef reference to the processor to lookup in the {@link org.apache.camel.spi.Registry}
-     * @return              the builder
+     * @param  ref reference to the processor to lookup in the {@link org.apache.camel.spi.Registry}
+     * @return     the builder
      */
-    public RecipientListDefinition<Type> onPrepareRef(String onPrepareRef) {
-        setOnPrepareRef(onPrepareRef);
+    public RecipientListDefinition<Type> onPrepare(String ref) {
+        setOnPrepare(ref);
         return this;
     }
 
@@ -363,16 +342,16 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
     /**
      * Sets the maximum size used by the {@link org.apache.camel.spi.ProducerCache} which is used to cache and reuse
      * producers when using this recipient list, when uris are reused.
-     *
+     * <p>
      * Beware that when using dynamic endpoints then it affects how well the cache can be utilized. If each dynamic
      * endpoint is unique then its best to turn of caching by setting this to -1, which allows Camel to not cache both
      * the producers and endpoints; they are regarded as prototype scoped and will be stopped and discarded after use.
      * This reduces memory usage as otherwise producers/endpoints are stored in memory in the caches.
-     *
+     * <p>
      * However if there are a high degree of dynamic endpoints that have been used before, then it can benefit to use
      * the cache to reuse both producers and endpoints and therefore the cache size can be set accordingly or rely on
      * the default size (1000).
-     *
+     * <p>
      * If there is a mix of unique and used before dynamic endpoints, then setting a reasonable cache size can help
      * reduce memory usage to avoid storing too many non frequent used producers.
      *
@@ -387,16 +366,16 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
     /**
      * Sets the maximum size used by the {@link org.apache.camel.spi.ProducerCache} which is used to cache and reuse
      * producers when using this recipient list, when uris are reused.
-     *
+     * <p>
      * Beware that when using dynamic endpoints then it affects how well the cache can be utilized. If each dynamic
      * endpoint is unique then its best to turn of caching by setting this to -1, which allows Camel to not cache both
      * the producers and endpoints; they are regarded as prototype scoped and will be stopped and discarded after use.
      * This reduces memory usage as otherwise producers/endpoints are stored in memory in the caches.
-     *
+     * <p>
      * However if there are a high degree of dynamic endpoints that have been used before, then it can benefit to use
      * the cache to reuse both producers and endpoints and therefore the cache size can be set accordingly or rely on
      * the default size (1000).
-     *
+     * <p>
      * If there is a mix of unique and used before dynamic endpoints, then setting a reasonable cache size can help
      * reduce memory usage to avoid storing too many non frequent used producers.
      *
@@ -410,6 +389,20 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
 
     // Properties
     // -------------------------------------------------------------------------
+
+    public AggregationStrategy getAggregationStrategyBean() {
+        return aggregationStrategyBean;
+    }
+
+    @Override
+    public ExecutorService getExecutorServiceBean() {
+        return executorServiceBean;
+    }
+
+    @Override
+    public String getExecutorServiceRef() {
+        return executorService;
+    }
 
     /**
      * Expression that returns which endpoints (url) to send the message to (the recipients). If the expression return
@@ -437,53 +430,6 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
         this.parallelProcessing = parallelProcessing;
     }
 
-    public String getStrategyRef() {
-        return strategyRef;
-    }
-
-    /**
-     * Sets a reference to the AggregationStrategy to be used to assemble the replies from the recipients, into a single
-     * outgoing message from the RecipientList. By default Camel will use the last reply as the outgoing message. You
-     * can also use a POJO as the AggregationStrategy
-     */
-    public void setStrategyRef(String strategyRef) {
-        this.strategyRef = strategyRef;
-    }
-
-    public String getStrategyMethodName() {
-        return strategyMethodName;
-    }
-
-    /**
-     * This option can be used to explicit declare the method name to use, when using POJOs as the AggregationStrategy.
-     */
-    public void setStrategyMethodName(String strategyMethodName) {
-        this.strategyMethodName = strategyMethodName;
-    }
-
-    public String getStrategyMethodAllowNull() {
-        return strategyMethodAllowNull;
-    }
-
-    /**
-     * If this option is false then the aggregate method is not used if there was no data to enrich. If this option is
-     * true then null values is used as the oldExchange (when no data to enrich), when using POJOs as the
-     * AggregationStrategy
-     */
-    public void setStrategyMethodAllowNull(String strategyMethodAllowNull) {
-        this.strategyMethodAllowNull = strategyMethodAllowNull;
-    }
-
-    @Override
-    public String getExecutorServiceRef() {
-        return executorServiceRef;
-    }
-
-    @Override
-    public void setExecutorServiceRef(String executorServiceRef) {
-        this.executorServiceRef = executorServiceRef;
-    }
-
     public String getIgnoreInvalidEndpoints() {
         return ignoreInvalidEndpoints;
     }
@@ -500,27 +446,32 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
         this.stopOnException = stopOnException;
     }
 
-    public AggregationStrategy getAggregationStrategy() {
+    public String getAggregationStrategy() {
         return aggregationStrategy;
     }
 
-    /**
-     * Sets the AggregationStrategy to be used to assemble the replies from the recipients, into a single outgoing
-     * message from the RecipientList. By default Camel will use the last reply as the outgoing message. You can also
-     * use a POJO as the AggregationStrategy
-     */
-    public void setAggregationStrategy(AggregationStrategy aggregationStrategy) {
+    public void setAggregationStrategy(String aggregationStrategy) {
         this.aggregationStrategy = aggregationStrategy;
     }
 
-    @Override
-    public ExecutorService getExecutorService() {
-        return executorService;
+    public void setAggregationStrategy(AggregationStrategy aggregationStrategy) {
+        this.aggregationStrategyBean = aggregationStrategy;
     }
 
-    @Override
-    public void setExecutorService(ExecutorService executorService) {
-        this.executorService = executorService;
+    public String getAggregationStrategyMethodName() {
+        return aggregationStrategyMethodName;
+    }
+
+    public void setAggregationStrategyMethodName(String aggregationStrategyMethodName) {
+        this.aggregationStrategyMethodName = aggregationStrategyMethodName;
+    }
+
+    public String getAggregationStrategyMethodAllowNull() {
+        return aggregationStrategyMethodAllowNull;
+    }
+
+    public void setAggregationStrategyMethodAllowNull(String aggregationStrategyMethodAllowNull) {
+        this.aggregationStrategyMethodAllowNull = aggregationStrategyMethodAllowNull;
     }
 
     public String getStreaming() {
@@ -539,20 +490,20 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
         this.timeout = timeout;
     }
 
-    public String getOnPrepareRef() {
-        return onPrepareRef;
-    }
-
-    public void setOnPrepareRef(String onPrepareRef) {
-        this.onPrepareRef = onPrepareRef;
-    }
-
-    public Processor getOnPrepare() {
+    public String getOnPrepare() {
         return onPrepare;
     }
 
-    public void setOnPrepare(Processor onPrepare) {
+    public void setOnPrepare(String onPrepare) {
         this.onPrepare = onPrepare;
+    }
+
+    public Processor getOnPrepareProcessor() {
+        return onPrepareProcessor;
+    }
+
+    public void setOnPrepareProcessor(Processor onPrepareProcessor) {
+        this.onPrepareProcessor = onPrepareProcessor;
     }
 
     public String getShareUnitOfWork() {
@@ -579,11 +530,11 @@ public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> ext
         this.parallelAggregate = parallelAggregate;
     }
 
-    public String getStopOnAggregateException() {
-        return stopOnAggregateException;
+    public String getExecutorService() {
+        return executorService;
     }
 
-    public void setStopOnAggregateException(String stopOnAggregateException) {
-        this.stopOnAggregateException = stopOnAggregateException;
+    public void setExecutorService(String executorService) {
+        this.executorService = executorService;
     }
 }

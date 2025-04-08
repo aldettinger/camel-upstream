@@ -1,12 +1,14 @@
-[[ahc-component]]
-= Async HTTP Client (AHC) Component
-:docTitle: Async HTTP Client (AHC)
-:artifactId: camel-ahc
+= Async HTTP Client (AHC) Component (deprecated)
+:doctitle: Async HTTP Client (AHC)
+:shortname: ahc
+:artifactid: camel-ahc
 :description: Call external HTTP services using Async Http Client.
 :since: 2.8
-:supportLevel: Stable
+:supportlevel: Stable-deprecated
+:deprecated: *deprecated*
 :component-header: Only producer is supported
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/components/ahc.adoc[opts=optional]
+//Manually maintained attributes
+:camel-spring-boot-name: ahc
 
 *Since Camel {since}*
 
@@ -34,7 +36,6 @@ for this component:
 
 == URI format
 
-[source,java]
 ---------------------------------------------------
 ahc:http://hostname[:port][/resourceUri][?options]
 ahc:https://hostname[:port][/resourceUri][?options]
@@ -45,132 +46,22 @@ Will by default use port 80 for HTTP and 443 for HTTPS.
 You can append query options to the URI in the following format,
 `?option=value&option=value&...`
 
-== Ahc Endpoint Options
+// component-configure options: START
 
-
-
-
-
-
-
-// endpoint options: START
-The Async HTTP Client (AHC) endpoint is configured using URI syntax:
-
-----
-ahc:httpUri
-----
-
-with the following path and query parameters:
-
-=== Path Parameters (1 parameters):
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *httpUri* | *Required* The URI to use such as \http://hostname:port/path |  | URI
-|===
-
-
-=== Query Parameters (13 parameters):
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *bridgeEndpoint* (producer) | If the option is true, then the Exchange.HTTP_URI header is ignored, and use the endpoint's URI for request. You may also set the throwExceptionOnFailure to be false to let the AhcProducer send all the fault response back. | false | boolean
-| *bufferSize* (producer) | The initial in-memory buffer size used when transferring data between Camel and AHC Client. | 4096 | int
-| *connectionClose* (producer) | Define if the Connection Close header has to be added to HTTP Request. This parameter is false by default | false | boolean
-| *cookieHandler* (producer) | Configure a cookie handler to maintain a HTTP session |  | CookieHandler
-| *headerFilterStrategy* (producer) | To use a custom HeaderFilterStrategy to filter header to and from Camel message. |  | HeaderFilterStrategy
-| *lazyStartProducer* (producer) | Whether the producer should be started lazy (on the first message). By starting lazy you can use this to allow CamelContext and routes to startup in situations where a producer may otherwise fail during starting and cause the route to fail being started. By deferring this startup to be lazy then the startup failure can be handled during routing messages via Camel's routing error handlers. Beware that when the first message is processed then creating and starting the producer may take a little time and prolong the total processing time of the processing. | false | boolean
-| *throwExceptionOnFailure* (producer) | Option to disable throwing the AhcOperationFailedException in case of failed responses from the remote server. This allows you to get all responses regardless of the HTTP status code. | true | boolean
-| *transferException* (producer) | If enabled and an Exchange failed processing on the consumer side, and if the caused Exception was send back serialized in the response as a application/x-java-serialized-object content type (for example using Jetty or Servlet Camel components). On the producer side the exception will be deserialized and thrown as is, instead of the AhcOperationFailedException. The caused exception is required to be serialized. This is by default turned off. If you enable this then be aware that Java will deserialize the incoming data from the request to Java and that can be a potential security risk. | false | boolean
-| *binding* (advanced) | To use a custom AhcBinding which allows to control how to bind between AHC and Camel. |  | AhcBinding
-| *clientConfig* (advanced) | To configure the AsyncHttpClient to use a custom com.ning.http.client.AsyncHttpClientConfig instance. |  | AsyncHttpClientConfig
-| *clientConfigOptions* (advanced) | To configure the AsyncHttpClientConfig using the key/values from the Map. |  | Map
-| *clientConfigRealmOptions* (security) | To configure the AsyncHttpClientConfig Realm using the key/values from the Map. |  | Map
-| *sslContextParameters* (security) | Reference to a org.apache.camel.support.jsse.SSLContextParameters in the Registry. This reference overrides any configured SSLContextParameters at the component level. See Using the JSSE Configuration Utility. Note that configuring this option will override any SSL/TLS configuration options provided through the clientConfig option at the endpoint or component level. |  | SSLContextParameters
-|===
-// endpoint options: END
-
-
-
-
-
-
-
-
-
-== AhcComponent Options
-
-
-
-
-
-
-
-
+// component-configure options: END
 
 // component options: START
-The Async HTTP Client (AHC) component supports 9 options, which are listed below.
-
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *lazyStartProducer* (producer) | Whether the producer should be started lazy (on the first message). By starting lazy you can use this to allow CamelContext and routes to startup in situations where a producer may otherwise fail during starting and cause the route to fail being started. By deferring this startup to be lazy then the startup failure can be handled during routing messages via Camel's routing error handlers. Beware that when the first message is processed then creating and starting the producer may take a little time and prolong the total processing time of the processing. | false | boolean
-| *allowJavaSerializedObject* (advanced) | Whether to allow java serialization when a request uses context-type=application/x-java-serialized-object This is by default turned off. If you enable this then be aware that Java will deserialize the incoming data from the request to Java and that can be a potential security risk. | false | boolean
-| *autowiredEnabled* (advanced) | Whether autowiring is enabled. This is used for automatic autowiring options (the option must be marked as autowired) by looking up in the registry to find if there is a single instance of matching type, which then gets configured on the component. This can be used for automatic configuring JDBC data sources, JMS connection factories, AWS Clients, etc. | true | boolean
-| *binding* (advanced) | To use a custom AhcBinding which allows to control how to bind between AHC and Camel. |  | AhcBinding
-| *client* (advanced) | To use a custom AsyncHttpClient |  | AsyncHttpClient
-| *clientConfig* (advanced) | To configure the AsyncHttpClient to use a custom com.ning.http.client.AsyncHttpClientConfig instance. |  | AsyncHttpClientConfig
-| *headerFilterStrategy* (filter) | To use a custom org.apache.camel.spi.HeaderFilterStrategy to filter header to and from Camel message. |  | HeaderFilterStrategy
-| *sslContextParameters* (security) | Reference to a org.apache.camel.support.jsse.SSLContextParameters in the Registry. Note that configuring this option will override any SSL/TLS configuration options provided through the clientConfig option at the endpoint or component level. |  | SSLContextParameters
-| *useGlobalSslContextParameters* (security) | Enable usage of global SSL context parameters. | false | boolean
-|===
+include::partial$component-configure-options.adoc[]
+include::partial$component-endpoint-options.adoc[]
 // component options: END
 
+// endpoint options: START
 
+// endpoint options: END
 
-
-
-
-
-
-
-Notice that setting any of the options on the `AhcComponent` will
-propagate those options to
-`AhcEndpoints` being created. However the `AhcEndpoint` can also
-configure/override a custom option. Options set on endpoints will always
-take precedence over options from the `AhcComponent`.
-
-== Message Headers
-
-[width="100%",cols="10%,10%,80%",options="header",]
-|=======================================================================
-|Name |Type |Description
-|`Exchange.HTTP_URI` |`String` |URI to call. Will override existing URI set directly on the endpoint.
-
-|`Exchange.HTTP_PATH` |`String` |Request URI's path, the header will be used to build the request URI
-with the HTTP_URI. If the path is start with "/", http producer will try
-to find the relative path based on the Exchange.HTTP_BASE_URI header or
-the `exchange.getFromEndpoint().getEndpointUri();`
-
-|`Exchange.HTTP_QUERY` |`String` |*Camel 2.11 onwards:* URI parameters. Will override existing URI
-parameters set directly on the endpoint.
-
-|`Exchange.HTTP_RESPONSE_CODE` |`int` |The HTTP response code from the external server. Is 200 for OK.
-
-|`Exchange.HTTP_CHARACTER_ENCODING` |`String` |Character encoding.
-
-|`Exchange.CONTENT_TYPE` |`String` |The HTTP content type. Is set on both the IN and OUT message to provide
-a content type, such as `text/html`.
-
-|`Exchange.CONTENT_ENCODING` |`String` |The HTTP content encoding. Is set on both the IN and OUT message to
-provide a content encoding, such as `gzip`.
-|=======================================================================
+// component headers: START
+include::partial$component-endpoint-headers.adoc[]
+// component headers: END
 
 == Message Body
 
@@ -439,4 +330,5 @@ Spring DSL based configuration of endpoint
 ...
 ----------------------------------------------------------------------------------
 
-include::camel-spring-boot::page$ahc-starter.adoc[]
+
+include::spring-boot:partial$starter.adoc[]

@@ -18,10 +18,8 @@ package org.apache.camel.component.couchdb;
 
 import java.net.URI;
 
-import com.google.gson.JsonObject;
 import org.apache.camel.Category;
 import org.apache.camel.Consumer;
-import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.spi.Metadata;
@@ -36,7 +34,7 @@ import org.lightcouch.CouchDbClient;
  * documents from a CouchDB database.
  */
 @UriEndpoint(firstVersion = "2.11.0", scheme = "couchdb", title = "CouchDB", syntax = "couchdb:protocol:hostname:port/database",
-             category = { Category.DATABASE, Category.NOSQL })
+             category = { Category.DATABASE, Category.NOSQL }, headersClass = CouchDbConstants.class)
 public class CouchDbEndpoint extends DefaultEndpoint {
 
     public static final String DEFAULT_STYLE = "main_only";
@@ -71,8 +69,6 @@ public class CouchDbEndpoint extends DefaultEndpoint {
     private boolean deletes = true;
     @UriParam(label = "consumer", defaultValue = "true")
     private boolean updates = true;
-    @UriParam(label = "consumer")
-    private String since;
 
     public CouchDbEndpoint() {
     }
@@ -110,17 +106,6 @@ public class CouchDbEndpoint extends DefaultEndpoint {
     @Override
     public Producer createProducer() throws Exception {
         return new CouchDbProducer(this, createClient());
-    }
-
-    public Exchange createExchange(String seq, String id, JsonObject obj, boolean deleted) {
-        Exchange exchange = super.createExchange();
-        exchange.getIn().setHeader(CouchDbConstants.HEADER_DATABASE, database);
-        exchange.getIn().setHeader(CouchDbConstants.HEADER_SEQ, seq);
-        exchange.getIn().setHeader(CouchDbConstants.HEADER_DOC_ID, id);
-        exchange.getIn().setHeader(CouchDbConstants.HEADER_DOC_REV, obj.get("_rev").getAsString());
-        exchange.getIn().setHeader(CouchDbConstants.HEADER_METHOD, deleted ? "DELETE" : "UPDATE");
-        exchange.getIn().setBody(obj);
-        return exchange;
     }
 
     protected CouchDbClientWrapper createClient() {
@@ -249,17 +234,5 @@ public class CouchDbEndpoint extends DefaultEndpoint {
      */
     public void setUpdates(boolean updates) {
         this.updates = updates;
-    }
-
-    public String getSince() {
-        return since;
-    }
-
-    /**
-     * Start tracking changes immediately after the given update sequence. The default, null, will start monitoring from
-     * the latest sequence.
-     */
-    public void setSince(String since) {
-        this.since = since;
     }
 }

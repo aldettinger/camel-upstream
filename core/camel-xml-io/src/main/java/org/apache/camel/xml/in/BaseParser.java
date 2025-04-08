@@ -31,20 +31,29 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 
+import org.apache.camel.LineNumberAware;
 import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.spi.NamespaceAware;
+import org.apache.camel.spi.Resource;
 import org.apache.camel.xml.io.MXParser;
 import org.apache.camel.xml.io.XmlPullParser;
 import org.apache.camel.xml.io.XmlPullParserException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class BaseParser {
 
-    private static final Logger LOG = LoggerFactory.getLogger(BaseParser.class);
-
     protected final MXParser parser;
     protected String namespace;
+    protected Resource resource;
+
+    public BaseParser(Resource resource) throws IOException, XmlPullParserException {
+        this(resource.getInputStream(), null);
+        this.resource = resource;
+    }
+
+    public BaseParser(Resource resource, String namespace) throws IOException, XmlPullParserException {
+        this(resource.getInputStream(), namespace);
+        this.resource = resource;
+    }
 
     public BaseParser(InputStream input) throws IOException, XmlPullParserException {
         this(input, null);
@@ -71,6 +80,17 @@ public class BaseParser {
     protected <T> T doParse(
             T definition, AttributeHandler<T> attributeHandler, ElementHandler<T> elementHandler, ValueHandler<T> valueHandler)
             throws IOException, XmlPullParserException {
+        if (definition instanceof LineNumberAware) {
+            // we want to get the line number where the tag starts (in case its multi-line)
+            int line = parser.getStartLineNumber();
+            if (line == -1) {
+                line = parser.getLineNumber();
+            }
+            ((LineNumberAware) definition).setLineNumber(line);
+            if (resource != null) {
+                ((LineNumberAware) definition).setLocation(resource.getLocation());
+            }
+        }
         if (definition instanceof NamespaceAware) {
             final Map<String, String> namespaces = new LinkedHashMap<>();
             for (int i = 0; i < parser.getNamespaceCount(parser.getDepth()); i++) {
@@ -216,6 +236,20 @@ public class BaseParser {
         }
 
         return true;
+    }
+
+    protected String getNextTag(String name, String name2) throws XmlPullParserException, IOException {
+        if (parser.nextTag() != XmlPullParser.START_TAG) {
+            throw new XmlPullParserException("Expected starting tag");
+        }
+
+        String pn = parser.getName();
+        boolean match = Objects.equals(name, pn) || Objects.equals(name2, pn);
+        if (!match || !Objects.equals(namespace, parser.getNamespace())) {
+            return ""; // empty tag
+        }
+
+        return pn;
     }
 
     @SuppressWarnings("unchecked")

@@ -17,16 +17,16 @@
 package org.apache.camel.component.activemq;
 
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.test.junit5.CamelTestSupport;
+import org.apache.camel.component.activemq.support.ActiveMQTestSupport;
 import org.junit.jupiter.api.Test;
 
 import static org.apache.camel.component.activemq.ActiveMQComponent.activeMQComponent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class ActiveMQToDSendDynamicTwoTest extends CamelTestSupport {
+public class ActiveMQToDSendDynamicTwoTest extends ActiveMQTestSupport {
 
     @Test
-    public void testToD() throws Exception {
+    public void testToD() {
         template.sendBodyAndHeader("direct:start", "Hello bar", "where", "bar");
         template.sendBodyAndHeader("direct:start", "Hello beer", "where", "beer");
         template.sendBodyAndHeader("direct:start", "Hello gin", "where", "gin");
@@ -40,11 +40,11 @@ public class ActiveMQToDSendDynamicTwoTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
-                context.addComponent("activemq", activeMQComponent("vm://localhost?broker.persistent=false"));
+            public void configure() {
+                context.addComponent("activemq", activeMQComponent(vmUri("?broker.persistent=false")));
 
                 // route message dynamic using toD
                 from("direct:start").toD("activemq:queue:${header.where}");

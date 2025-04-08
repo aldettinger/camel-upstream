@@ -29,7 +29,7 @@ import org.apache.camel.spi.Metadata;
 /**
  * Resilience4j Circuit Breaker EIP configuration
  */
-@Metadata(label = "eip,routing,circuitbreaker")
+@Metadata(label = "configuration,eip")
 @XmlRootElement(name = "resilience4jConfiguration")
 @XmlAccessorType(XmlAccessType.FIELD)
 @Configurer(extended = true)
@@ -52,8 +52,8 @@ public class Resilience4jConfigurationDefinition extends Resilience4jConfigurati
      * Refers to an existing io.github.resilience4j.circuitbreaker.CircuitBreaker instance to lookup and use from the
      * registry. When using this, then any other circuit breaker options are not in use.
      */
-    public Resilience4jConfigurationDefinition circuitBreakerRef(String circuitBreakerRef) {
-        setCircuitBreakerRef(circuitBreakerRef);
+    public Resilience4jConfigurationDefinition circuitBreaker(String circuitBreaker) {
+        setCircuitBreaker(circuitBreaker);
         return this;
     }
 
@@ -61,8 +61,8 @@ public class Resilience4jConfigurationDefinition extends Resilience4jConfigurati
      * Refers to an existing io.github.resilience4j.circuitbreaker.CircuitBreakerConfig instance to lookup and use from
      * the registry.
      */
-    public Resilience4jConfigurationDefinition configRef(String ref) {
-        setConfigRef(ref);
+    public Resilience4jConfigurationDefinition config(String ref) {
+        setConfig(ref);
         return this;
     }
 
@@ -198,7 +198,7 @@ public class Resilience4jConfigurationDefinition extends Resilience4jConfigurati
      * Configures the max amount of concurrent calls the bulkhead will support.
      */
     public Resilience4jConfigurationDefinition bulkheadMaxConcurrentCalls(int bulkheadMaxConcurrentCalls) {
-        setBulkheadMaxWaitDuration(Integer.toString(bulkheadMaxConcurrentCalls));
+        setBulkheadMaxConcurrentCalls(Integer.toString(bulkheadMaxConcurrentCalls));
         return this;
     }
 
@@ -228,8 +228,8 @@ public class Resilience4jConfigurationDefinition extends Resilience4jConfigurati
      * References to a custom thread pool to use when timeout is enabled (uses {@link ForkJoinPool#commonPool()} by
      * default)
      */
-    public Resilience4jConfigurationDefinition timeoutExecutorServiceRef(String executorServiceRef) {
-        setTimeoutExecutorServiceRef(executorServiceRef);
+    public Resilience4jConfigurationDefinition timeoutExecutorService(String executorService) {
+        setTimeoutExecutorService(executorService);
         return this;
     }
 

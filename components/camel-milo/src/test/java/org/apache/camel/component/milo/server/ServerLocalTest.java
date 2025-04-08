@@ -16,18 +16,21 @@
  */
 package org.apache.camel.component.milo.server;
 
-import java.io.IOException;
-
 import org.apache.camel.EndpointInject;
 import org.apache.camel.RoutesBuilder;
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.component.milo.converter.ConverterTest;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.test.AvailablePortFinder;
 import org.apache.camel.test.junit5.CamelTestSupport;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
 import org.eclipse.milo.opcua.stack.core.types.builtin.Variant;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Unit tests for milo server component without using an actual connection
@@ -38,20 +41,26 @@ public class ServerLocalTest extends CamelTestSupport {
 
     private static final String MOCK_TEST = "mock:test";
 
+    private static final Logger LOG = LoggerFactory.getLogger(ConverterTest.class);
+
     @EndpointInject(MOCK_TEST)
     protected MockEndpoint testEndpoint;
 
     @BeforeEach
-    public void pickFreePort() throws IOException {
+    public void pickFreePort(TestInfo testInfo) {
+        final var displayName = testInfo.getDisplayName();
+        LOG.info("********************************************************************************");
+        LOG.info(displayName);
+        LOG.info("********************************************************************************");
         final MiloServerComponent component = context().getComponent("milo-server", MiloServerComponent.class);
         component.setPort(AvailablePortFinder.getNextAvailable());
     }
 
     @Override
-    protected RoutesBuilder createRouteBuilder() throws Exception {
+    protected RoutesBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from(MILO_ITEM_1).to(MOCK_TEST);
             }
         };
@@ -63,31 +72,31 @@ public class ServerLocalTest extends CamelTestSupport {
 
     @Test
     public void testAcceptVariantString() {
-        sendBody(MILO_ITEM_1, new Variant("Foo"));
+        Assertions.assertDoesNotThrow(() -> sendBody(MILO_ITEM_1, new Variant("Foo")));
     }
 
     @Test
     public void testAcceptVariantDouble() {
-        sendBody(MILO_ITEM_1, new Variant(0.0));
+        Assertions.assertDoesNotThrow(() -> sendBody(MILO_ITEM_1, new Variant(0.0)));
     }
 
     @Test
     public void testAcceptString() {
-        sendBody(MILO_ITEM_1, "Foo");
+        Assertions.assertDoesNotThrow(() -> sendBody(MILO_ITEM_1, "Foo"));
     }
 
     @Test
     public void testAcceptDouble() {
-        sendBody(MILO_ITEM_1, 0.0);
+        Assertions.assertDoesNotThrow(() -> sendBody(MILO_ITEM_1, 0.0));
     }
 
     @Test
     public void testAcceptDataValueString() {
-        sendBody(MILO_ITEM_1, new DataValue(new Variant("Foo")));
+        Assertions.assertDoesNotThrow(() -> sendBody(MILO_ITEM_1, new DataValue(new Variant("Foo"))));
     }
 
     @Test
     public void testAcceptDataValueDouble() {
-        sendBody(MILO_ITEM_1, new DataValue(new Variant(0.0)));
+        Assertions.assertDoesNotThrow(() -> sendBody(MILO_ITEM_1, new DataValue(new Variant(0.0))));
     }
 }

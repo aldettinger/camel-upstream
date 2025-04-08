@@ -26,7 +26,7 @@ import org.apache.camel.spi.Metadata;
 /**
  * Rest security definition
  */
-@Metadata(label = "rest,security", title = "Security")
+@Metadata(label = "rest,security,configuration", title = "Rest Security")
 @XmlRootElement(name = "security")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class SecurityDefinition {
@@ -34,7 +34,6 @@ public class SecurityDefinition {
     @XmlAttribute(required = true)
     @Metadata(required = true)
     private String key;
-
     @XmlAttribute
     private String scopes;
 

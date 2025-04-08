@@ -56,7 +56,7 @@ public class ManagedMessageHistoryTest extends CamelTestSupport {
         return context.getManagementStrategy().getManagementAgent().getMBeanServer();
     }
 
-    public void addRegistry() throws Exception {
+    public void addRegistry() {
         meterRegistry = new CompositeMeterRegistry();
         meterRegistry.add(new SimpleMeterRegistry());
         meterRegistry.add(new JmxMeterRegistry(CamelJmxConfig.DEFAULT, Clock.SYSTEM, HierarchicalNameMapper.DEFAULT));
@@ -97,7 +97,8 @@ public class ManagedMessageHistoryTest extends CamelTestSupport {
 
         // there should be 3 mbeans
         Set<ObjectName> set
-                = getMBeanServer().queryNames(new ObjectName("org.apache.camel.micrometer:name=CamelMessageHistory.*"), null);
+                = getMBeanServer().queryNames(new ObjectName("org.apache.camel.micrometer:type=timers,name=*"), null);
+        System.out.println(set);
         assertEquals(3, set.size());
 
         ObjectName fooMBean = set.stream().filter(on -> on.getCanonicalName().contains("foo")).findFirst()

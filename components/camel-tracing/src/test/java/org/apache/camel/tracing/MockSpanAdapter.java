@@ -24,7 +24,9 @@ import java.util.Map;
 public class MockSpanAdapter implements SpanAdapter {
 
     private List<LogEntry> logEntries = new ArrayList<>();
-    private HashMap<String, Object> tags = new HashMap<>();
+    private Map<String, Object> tags = new HashMap<>();
+    private String traceId;
+    private String spanId;
 
     static long nowMicros() {
         return System.currentTimeMillis() * 1000;
@@ -34,7 +36,7 @@ public class MockSpanAdapter implements SpanAdapter {
         return new MockSpanAdapter().setOperation(operation);
     }
 
-    public HashMap<String, Object> tags() {
+    public Map<String, Object> tags() {
         return tags;
     }
 
@@ -73,9 +75,27 @@ public class MockSpanAdapter implements SpanAdapter {
         this.tags.put(key, value);
     }
 
+    public void setTraceId(String traceId) {
+        this.traceId = traceId;
+    }
+
+    public void setSpanId(String spanId) {
+        this.spanId = spanId;
+    }
+
     @Override
     public void log(Map<String, String> fields) {
         this.logEntries.add(new LogEntry(nowMicros(), fields));
+    }
+
+    @Override
+    public String traceId() {
+        return this.traceId;
+    }
+
+    @Override
+    public String spanId() {
+        return this.spanId;
     }
 
     public List<LogEntry> logEntries() {

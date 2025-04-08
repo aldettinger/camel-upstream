@@ -31,7 +31,7 @@ public class JmsMultipleConsumersTest extends CamelTestSupport {
     public void testMultipleConsumersTopic() throws Exception {
         context.addRoutes(new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("jms:topic:foo").to("mock:foo");
 
                 from("direct:start").to("mock:result");
@@ -40,9 +40,6 @@ public class JmsMultipleConsumersTest extends CamelTestSupport {
             }
         });
         context.start();
-
-        // give it a bit time to setup both topic listeners
-        Thread.sleep(2000);
 
         getMockEndpoint("mock:foo").expectedMessageCount(1);
         getMockEndpoint("mock:bar").expectedMessageCount(1);
@@ -57,7 +54,7 @@ public class JmsMultipleConsumersTest extends CamelTestSupport {
     public void testMultipleConsumersQueue() throws Exception {
         context.addRoutes(new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("jms:queue:foo").to("mock:result");
 
                 from("direct:start").to("mock:result");

@@ -19,27 +19,29 @@ public class AtmosEndpointUriFactory extends org.apache.camel.support.component.
 
     private static final Set<String> PROPERTY_NAMES;
     private static final Set<String> SECRET_PROPERTY_NAMES;
+    private static final Set<String> MULTI_VALUE_PREFIXES;
     static {
         Set<String> props = new HashSet<>(14);
+        props.add("bridgeErrorHandler");
+        props.add("exceptionHandler");
+        props.add("exchangePattern");
+        props.add("fullTokenId");
+        props.add("lazyStartProducer");
+        props.add("localPath");
+        props.add("name");
+        props.add("newRemotePath");
+        props.add("operation");
+        props.add("query");
         props.add("remotePath");
         props.add("secretKey");
-        props.add("query");
-        props.add("exchangePattern");
-        props.add("uri");
-        props.add("lazyStartProducer");
-        props.add("bridgeErrorHandler");
-        props.add("fullTokenId");
-        props.add("name");
-        props.add("localPath");
-        props.add("newRemotePath");
         props.add("sslValidation");
-        props.add("operation");
-        props.add("exceptionHandler");
+        props.add("uri");
         PROPERTY_NAMES = Collections.unmodifiableSet(props);
         Set<String> secretProps = new HashSet<>(2);
         secretProps.add("fullTokenId");
         secretProps.add("secretKey");
         SECRET_PROPERTY_NAMES = Collections.unmodifiableSet(secretProps);
+        MULTI_VALUE_PREFIXES = Collections.emptySet();
     }
 
     @Override
@@ -68,6 +70,11 @@ public class AtmosEndpointUriFactory extends org.apache.camel.support.component.
     @Override
     public Set<String> secretPropertyNames() {
         return SECRET_PROPERTY_NAMES;
+    }
+
+    @Override
+    public Set<String> multiValuePrefixes() {
+        return MULTI_VALUE_PREFIXES;
     }
 
     @Override

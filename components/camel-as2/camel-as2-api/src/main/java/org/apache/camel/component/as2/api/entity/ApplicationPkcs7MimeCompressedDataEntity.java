@@ -19,8 +19,8 @@ package org.apache.camel.component.as2.api.entity;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
-import org.apache.camel.component.as2.api.AS2Charset;
 import org.apache.camel.component.as2.api.AS2Header;
 import org.apache.camel.component.as2.api.CanonicalOutputStream;
 import org.apache.camel.component.as2.api.util.EntityUtils;
@@ -32,6 +32,7 @@ import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.Args;
 import org.bouncycastle.cms.CMSCompressedData;
 import org.bouncycastle.cms.CMSCompressedDataGenerator;
+import org.bouncycastle.cms.CMSException;
 import org.bouncycastle.cms.CMSProcessableByteArray;
 import org.bouncycastle.cms.CMSTypedData;
 import org.bouncycastle.operator.InputExpanderProvider;
@@ -78,7 +79,7 @@ public class ApplicationPkcs7MimeCompressedDataEntity extends MimeEntity {
 
         // Write out mime part headers if this is not the main body of message.
         if (!isMainBody()) {
-            try (CanonicalOutputStream canonicalOutstream = new CanonicalOutputStream(ncos, AS2Charset.US_ASCII)) {
+            try (CanonicalOutputStream canonicalOutstream = new CanonicalOutputStream(ncos, StandardCharsets.US_ASCII.name())) {
 
                 HeaderIterator it = headerIterator();
                 while (it.hasNext()) {
@@ -107,7 +108,7 @@ public class ApplicationPkcs7MimeCompressedDataEntity extends MimeEntity {
 
     private byte[] createCompressedData(
             MimeEntity entity2Encrypt, CMSCompressedDataGenerator compressedDataGenerator, OutputCompressor compressor)
-            throws Exception {
+            throws IOException, CMSException {
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
             entity2Encrypt.writeTo(bos);
             bos.flush();
@@ -115,8 +116,6 @@ public class ApplicationPkcs7MimeCompressedDataEntity extends MimeEntity {
             CMSTypedData contentData = new CMSProcessableByteArray(bos.toByteArray());
             CMSCompressedData compressedData = compressedDataGenerator.generate(contentData, compressor);
             return compressedData.getEncoded();
-        } catch (Exception e) {
-            throw new Exception("", e);
         }
     }
 

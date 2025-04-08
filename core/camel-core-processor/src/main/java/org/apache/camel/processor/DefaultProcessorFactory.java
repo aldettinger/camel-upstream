@@ -18,12 +18,14 @@ package org.apache.camel.processor;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.ExchangePattern;
 import org.apache.camel.Expression;
 import org.apache.camel.ExtendedCamelContext;
+import org.apache.camel.LineNumberAware;
 import org.apache.camel.NamedNode;
 import org.apache.camel.NoFactoryAvailableException;
 import org.apache.camel.Processor;
@@ -42,8 +44,6 @@ import org.apache.camel.spi.annotations.JdkService;
  * name of the {@link ProcessorFactory} the Camel component implement, which gets called for creating the
  * {@link Processor}s for the EIP.
  * <p/>
- * The Hystrix EIP is such an example where the circuit breaker EIP (CircuitBreakerDefinition) is implemented in the
- * <tt>camel-hystrix</tt> component.
  */
 @JdkService(ProcessorFactory.FACTORY)
 public class DefaultProcessorFactory implements ProcessorFactory, BootstrapCloseable {
@@ -71,7 +71,9 @@ public class DefaultProcessorFactory implements ProcessorFactory, BootstrapClose
             Object object = finder.newInstance(name).orElse(null);
             if (object instanceof ProcessorFactory) {
                 ProcessorFactory pc = (ProcessorFactory) object;
-                return pc.createChildProcessor(route, definition, mandatory);
+                Processor processor = pc.createChildProcessor(route, definition, mandatory);
+                LineNumberAware.trySetLineNumberAware(processor, definition);
+                return processor;
             }
         } catch (NoFactoryAvailableException e) {
             // ignore there is no custom factory
@@ -89,9 +91,10 @@ public class DefaultProcessorFactory implements ProcessorFactory, BootstrapClose
         }
         ProcessorFactory pc = finder.newInstance(name, ProcessorFactory.class).orElse(null);
         if (pc != null) {
-            return pc.createProcessor(route, definition);
+            Processor processor = pc.createProcessor(route, definition);
+            LineNumberAware.trySetLineNumberAware(processor, definition);
+            return processor;
         }
-
         return null;
     }
 
@@ -116,6 +119,9 @@ public class DefaultProcessorFactory implements ProcessorFactory, BootstrapClose
             return new MulticastProcessor(
                     camelContext, null, processors, null, true, executor, shutdownExecutorService, false, false, 0,
                     null, false, false);
+        } else if ("Pipeline".equals(definitionName)) {
+            List<Processor> processors = (List<Processor>) args[0];
+            return Pipeline.newInstance(camelContext, processors);
         }
 
         return null;

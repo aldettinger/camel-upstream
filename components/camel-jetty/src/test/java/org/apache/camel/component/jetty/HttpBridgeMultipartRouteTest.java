@@ -37,9 +37,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class HttpBridgeMultipartRouteTest extends BaseJettyTest {
 
-    private int port1;
-    private int port2;
-
     private static class MultipartHeaderFilterStrategy extends DefaultHeaderFilterStrategy {
         MultipartHeaderFilterStrategy() {
             initialize();
@@ -74,16 +71,13 @@ public class HttpBridgeMultipartRouteTest extends BaseJettyTest {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             public void configure() {
-                port1 = getPort();
-                port2 = getNextPort();
-
                 errorHandler(noErrorHandler());
 
                 Processor serviceProc = new Processor() {
-                    public void process(Exchange exchange) throws Exception {
+                    public void process(Exchange exchange) {
                         AttachmentMessage in = exchange.getIn(AttachmentMessage.class);
                         // put the number of attachments in a response header
                         exchange.getMessage().setHeader("numAttachments", in.getAttachments().size());

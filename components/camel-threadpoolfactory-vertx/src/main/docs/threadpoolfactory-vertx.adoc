@@ -1,11 +1,10 @@
-[[threadpoolfactory-vertx-other]]
 = ThreadPoolFactory Vert.x Component
-:docTitle: ThreadPoolFactory Vert.x
-:artifactId: camel-threadpoolfactory-vertx
+:doctitle: ThreadPoolFactory Vert.x
+:shortname: threadpoolfactory-vertx
+:artifactid: camel-threadpoolfactory-vertx
 :description: ThreadPoolFactory for camel-core using Vert.x
 :since: 3.5
-:supportLevel: Preview
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/others/threadpoolfactory-vertx.adoc[opts=optional]
+:supportlevel: Preview
 
 *Since Camel {since}*
 
@@ -43,7 +42,7 @@ context.getExecutorServiceManager().registerThreadPoolProfile(
 
 from("direct:start")
     .to("log:foo")
-    .split(body()).executorServiceRef("myLowPool")
+    .split(body()).executorService("myLowPool")
         .to("mock:split")
     .end()
     .to("mock:result");

@@ -166,7 +166,7 @@ public class JMXConsumer extends DefaultConsumer implements NotificationListener
     /**
      * Schedules execution of the doStart() operation to occur again after the reconnect delay
      */
-    protected void scheduleDelayedStart() throws Exception {
+    protected void scheduleDelayedStart() {
         Runnable startRunnable = new Runnable() {
             @Override
             public void run() {
@@ -308,8 +308,8 @@ public class JMXConsumer extends DefaultConsumer implements NotificationListener
     }
 
     /**
-     * Processes the Notification received. The handback will be set as the header "jmx.handback" while the Notification
-     * will be set as the body.
+     * Processes the Notification received. The handback will be set as the header {@link JMXConstants#JMX_HANDBACK}
+     * while the Notification will be set as the body.
      * <p/>
      * If the format is set to "xml" then the Notification will be converted to XML first using
      * {@link NotificationXmlFormatter}
@@ -319,9 +319,9 @@ public class JMXConsumer extends DefaultConsumer implements NotificationListener
     @Override
     public void handleNotification(Notification aNotification, Object aHandback) {
         JMXEndpoint ep = getEndpoint();
-        Exchange exchange = getEndpoint().createExchange();
+        Exchange exchange = createExchange(true);
         Message message = exchange.getIn();
-        message.setHeader("jmx.handback", aHandback);
+        message.setHeader(JMXConstants.JMX_HANDBACK, aHandback);
         try {
             if (ep.isXML()) {
                 message.setBody(getFormatter().format(aNotification));
@@ -329,7 +329,7 @@ public class JMXConsumer extends DefaultConsumer implements NotificationListener
                 message.setBody(aNotification);
             }
 
-            // process the notification from thred pool to not block this notification callback thread from the JVM
+            // process the notification from thread pool to not block this notification callback thread from the JVM
             executorService.submit(() -> {
                 try {
                     getProcessor().process(exchange);

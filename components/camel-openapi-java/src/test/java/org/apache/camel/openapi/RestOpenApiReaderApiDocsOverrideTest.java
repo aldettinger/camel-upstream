@@ -42,10 +42,10 @@ public class RestOpenApiReaderApiDocsOverrideTest extends CamelTestSupport {
     private DummyRestConsumerFactory factory = new DummyRestConsumerFactory();
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 rest("/hello").apiDocs(false).consumes("application/json").produces("application/json").get("/hi/{name}")
                         .description("Saying hi").param().name("name")
                         .type(RestParamType.path).dataType("string").description("Who is it").endParam().to("log:hi")
@@ -69,7 +69,7 @@ public class RestOpenApiReaderApiDocsOverrideTest extends CamelTestSupport {
         config.setVersion("2.0");
         RestOpenApiReader reader = new RestOpenApiReader();
         OasDocument openApi = null;
-        openApi = reader.read(context, context.getRestDefinitions(), null, config, context.getName(),
+        openApi = reader.read(context, context.getRestDefinitions(), config, context.getName(),
                 new DefaultClassResolver());
 
         assertNotNull(openApi);
@@ -97,7 +97,7 @@ public class RestOpenApiReaderApiDocsOverrideTest extends CamelTestSupport {
         config.setBasePath("/api");
         RestOpenApiReader reader = new RestOpenApiReader();
         OasDocument openApi = null;
-        openApi = reader.read(context, context.getRestDefinitions(), null, config, context.getName(),
+        openApi = reader.read(context, context.getRestDefinitions(), config, context.getName(),
                 new DefaultClassResolver());
 
         assertNotNull(openApi);

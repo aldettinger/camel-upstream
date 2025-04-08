@@ -68,7 +68,7 @@ import org.springframework.util.ErrorHandler;
  */
 @ManagedResource(description = "Managed JMS Endpoint")
 @UriEndpoint(firstVersion = "1.0.0", scheme = "jms", title = "JMS", syntax = "jms:destinationType:destinationName",
-             category = { Category.MESSAGING })
+             category = { Category.MESSAGING }, headersClass = JmsConstants.class)
 @Metadata(excludeProperties = "bridgeErrorHandler")
 public class JmsEndpoint extends DefaultEndpoint
         implements AsyncEndpoint, HeaderFilterStrategyAware, MultipleConsumersSupport, Service {
@@ -155,6 +155,11 @@ public class JmsEndpoint extends DefaultEndpoint
 
     public AbstractMessageListenerContainer createMessageListenerContainer() throws Exception {
         return configuration.createMessageListenerContainer(this);
+    }
+
+    public AbstractMessageListenerContainer createReplyToMessageListenerContainer() throws Exception {
+        // only choose as the reply manager will configure the listener
+        return configuration.chooseMessageListenerContainerImplementation(this, configuration.getReplyToConsumerType());
     }
 
     public void configureListenerContainer(AbstractMessageListenerContainer listenerContainer, JmsConsumer consumer) {
@@ -414,11 +419,11 @@ public class JmsEndpoint extends DefaultEndpoint
         return getComponent().getAsyncStartStopExecutorService();
     }
 
-    public void onListenerContainerStarting(AbstractMessageListenerContainer container) {
+    public void onListenerContainerStarting() {
         runningMessageListeners.incrementAndGet();
     }
 
-    public void onListenerContainerStopped(AbstractMessageListenerContainer container) {
+    public void onListenerContainerStopped() {
         runningMessageListeners.decrementAndGet();
     }
 

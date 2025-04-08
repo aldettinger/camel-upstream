@@ -22,14 +22,10 @@ import io.iron.ironmq.Client;
 import io.iron.ironmq.Cloud;
 import org.apache.camel.Category;
 import org.apache.camel.Consumer;
-import org.apache.camel.Exchange;
-import org.apache.camel.ExchangePattern;
-import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
-import org.apache.camel.support.DefaultScheduledPollConsumerScheduler;
 import org.apache.camel.support.ScheduledPollEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,7 +35,7 @@ import org.slf4j.LoggerFactory;
  * queue as a service.
  */
 @UriEndpoint(firstVersion = "2.17.0", scheme = "ironmq", syntax = "ironmq:queueName", title = "IronMQ",
-             category = { Category.CLOUD, Category.MESSAGING })
+             category = { Category.CLOUD, Category.MESSAGING }, headersClass = IronMQConstants.class)
 public class IronMQEndpoint extends ScheduledPollEndpoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(IronMQEndpoint.class);
@@ -61,35 +57,10 @@ public class IronMQEndpoint extends ScheduledPollEndpoint {
 
     @Override
     public Consumer createConsumer(Processor processor) throws Exception {
-        IronMQConsumer ironMQConsumer = new IronMQConsumer(this, processor);
-        configureConsumer(ironMQConsumer);
-        ironMQConsumer.setMaxMessagesPerPoll(configuration.getMaxMessagesPerPoll());
-        DefaultScheduledPollConsumerScheduler scheduler = new DefaultScheduledPollConsumerScheduler();
-        scheduler.setDelay(ironMQConsumer.getDelay());
-        scheduler.setUseFixedDelay(ironMQConsumer.isUseFixedDelay());
-        scheduler.setInitialDelay(ironMQConsumer.getInitialDelay());
-        scheduler.setTimeUnit(ironMQConsumer.getTimeUnit());
-        scheduler.setConcurrentTasks(configuration.getConcurrentConsumers());
-        ironMQConsumer.setScheduler(scheduler);
-        return ironMQConsumer;
-    }
-
-    public Exchange createExchange(io.iron.ironmq.Message msg) {
-        return createExchange(getExchangePattern(), msg);
-    }
-
-    private Exchange createExchange(ExchangePattern pattern, io.iron.ironmq.Message msg) {
-        Exchange exchange = super.createExchange(pattern);
-        Message message = exchange.getIn();
-        if (configuration.isPreserveHeaders()) {
-            GsonUtil.copyFrom(msg, message);
-        } else {
-            message.setBody(msg.getBody());
-        }
-        message.setHeader(IronMQConstants.MESSAGE_ID, msg.getId());
-        message.setHeader(IronMQConstants.MESSAGE_RESERVATION_ID, msg.getReservationId());
-        message.setHeader(IronMQConstants.MESSAGE_RESERVED_COUNT, msg.getReservedCount());
-        return exchange;
+        IronMQConsumer consumer = new IronMQConsumer(this, processor);
+        configureConsumer(consumer);
+        consumer.setMaxMessagesPerPoll(configuration.getMaxMessagesPerPoll());
+        return consumer;
     }
 
     @Override

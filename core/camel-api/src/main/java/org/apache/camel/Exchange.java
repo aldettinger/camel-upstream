@@ -100,6 +100,11 @@ public interface Exchange {
     String COOKIE_HANDLER = "CamelCookieHandler";
     String CORRELATION_ID = "CamelCorrelationId";
 
+    // The schema of the message payload
+    String CONTENT_SCHEMA = "CamelContentSchema";
+    // The schema type of the message payload (json schema, avro, etc)
+    String CONTENT_SCHEMA_TYPE = "CamelContentSchemaType";
+
     String DATASET_INDEX = "CamelDataSetIndex";
     String DEFAULT_CHARSET_PROPERTY = "org.apache.camel.default.charset";
     String DESTINATION_OVERRIDE_URL = "CamelDestinationOverrideUrl";
@@ -111,7 +116,8 @@ public interface Exchange {
     String EXCEPTION_CAUGHT = "CamelExceptionCaught";
     String EXCEPTION_HANDLED = "CamelExceptionHandled";
     String EVALUATE_EXPRESSION_RESULT = "CamelEvaluateExpressionResult";
-    String ERRORHANDLER_CIRCUIT_DETECTED = "CamelFErrorHandlerCircuitDetected";
+    String ERRORHANDLER_BRIDGE = "CamelErrorHandlerBridge";
+    String ERRORHANDLER_CIRCUIT_DETECTED = "CamelErrorHandlerCircuitDetected";
     @Deprecated
     String ERRORHANDLER_HANDLED = "CamelErrorHandlerHandled";
     @Deprecated
@@ -136,6 +142,7 @@ public interface Exchange {
     String FILE_LOCK_EXCLUSIVE_LOCK = "CamelFileLockExclusiveLock";
     String FILE_LOCK_RANDOM_ACCESS_FILE = "CamelFileLockRandomAccessFile";
     String FILE_LOCK_CHANNEL_FILE = "CamelFileLockChannelFile";
+    @Deprecated
     String FILTER_MATCHED = "CamelFilterMatched";
     String FILTER_NON_XML_CHARS = "CamelFilterNonXmlChars";
 
@@ -183,6 +190,7 @@ public interface Exchange {
     String MESSAGE_HISTORY = "CamelMessageHistory";
     String MESSAGE_HISTORY_HEADER_FORMAT = "CamelMessageHistoryHeaderFormat";
     String MESSAGE_HISTORY_OUTPUT_FORMAT = "CamelMessageHistoryOutputFormat";
+    String MESSAGE_TIMESTAMP = "CamelMessageTimestamp";
     String MULTICAST_INDEX = "CamelMulticastIndex";
     String MULTICAST_COMPLETE = "CamelMulticastComplete";
 
@@ -191,6 +199,7 @@ public interface Exchange {
 
     String ON_COMPLETION = "CamelOnCompletion";
     String ON_COMPLETION_ROUTE_IDS = "CamelOnCompletionRouteIds";
+    String OFFSET = "CamelOffset";
     String OVERRULE_FILE_NAME = "CamelOverruleFileName";
 
     String PARENT_UNIT_OF_WORK = "CamelParentUnitOfWork";
@@ -216,9 +225,11 @@ public interface Exchange {
     String REUSE_SCRIPT_ENGINE = "CamelReuseScripteEngine";
     String COMPILE_SCRIPT = "CamelCompileScript";
 
+    @Deprecated
     String SAXPARSER_FACTORY = "CamelSAXParserFactory";
 
     String SCHEDULER_POLLED_MESSAGES = "CamelSchedulerPolledMessages";
+    @Deprecated
     String SOAP_ACTION = "CamelSoapAction";
     String SKIP_GZIP_ENCODING = "CamelSkipGzipEncoding";
     String SKIP_WWW_FORM_URLENCODED = "CamelSkipWwwFormUrlEncoding";
@@ -239,18 +250,14 @@ public interface Exchange {
     String TRACE_EVENT_NODE_ID = "CamelTraceEventNodeId";
     String TRACE_EVENT_TIMESTAMP = "CamelTraceEventTimestamp";
     String TRACE_EVENT_EXCHANGE = "CamelTraceEventExchange";
+    @Deprecated
     String TRACING_HEADER_FORMAT = "CamelTracingHeaderFormat";
+    @Deprecated
     String TRACING_OUTPUT_FORMAT = "CamelTracingOutputFormat";
     String TRY_ROUTE_BLOCK = "TryRouteBlock";
     String TRANSFER_ENCODING = "Transfer-Encoding";
 
     String UNIT_OF_WORK_EXHAUSTED = "CamelUnitOfWorkExhausted";
-
-    /**
-     * @deprecated UNIT_OF_WORK_PROCESS_SYNC is not in use and will be removed in future Camel release
-     */
-    @Deprecated
-    String UNIT_OF_WORK_PROCESS_SYNC = "CamelUnitOfWorkProcessSync";
 
     String XSLT_FILE_NAME = "CamelXsltFileName";
     String XSLT_ERROR = "CamelXsltError";
@@ -283,6 +290,51 @@ public interface Exchange {
      * @param pattern the pattern
      */
     void setPattern(ExchangePattern pattern);
+
+    /**
+     * Returns a property associated with this exchange by the key
+     *
+     * @param  key the exchange key
+     * @return     the value of the given property or <tt>null</tt> if there is no property for the given key
+     */
+    Object getProperty(ExchangePropertyKey key);
+
+    /**
+     * Returns a property associated with this exchange by the key and specifying the type required
+     *
+     * @param  key  the exchange key
+     * @param  type the type of the property
+     * @return      the value of the given property or <tt>null</tt> if there is no property for the given name or
+     *              <tt>null</tt> if it cannot be converted to the given type
+     */
+    <T> T getProperty(ExchangePropertyKey key, Class<T> type);
+
+    /**
+     * Returns a property associated with this exchange by name and specifying the type required
+     *
+     * @param  key          the exchange key
+     * @param  defaultValue the default value to return if property was absent
+     * @param  type         the type of the property
+     * @return              the value of the given property or <tt>defaultValue</tt> if there is no property for the
+     *                      given name or <tt>null</tt> if it cannot be converted to the given type
+     */
+    <T> T getProperty(ExchangePropertyKey key, Object defaultValue, Class<T> type);
+
+    /**
+     * Sets a property on the exchange
+     *
+     * @param key   the exchange key
+     * @param value to associate with the name
+     */
+    void setProperty(ExchangePropertyKey key, Object value);
+
+    /**
+     * Removes the given property on the exchange
+     *
+     * @param  key the exchange key
+     * @return     the old value of the property
+     */
+    Object removeProperty(ExchangePropertyKey key);
 
     /**
      * Returns a property associated with this exchange by name
@@ -341,7 +393,7 @@ public interface Exchange {
     Object removeProperty(String name);
 
     /**
-     * Remove all of the properties associated with the exchange matching a specific pattern
+     * Remove all the properties associated with the exchange matching a specific pattern
      *
      * @param  pattern pattern of names
      * @return         boolean whether any properties matched
@@ -350,8 +402,8 @@ public interface Exchange {
 
     /**
      * Removes the properties from this exchange that match the given <tt>pattern</tt>, except for the ones matching one
-     * ore more <tt>excludePatterns</tt>
-     * 
+     * or more <tt>excludePatterns</tt>
+     *
      * @param  pattern         pattern of names that should be removed
      * @param  excludePatterns one or more pattern of properties names that should be excluded (= preserved)
      * @return                 boolean whether any properties matched
@@ -359,14 +411,23 @@ public interface Exchange {
     boolean removeProperties(String pattern, String... excludePatterns);
 
     /**
-     * Returns all of the properties associated with the exchange
+     * Returns the properties associated with the exchange
      *
-     * @return all the headers in a Map
+     * @return the properties in a Map
+     * @see    #getAllProperties()
      */
     Map<String, Object> getProperties();
 
     /**
-     * Returns whether any properties has been set
+     * Returns all (both internal and custom) properties associated with the exchange
+     *
+     * @return all (both internal and custom) properties in a Map
+     * @see    #getProperties()
+     */
+    Map<String, Object> getAllProperties();
+
+    /**
+     * Returns whether any properties have been set
      *
      * @return <tt>true</tt> if any properties has been set
      */
@@ -506,9 +567,9 @@ public interface Exchange {
     void setException(Throwable t);
 
     /**
-     * Returns true if this exchange failed due to either an exception or fault
+     * Returns true if this exchange failed due to an exception
      *
-     * @return true if this exchange failed due to either an exception or fault
+     * @return true if this exchange failed due to an exception
      * @see    Exchange#getException()
      */
     boolean isFailed();
@@ -575,13 +636,24 @@ public interface Exchange {
 
     /**
      * Returns the endpoint which originated this message exchange if a consumer on an endpoint created the message
-     * exchange, otherwise this property will be <tt>null</tt>
+     * exchange, otherwise his property will be <tt>null</tt>.
+     *
+     * Note: In case this message exchange has been cloned through another parent message exchange (which itself has
+     * been created through the consumer of it's own endpoint), then if desired one could still retrieve the consumer
+     * endpoint of such a parent message exchange as the following:
+     *
+     * <pre>
+     * getContext().getRoute(getFromRouteId()).getEndpoint()
+     * </pre>
      */
     Endpoint getFromEndpoint();
 
     /**
      * Returns the route id which originated this message exchange if a route consumer on an endpoint created the
-     * message exchange, otherwise this property will be <tt>null</tt>
+     * message exchange, otherwise his property will be <tt>null</tt>.
+     *
+     * Note: In case this message exchange has been cloned through another parent message exchange then this method
+     * would return the <tt>fromRouteId<tt> property of that exchange.
      */
     String getFromRouteId();
 
@@ -602,6 +674,8 @@ public interface Exchange {
 
     /**
      * Gets the timestamp in millis when this exchange was created.
+     *
+     * @see Message#getMessageTimestamp()
      */
     long getCreated();
 

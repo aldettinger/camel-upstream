@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>camel-parent</artifactId>
-        <version>3.9.0-SNAPSHOT</version>
+        <version>3.18.0-SNAPSHOT</version>
         <relativePath>../parent/pom.xml</relativePath>
     </parent>
 
@@ -42,6 +42,7 @@
         <module>camel-management</module>
         <module>camel-base</module>
         <module>camel-base-engine</module>
+        <module>camel-xml-io-util</module>
         <module>camel-xml-jaxp</module>
         <module>camel-cluster</module>
         <module>camel-core-engine</module>
@@ -55,14 +56,14 @@
         <module>camel-core-xml</module>
         <module>camel-cloud</module>
         <module>camel-health</module>
+        <module>camel-console</module>
         <module>camel-main</module>
-        <module>camel-allcomponents</module>
-        <module>camel-endpointdsl</module>
-        <module>camel-componentdsl</module>
+        <module>camel-core-all</module>
     </modules>
 
     <properties>
         <camel.osgi.manifest>${project.build.outputDirectory}/META-INF/MANIFEST.MF</camel.osgi.manifest>
+        <camel.surefire.parallel>true</camel.surefire.parallel>
     </properties>
 
     <build>
@@ -82,6 +83,7 @@
                         <id>generate-postcompile</id>
                         <goals>
                             <goal>generate-postcompile</goal>
+                            <goal>generate-others-list</goal>
                         </goals>
                         <phase>prepare-package</phase>
                     </execution>
@@ -151,6 +153,8 @@
                         <Bundle-Activator>${camel.osgi.activator}</Bundle-Activator>
                         <Import-Package>${camel.osgi.import}</Import-Package>
                         <Export-Package>${camel.osgi.export}</Export-Package>
+                        <!-- do not include any resources as not needed-->
+                        <Include-Resource></Include-Resource>
                         <DynamicImport-Package>${camel.osgi.dynamic}</DynamicImport-Package>
                         <Private-Package>${camel.osgi.private.pkg}</Private-Package>
                         <Require-Capability>${camel.osgi.require.capability}</Require-Capability>
@@ -184,10 +188,6 @@
                         </goals>
                     </execution>
                 </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.camel</groupId>
-                <artifactId>camel-format-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

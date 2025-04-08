@@ -25,25 +25,28 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 public class ConsulLocalContainerService implements ConsulService, ContainerService<GenericContainer> {
-    public static final String CONTAINER_IMAGE = "consul:1.8.3";
+    public static final String CONTAINER_IMAGE = "consul:1.11.2";
     public static final String CONTAINER_NAME = "consul";
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsulLocalContainerService.class);
 
-    private GenericContainer container;
+    private final GenericContainer container;
 
     public ConsulLocalContainerService() {
-        String containerName = System.getProperty("consul.container", CONTAINER_IMAGE);
-        initContainer(containerName);
+        this(System.getProperty("consul.container", CONTAINER_IMAGE));
     }
 
     public ConsulLocalContainerService(String containerName) {
-        initContainer(containerName);
+        container = initContainer(containerName, CONTAINER_NAME);
     }
 
-    protected void initContainer(String containerName) {
-        container = new GenericContainer(containerName)
-                .withNetworkAliases(CONTAINER_NAME)
+    public ConsulLocalContainerService(GenericContainer container) {
+        this.container = container;
+    }
+
+    protected GenericContainer initContainer(String imageName, String containerName) {
+        return new GenericContainer(imageName)
+                .withNetworkAliases(containerName)
                 .withExposedPorts(Consul.DEFAULT_HTTP_PORT)
                 .waitingFor(Wait.forLogMessage(".*Synced node info.*", 1))
                 .withCommand("agent", "-dev", "-server", "-bootstrap", "-client", "0.0.0.0", "-log-level", "trace");

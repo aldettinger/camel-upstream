@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +57,7 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectHelper;
 
+import static org.apache.camel.maven.packaging.MojoHelper.getComponentPath;
 import static org.apache.camel.tooling.util.PackageHelper.loadText;
 
 /**
@@ -63,11 +65,6 @@ import static org.apache.camel.tooling.util.PackageHelper.loadText;
  */
 @Mojo(name = "prepare-catalog", threadSafe = true)
 public class PrepareCatalogMojo extends AbstractMojo {
-
-    private static final String[] EXCLUDE_DOC_FILES
-            = {
-                    "camel-core-model", "camel-core-xml", "camel-http-common", "camel-http-base", "camel-jetty-common",
-                    "camel-debezium-common", "camel-infinispan-common" };
 
     private static final int UNUSED_LABELS_WARN = 15;
 
@@ -109,12 +106,6 @@ public class PrepareCatalogMojo extends AbstractMojo {
     protected File othersOutDir;
 
     /**
-     * The output directory for documents catalog
-     */
-    @Parameter(defaultValue = "${project.basedir}/src/generated/resources/org/apache/camel/catalog/docs")
-    protected File documentsOutDir;
-
-    /**
      * The output directory for models catalog
      */
     @Parameter(defaultValue = "${project.basedir}/src/generated/resources/org/apache/camel/catalog/models")
@@ -147,7 +138,7 @@ public class PrepareCatalogMojo extends AbstractMojo {
     /**
      * The camel-core directory
      */
-    @Parameter(defaultValue = "${project.build.directory}/../../../core/camel-core-engine")
+    @Parameter(defaultValue = "${project.build.directory}/../../../core/")
     protected File coreDir;
 
     /**
@@ -157,22 +148,16 @@ public class PrepareCatalogMojo extends AbstractMojo {
     protected File modelDir;
 
     /**
-     * The camel-base directory
+     * The DSL directory
      */
-    @Parameter(defaultValue = "${project.build.directory}/../../../core/camel-base")
-    protected File baseDir;
+    @Parameter(defaultValue = "${project.build.directory}/../../../dsl/")
+    protected File dslDir;
 
     /**
      * The camel-core-languages directory
      */
     @Parameter(defaultValue = "${project.build.directory}/../../../core/camel-core-languages")
     protected File languagesDir;
-
-    /**
-     * The camel-xml-jaxp directory
-     */
-    @Parameter(defaultValue = "${project.build.directory}/../../../core/camel-xml-jaxp")
-    protected File jaxpDir;
 
     /**
      * The directory where the camel-spring XML models are
@@ -206,7 +191,7 @@ public class PrepareCatalogMojo extends AbstractMojo {
 
     private Collection<Path> allJsonFiles;
     private Collection<Path> allPropertiesFiles;
-    private Map<Path, BaseModel<?>> allModels;
+    private final Map<Path, BaseModel<?>> allModels = new HashMap<>();
 
     private static String asComponentName(Path file) {
         String name = file.getFileName().toString();
@@ -216,15 +201,6 @@ public class PrepareCatalogMojo extends AbstractMojo {
             return name.substring(0, name.length() - ".adoc".length());
         }
         return name;
-    }
-
-    private static boolean excludeDocumentDir(String name) {
-        for (String exclude : EXCLUDE_DOC_FILES) {
-            if (exclude.equals(name)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -240,23 +216,67 @@ public class PrepareCatalogMojo extends AbstractMojo {
             allJsonFiles = new TreeSet<>();
             allPropertiesFiles = new TreeSet<>();
 
-            Stream.concat(list(componentsDir.toPath()),
-                    Stream.of(coreDir.toPath(), modelDir.toPath(), baseDir.toPath(), languagesDir.toPath(), jaxpDir.toPath(),
-                            springDir.toPath()))
-                    .filter(dir -> !"target".equals(dir.getFileName().toString()))
+            try (Stream<Path> paths
+                    = Stream.of(list(coreDir.toPath()), list(componentsDir.toPath())).flatMap(s -> s);
+                 Stream<Path> stream = Stream.concat(paths,
+                         Stream.of(languagesDir.toPath(), springDir.toPath()))
+                         .filter(dir -> !"target".equals(dir.getFileName().toString()))
+                         .flatMap(p -> getComponentPath(p).stream())
+                         .filter(dir -> Files.isDirectory(dir.resolve("src")))
+                         .map(p -> p.resolve("target/classes"))
+                         .flatMap(PackageHelper::walk)
+                         .filter(Files::isRegularFile)) {
+                stream
+                        .forEach(p -> {
+                            String f = p.getFileName().toString();
+                            if (f.endsWith(PackageHelper.JSON_SUFIX)) {
+                                allJsonFiles.add(p);
+                            } else if (f.equals("component.properties") || f.equals("dataformat.properties")
+                                    || f.equals("language.properties") || f.equals("other.properties")) {
+                                allPropertiesFiles.add(p);
+                            }
+                        });
+            }
+
+            for (Path p : allJsonFiles) {
+                var m = JsonMapper.generateModel(p);
+                if (m != null) {
+                    allModels.put(p, m);
+                }
+            }
+
+            // special for dsl-dir as its built after camel-catalog, so we can only look inside src/generated
+            try (Stream<Path> stream = Stream.of(list(dslDir.toPath())).flatMap(s -> s)
                     .flatMap(p -> getComponentPath(p).stream())
-                    .filter(dir -> Files.isDirectory(dir.resolve("src")))
-                    .map(p -> p.resolve("target/classes"))
-                    .flatMap(PackageHelper::walk).forEach(p -> {
-                        String f = p.getFileName().toString();
-                        if (f.endsWith(PackageHelper.JSON_SUFIX)) {
-                            allJsonFiles.add(p);
-                        } else if (f.equals("component.properties") || f.equals("dataformat.properties")
-                                || f.equals("language.properties") || f.equals("other.properties")) {
-                            allPropertiesFiles.add(p);
-                        }
-                    });
-            allModels = allJsonFiles.stream().collect(Collectors.toMap(p -> p, JsonMapper::generateModel));
+                    .filter(dir -> Files.isDirectory(dir.resolve("src/generated/resources")))
+                    .map(p -> p.resolve("src/generated/resources"))
+                    .flatMap(PackageHelper::walk)
+                    .filter(Files::isRegularFile)) {
+                stream
+                        .forEach(p -> {
+                            String f = p.getFileName().toString();
+                            if (f.endsWith(PackageHelper.JSON_SUFIX)) {
+                                allJsonFiles.add(p);
+                                var m = JsonMapper.generateModel(p);
+                                if (m instanceof OtherModel) {
+                                    OtherModel om = (OtherModel) m;
+                                    if (!project.getVersion().equals(om.getVersion())) {
+                                        // update version in model and file because we prepare catalog before we build DSL
+                                        // so their previous generated model files may use previous version (eg 3.18.0-SNAPSHOT -> 3.15.0)
+                                        try {
+                                            String s = Files.readString(p);
+                                            s = s.replaceAll(om.getVersion(), project.getVersion());
+                                            FileUtil.updateFile(p, s);
+                                        } catch (IOException e) {
+                                            // ignore
+                                        }
+                                        om.setVersion(project.getVersion());
+                                    }
+                                    allModels.put(p, m);
+                                }
+                            }
+                        });
+            }
 
             executeModel();
             Set<String> components = executeComponents();
@@ -273,8 +293,8 @@ public class PrepareCatalogMojo extends AbstractMojo {
     }
 
     protected void executeModel() throws Exception {
-        Path coreDir = this.modelDir.toPath();
-        Path springDir = this.springDir.toPath();
+        Path modelDir = this.modelDir.toPath();
+        this.springDir.toPath();
         Path modelsOutDir = this.modelsOutDir.toPath();
 
         getLog().info("================================================================================");
@@ -287,12 +307,10 @@ public class PrepareCatalogMojo extends AbstractMojo {
         Set<Path> missingJavaDoc = new TreeSet<>();
         Map<String, Set<String>> usedLabels = new TreeMap<>();
 
-        // find all json files in camel-core and camel-spring
-        Path coreDirTarget = coreDir.resolve("target/classes/org/apache/camel/model");
-        Path springTarget1 = springDir.resolve("target/classes/org/apache/camel/spring");
-        Path springTarget2 = springDir.resolve("target/classes/org/apache/camel/core/xml");
+        // find all json files in camel-core
+        Path coreDirTarget = modelDir.resolve("target/classes/org/apache/camel/model");
         jsonFiles = allJsonFiles.stream()
-                .filter(p -> p.startsWith(coreDirTarget) || p.startsWith(springTarget1) || p.startsWith(springTarget2))
+                .filter(p -> p.startsWith(coreDirTarget))
                 .collect(Collectors.toCollection(TreeSet::new));
         getLog().info("Found " + jsonFiles.size() + " model json files");
 
@@ -303,7 +321,9 @@ public class PrepareCatalogMojo extends AbstractMojo {
 
         // Copy all descriptors
         Map<Path, Path> newJsons = map(jsonFiles, p -> p, p -> modelsOutDir.resolve(p.getFileName()));
-        list(modelsOutDir).filter(p -> !newJsons.containsValue(p)).forEach(this::delete);
+        try (Stream<Path> stream = list(modelsOutDir).filter(p -> !newJsons.containsValue(p))) {
+            stream.forEach(this::delete);
+        }
         newJsons.forEach(this::copy);
 
         for (Path file : jsonFiles) {
@@ -378,7 +398,9 @@ public class PrepareCatalogMojo extends AbstractMojo {
 
         // Copy all descriptors
         Map<Path, Path> newJsons = map(jsonFiles, p -> p, p -> componentsOutDir.resolve(p.getFileName()));
-        list(componentsOutDir).filter(p -> !newJsons.containsValue(p)).forEach(this::delete);
+        try (Stream<Path> stream = list(componentsOutDir).filter(p -> !newJsons.containsValue(p))) {
+            stream.forEach(this::delete);
+        }
         newJsons.forEach(this::copy);
 
         Set<String> alternativeSchemes = new HashSet<>();
@@ -403,11 +425,11 @@ public class PrepareCatalogMojo extends AbstractMojo {
                 // check all the component options and grab the label(s) they
                 // use
                 model.getComponentOptions().stream().map(BaseOptionModel::getLabel).filter(l -> !Strings.isNullOrEmpty(l)).flatMap(l -> Stream.of(label.split(",")))
-                    .forEach(usedOptionLabels::add);
+                        .forEach(usedOptionLabels::add);
 
                 // check all the endpoint options and grab the label(s) they use
                 model.getEndpointOptions().stream().map(BaseOptionModel::getLabel).filter(l -> !Strings.isNullOrEmpty(l)).flatMap(l -> Stream.of(label.split(",")))
-                    .forEach(usedOptionLabels::add);
+                        .forEach(usedOptionLabels::add);
 
                 long unused = model.getEndpointOptions().stream().map(BaseOptionModel::getLabel).filter(Strings::isNullOrEmpty).count();
                 if (unused >= UNUSED_LABELS_WARN) {
@@ -472,7 +494,9 @@ public class PrepareCatalogMojo extends AbstractMojo {
 
         // Copy all descriptors
         Map<Path, Path> newJsons = map(jsonFiles, p -> p, p -> dataFormatsOutDir.resolve(p.getFileName()));
-        list(dataFormatsOutDir).filter(p -> !newJsons.containsValue(p)).forEach(this::delete);
+        try (Stream<Path> stream = list(dataFormatsOutDir).filter(p -> !newJsons.containsValue(p))) {
+            stream.forEach(this::delete);
+        }
         newJsons.forEach(this::copy);
 
         for (Path file : jsonFiles) {
@@ -528,7 +552,9 @@ public class PrepareCatalogMojo extends AbstractMojo {
 
         // Copy all descriptors
         Map<Path, Path> newJsons = map(jsonFiles, p -> p, p -> languagesOutDir.resolve(p.getFileName()));
-        list(languagesOutDir).filter(p -> !newJsons.containsValue(p)).forEach(this::delete);
+        try (Stream<Path> stream = list(languagesOutDir).filter(p -> !newJsons.containsValue(p))) {
+            stream.forEach(this::delete);
+        }
         newJsons.forEach(this::copy);
 
         for (Path file : jsonFiles) {
@@ -573,21 +599,52 @@ public class PrepareCatalogMojo extends AbstractMojo {
         jsonFiles = allJsonFiles.stream().filter(p -> {
             Path m = getModule(p);
             switch (m.getFileName().toString()) {
+                // we want to skip some JARs from core
+                case "camel-api":
+                case "camel-base":
+                case "camel-base-engine":
+                case "camel-core":
+                case "camel-core-catalog":
+                case "camel-core-engine":
+                case "camel-core-languages":
                 case "camel-core-model":
+                case "camel-core-processor":
+                case "camel-core-reifier":
                 case "camel-core-xml":
+                case "camel-management-api":
+                case "camel-support":
+                case "camel-util":
+                case "camel-xml-io":
+                case "camel-xml-io-util":
+                case "camel-xml-jaxb":
+                case "camel-xml-jaxp":
+                    // and some from dsl
+                case "dsl-support":
+                case "camel-dsl-support":
+                case "camel-endpointdsl-support":
+                    // and components with middle folders
+                case "camel-as2":
+                case "camel-avro-rpc":
+                case "camel-aws":
+                case "camel-azure":
                 case "camel-box":
+                case "camel-debezium":
+                case "camel-debezium-common":
+                case "camel-fhir":
+                case "camel-google":
                 case "camel-http-base":
                 case "camel-http-common":
+                case "camel-huawei":
+                case "camel-infinispan":
                 case "camel-jetty-common":
-                case "camel-as2":
+                case "camel-kantive":
+                case "camel-microprofile":
                 case "camel-olingo2":
                 case "camel-olingo4":
-                case "camel-servicenow":
                 case "camel-salesforce":
-                case "camel-fhir":
-                case "camel-debezium-common":
-                case "camel-vertx-kafka":
-                case "camel-infinispan":
+                case "camel-servicenow":
+                case "camel-test":
+                case "camel-vertx":
                     return false;
                 default:
                     return true;
@@ -605,7 +662,9 @@ public class PrepareCatalogMojo extends AbstractMojo {
 
         // Copy all descriptors
         Map<Path, Path> newJsons = map(jsonFiles, p -> p, p -> othersOutDir.resolve(p.getFileName()));
-        list(othersOutDir).filter(p -> !newJsons.containsValue(p)).forEach(this::delete);
+        try (Stream<Path> stream = list(othersOutDir).filter(p -> !newJsons.containsValue(p))) {
+            stream.forEach(this::delete);
+        }
         newJsons.forEach(this::copy);
 
         for (Path file : jsonFiles) {
@@ -664,57 +723,44 @@ public class PrepareCatalogMojo extends AbstractMojo {
         copyFile(mainDir.toPath().resolve("camel-main-configuration-metadata.json"), mainOutDir.toPath());
     }
 
-    protected void executeDocuments(Set<String> components, Set<String> dataformats, Set<String> languages, Set<String> others) throws Exception {
-        Path documentsOutDir = this.documentsOutDir.toPath();
-
-        getLog().info("Copying all Camel documents (ascii docs)");
-
+    protected void executeDocuments(Set<String> components, Set<String> dataformats, Set<String> languages, Set<String> others) {
         // lets use sorted set/maps
         Set<Path> adocFiles = new TreeSet<>();
         Set<Path> missingAdocFiles = new TreeSet<>();
-        Set<Path> duplicateAdocFiles = new TreeSet<>();
+        Set<Path> duplicateAdocFiles;
 
         // find all camel maven modules
-        Stream.concat(
-            list(componentsDir.toPath())
-                .filter(dir -> !dir.getFileName().startsWith(".") && !"target".equals(dir.getFileName().toString()))
-                .flatMap(p -> getComponentPath(p).stream()),
-            Stream.of(coreDir.toPath(), baseDir.toPath(), languagesDir.toPath(), jaxpDir.toPath()))
-            .forEach(dir -> {
-                List<Path> l = PackageHelper.walk(dir.resolve("src/main/docs"))
-                    .filter(f -> f.getFileName().toString().endsWith(".adoc"))
-                    .collect(Collectors.toList());
+        try (Stream<Path> stream = Stream.concat(
+                list(componentsDir.toPath())
+                        .filter(dir -> !dir.getFileName().startsWith(".") && !"target".equals(dir.getFileName().toString()))
+                        .flatMap(p -> getComponentPath(p).stream()),
+                Stream.of(coreDir.toPath(), languagesDir.toPath()))) {
+            stream
+                    .forEach(dir -> {
+                        try (Stream<Path> pathStream = PackageHelper.walk(dir.resolve("src/main/docs"))
+                                .filter(f -> f.getFileName().toString().endsWith(".adoc"))) {
+                            List<Path> l = pathStream
+                                    .collect(Collectors.toList());
 
-                if (l.isEmpty()) {
-                    String n = dir.getFileName().toString();
-                    boolean isDir = dir.toFile().isDirectory();
-                    boolean valid = isDir && !n.startsWith(".") && !n.endsWith("-base") && !n.endsWith("-common");
-                    if (valid) {
-                        missingAdocFiles.add(dir);
-                    }
-                } else {
-                    adocFiles.addAll(l);
-                }
-            });
+                            if (l.isEmpty()) {
+                                String n = dir.getFileName().toString();
+                                boolean isDir = dir.toFile().isDirectory();
+                                boolean valid = isDir && !n.startsWith(".") && !n.endsWith("-base") && !n.endsWith("-common") && !n.equals("src");
+                                if (valid) {
+                                    missingAdocFiles.add(dir);
+                                }
+                            } else {
+                                adocFiles.addAll(l);
+                            }
+                        }
+                    });
+        }
 
         getLog().info("Found " + adocFiles.size() + " ascii document files");
 
-        // make sure to create out dir
-        Files.createDirectories(documentsOutDir);
-
         // Check duplicates
         duplicateAdocFiles = getDuplicates(adocFiles);
-
-        // Copy all descriptors
-        Map<Path, Path> newJsons = map(adocFiles, p -> p, p -> documentsOutDir.resolve(p.getFileName()));
-        list(documentsOutDir).filter(p -> !newJsons.containsValue(p) && !newJsons.containsValue(p.resolveSibling(p.getFileName().toString().replace(".html", ".adoc"))))
-            .forEach(this::delete);
-        newJsons.forEach(this::copy);
-
-        Path all = documentsOutDir.resolve("../docs.properties");
         Set<String> docNames = adocFiles.stream().map(PrepareCatalogMojo::asComponentName).collect(Collectors.toCollection(TreeSet::new));
-        FileUtil.updateFile(all, String.join("\n", docNames) + "\n");
-
         printDocumentsReport(adocFiles, duplicateAdocFiles, missingAdocFiles);
 
         // find out if we have documents for each component / dataformat /
@@ -753,9 +799,7 @@ public class PrepareCatalogMojo extends AbstractMojo {
         if (!missing.isEmpty()) {
             getLog().info("");
             getLog().warn("\tMissing .adoc component documentation: " + missing.size());
-            for (String name : missing) {
-                getLog().warn("\t\t" + name);
-            }
+            printMissingWarning(missing);
         }
         missing.clear();
 
@@ -772,9 +816,7 @@ public class PrepareCatalogMojo extends AbstractMojo {
         if (!missing.isEmpty()) {
             getLog().info("");
             getLog().warn("\tMissing .adoc dataformat documentation: " + missing.size());
-            for (String name : missing) {
-                getLog().warn("\t\t" + name);
-            }
+            printMissingWarning(missing);
         }
         missing.clear();
 
@@ -787,29 +829,31 @@ public class PrepareCatalogMojo extends AbstractMojo {
         if (!missing.isEmpty()) {
             getLog().info("");
             getLog().warn("\tMissing .adoc language documentation: " + missing.size());
-            for (String name : missing) {
-                getLog().warn("\t\t" + name);
-            }
+            printMissingWarning(missing);
         }
         missing.clear();
 
         for (String other : others) {
-            String name = other;
-            if (!docs.contains(name)) {
-                missing.add(name);
+
+            if (!docs.contains(other)) {
+                missing.add(other);
             }
         }
         if (!missing.isEmpty()) {
             getLog().info("");
             getLog().warn("\tMissing .adoc other documentation: " + missing.size());
-            for (String name : missing) {
-                getLog().warn("\t\t" + name);
-            }
+            printMissingWarning(missing);
         }
         missing.clear();
 
         getLog().info("");
         getLog().info("================================================================================");
+    }
+
+    private void printMissingWarning(List<String> missing) {
+        for (String name : missing) {
+            getLog().warn("\t\t" + name);
+        }
     }
 
     private void printModelsReport(Set<Path> json, Set<Path> duplicate, Set<Path> missingLabels, Map<String, Set<String>> usedLabels, Set<Path> missingJavaDoc) {
@@ -819,42 +863,54 @@ public class PrepareCatalogMojo extends AbstractMojo {
         getLog().info("Camel model catalog report");
         getLog().info("");
         getLog().info("\tModels found: " + json.size());
-        for (Path file : json) {
-            getLog().info("\t\t" + asComponentName(file));
-        }
+        printComponentDebug(json);
         if (!duplicate.isEmpty()) {
             getLog().info("");
             getLog().warn("\tDuplicate models detected: " + duplicate.size());
-            for (Path file : duplicate) {
-                getLog().warn("\t\t" + asComponentName(file));
-            }
+            printComponentWarning(duplicate);
         }
         if (!missingLabels.isEmpty()) {
             getLog().info("");
             getLog().warn("\tMissing labels detected: " + missingLabels.size());
-            for (Path file : missingLabels) {
-                getLog().warn("\t\t" + asComponentName(file));
-            }
+            printComponentWarning(missingLabels);
         }
-        if (!usedLabels.isEmpty()) {
-            getLog().info("");
-            getLog().info("\tUsed labels: " + usedLabels.size());
-            for (Map.Entry<String, Set<String>> entry : usedLabels.entrySet()) {
-                getLog().info("\t\t" + entry.getKey() + ":");
-                for (String name : entry.getValue()) {
-                    getLog().info("\t\t\t" + name);
-                }
-            }
-        }
+        printUsedLabels(usedLabels);
         if (!missingJavaDoc.isEmpty()) {
             getLog().info("");
             getLog().warn("\tMissing javadoc on models: " + missingJavaDoc.size());
-            for (Path file : missingJavaDoc) {
-                getLog().warn("\t\t" + asComponentName(file));
-            }
+            printComponentWarning(missingJavaDoc);
         }
         getLog().info("");
         getLog().info("================================================================================");
+    }
+
+    private void printComponentWarning(Set<Path> duplicate) {
+        for (Path file : duplicate) {
+            getLog().warn("\t\t" + asComponentName(file));
+        }
+    }
+
+    private void printComponentDebug(Set<Path> json) {
+        if (getLog().isDebugEnabled()) {
+            for (Path file : json) {
+                getLog().debug("\t\t" + asComponentName(file));
+            }
+        }
+    }
+
+    private void printUsedLabels(Map<String, Set<String>> usedLabels) {
+        if (getLog().isDebugEnabled()) {
+            if (!usedLabels.isEmpty()) {
+                getLog().info("");
+                getLog().info("\tUsed labels: " + usedLabels.size());
+                for (Map.Entry<String, Set<String>> entry : usedLabels.entrySet()) {
+                    getLog().info("\t\t" + entry.getKey() + ":");
+                    for (String name : entry.getValue()) {
+                        getLog().info("\t\t\t" + name);
+                    }
+                }
+            }
+        }
     }
 
     private void printComponentsReport(Set<Path> json, Set<Path> duplicate, Set<Path> missing, Map<String, Set<String>> usedComponentLabels, Set<String> usedOptionsLabels,
@@ -864,31 +920,29 @@ public class PrepareCatalogMojo extends AbstractMojo {
         getLog().info("Camel component catalog report");
         getLog().info("");
         getLog().info("\tComponents found: " + json.size());
-        for (Path file : json) {
-            getLog().info("\t\t" + asComponentName(file));
-        }
+        printComponentDebug(json);
         if (!duplicate.isEmpty()) {
             getLog().info("");
             getLog().warn("\tDuplicate components detected: " + duplicate.size());
-            for (Path file : duplicate) {
-                getLog().warn("\t\t" + asComponentName(file));
-            }
+            printComponentWarning(duplicate);
         }
-        if (!usedComponentLabels.isEmpty()) {
-            getLog().info("");
-            getLog().info("\tUsed component labels: " + usedComponentLabels.size());
-            for (Map.Entry<String, Set<String>> entry : usedComponentLabels.entrySet()) {
-                getLog().info("\t\t" + entry.getKey() + ":");
-                for (String name : entry.getValue()) {
-                    getLog().info("\t\t\t" + name);
+        if (getLog().isDebugEnabled()) {
+            if (!usedComponentLabels.isEmpty()) {
+                getLog().info("");
+                getLog().info("\tUsed component labels: " + usedComponentLabels.size());
+                for (Map.Entry<String, Set<String>> entry : usedComponentLabels.entrySet()) {
+                    getLog().debug("\t\t" + entry.getKey() + ":");
+                    for (String name : entry.getValue()) {
+                        getLog().debug("\t\t\t" + name);
+                    }
                 }
             }
-        }
-        if (!usedOptionsLabels.isEmpty()) {
-            getLog().info("");
-            getLog().info("\tUsed component/endpoint options labels: " + usedOptionsLabels.size());
-            for (String name : usedOptionsLabels) {
-                getLog().info("\t\t\t" + name);
+            if (!usedOptionsLabels.isEmpty()) {
+                getLog().info("");
+                getLog().info("\tUsed component/endpoint options labels: " + usedOptionsLabels.size());
+                for (String name : usedOptionsLabels) {
+                    getLog().info("\t\t\t" + name);
+                }
             }
         }
         if (!unusedLabels.isEmpty()) {
@@ -901,19 +955,21 @@ public class PrepareCatalogMojo extends AbstractMojo {
         if (!missing.isEmpty()) {
             getLog().info("");
             getLog().warn("\tMissing components detected: " + missing.size());
-            for (Path name : missing) {
-                getLog().warn("\t\t" + name.getFileName().toString());
-            }
+            printWarnings(missing);
         }
         if (!missingFirstVersions.isEmpty()) {
             getLog().info("");
             getLog().warn("\tComponents without firstVersion defined: " + missingFirstVersions.size());
-            for (Path name : missingFirstVersions) {
-                getLog().warn("\t\t" + name.getFileName().toString());
-            }
+            printWarnings(missingFirstVersions);
         }
         getLog().info("");
         getLog().info("================================================================================");
+    }
+
+    private void printWarnings(Set<Path> missing) {
+        for (Path name : missing) {
+            getLog().warn("\t\t" + name.getFileName().toString());
+        }
     }
 
     private void printDataFormatsReport(Set<Path> json, Set<Path> duplicate, Map<String, Set<String>> usedLabels, Set<Path> missingFirstVersions) {
@@ -922,32 +978,17 @@ public class PrepareCatalogMojo extends AbstractMojo {
         getLog().info("Camel data format catalog report");
         getLog().info("");
         getLog().info("\tDataFormats found: " + json.size());
-        for (Path file : json) {
-            getLog().info("\t\t" + asComponentName(file));
-        }
+        printComponentDebug(json);
         if (!duplicate.isEmpty()) {
             getLog().info("");
             getLog().warn("\tDuplicate dataformat detected: " + duplicate.size());
-            for (Path file : duplicate) {
-                getLog().warn("\t\t" + asComponentName(file));
-            }
+            printComponentWarning(duplicate);
         }
-        if (!usedLabels.isEmpty()) {
-            getLog().info("");
-            getLog().info("\tUsed labels: " + usedLabels.size());
-            for (Map.Entry<String, Set<String>> entry : usedLabels.entrySet()) {
-                getLog().info("\t\t" + entry.getKey() + ":");
-                for (String name : entry.getValue()) {
-                    getLog().info("\t\t\t" + name);
-                }
-            }
-        }
+        printUsedLabels(usedLabels);
         if (!missingFirstVersions.isEmpty()) {
             getLog().info("");
             getLog().warn("\tDataFormats without firstVersion defined: " + missingFirstVersions.size());
-            for (Path name : missingFirstVersions) {
-                getLog().warn("\t\t" + name.getFileName().toString());
-            }
+            printWarnings(missingFirstVersions);
         }
         getLog().info("");
         getLog().info("================================================================================");
@@ -959,32 +1000,17 @@ public class PrepareCatalogMojo extends AbstractMojo {
         getLog().info("Camel language catalog report");
         getLog().info("");
         getLog().info("\tLanguages found: " + json.size());
-        for (Path file : json) {
-            getLog().info("\t\t" + asComponentName(file));
-        }
+        printComponentDebug(json);
         if (!duplicate.isEmpty()) {
             getLog().info("");
             getLog().warn("\tDuplicate language detected: " + duplicate.size());
-            for (Path file : duplicate) {
-                getLog().warn("\t\t" + asComponentName(file));
-            }
+            printComponentWarning(duplicate);
         }
-        if (!usedLabels.isEmpty()) {
-            getLog().info("");
-            getLog().info("\tUsed labels: " + usedLabels.size());
-            for (Map.Entry<String, Set<String>> entry : usedLabels.entrySet()) {
-                getLog().info("\t\t" + entry.getKey() + ":");
-                for (String name : entry.getValue()) {
-                    getLog().info("\t\t\t" + name);
-                }
-            }
-        }
+        printUsedLabels(usedLabels);
         if (!missingFirstVersions.isEmpty()) {
             getLog().info("");
             getLog().warn("\tLanguages without firstVersion defined: " + missingFirstVersions.size());
-            for (Path name : missingFirstVersions) {
-                getLog().warn("\t\t" + name.getFileName().toString());
-            }
+            printWarnings(missingFirstVersions);
         }
         getLog().info("");
         getLog().info("================================================================================");
@@ -996,32 +1022,17 @@ public class PrepareCatalogMojo extends AbstractMojo {
         getLog().info("Camel other catalog report");
         getLog().info("");
         getLog().info("\tOthers found: " + json.size());
-        for (Path file : json) {
-            getLog().info("\t\t" + asComponentName(file));
-        }
+        printComponentDebug(json);
         if (!duplicate.isEmpty()) {
             getLog().info("");
             getLog().warn("\tDuplicate other detected: " + duplicate.size());
-            for (Path file : duplicate) {
-                getLog().warn("\t\t" + asComponentName(file));
-            }
+            printComponentWarning(duplicate);
         }
-        if (!usedLabels.isEmpty()) {
-            getLog().info("");
-            getLog().info("\tUsed labels: " + usedLabels.size());
-            for (Map.Entry<String, Set<String>> entry : usedLabels.entrySet()) {
-                getLog().info("\t\t" + entry.getKey() + ":");
-                for (String name : entry.getValue()) {
-                    getLog().info("\t\t\t" + name);
-                }
-            }
-        }
+        printUsedLabels(usedLabels);
         if (!missingFirstVersions.isEmpty()) {
             getLog().info("");
             getLog().warn("\tOthers without firstVersion defined: " + missingFirstVersions.size());
-            for (Path name : missingFirstVersions) {
-                getLog().warn("\t\t" + name.getFileName().toString());
-            }
+            printWarnings(missingFirstVersions);
         }
         getLog().info("");
         getLog().info("================================================================================");
@@ -1033,23 +1044,17 @@ public class PrepareCatalogMojo extends AbstractMojo {
         getLog().info("Camel document catalog report");
         getLog().info("");
         getLog().info("\tDocuments found: " + docs.size());
-        for (Path file : docs) {
-            getLog().info("\t\t" + asComponentName(file));
-        }
+        printComponentDebug(docs);
         if (!duplicate.isEmpty()) {
             getLog().info("");
             getLog().warn("\tDuplicate document detected: " + duplicate.size());
-            for (Path file : duplicate) {
-                getLog().warn("\t\t" + asComponentName(file));
-            }
+            printComponentWarning(duplicate);
         }
         getLog().info("");
         if (!missing.isEmpty()) {
             getLog().info("");
             getLog().warn("\tMissing document detected: " + missing.size());
-            for (Path name : missing) {
-                getLog().warn("\t\t" + name.getFileName().toString());
-            }
+            printWarnings(missing);
         }
         getLog().info("");
         getLog().info("================================================================================");
@@ -1141,31 +1146,6 @@ public class PrepareCatalogMojo extends AbstractMojo {
                 // list
                 this::concat); // merge lists
         return byName.values().stream().flatMap(l -> l.stream().skip(1)).collect(Collectors.toCollection(TreeSet::new));
-    }
-
-    private List<Path> getComponentPath(Path dir) {
-        switch (dir.getFileName().toString()) {
-            case "camel-as2":
-                return Collections.singletonList(dir.resolve("camel-as2-component"));
-            case "camel-salesforce":
-                return Collections.singletonList(dir.resolve("camel-salesforce-component"));
-            case "camel-olingo2":
-                return Collections.singletonList(dir.resolve("camel-olingo2-component"));
-            case "camel-olingo4":
-                return Collections.singletonList(dir.resolve("camel-olingo4-component"));
-            case "camel-box":
-                return Collections.singletonList(dir.resolve("camel-box-component"));
-            case "camel-servicenow":
-                return Collections.singletonList(dir.resolve("camel-servicenow-component"));
-            case "camel-fhir":
-                return Collections.singletonList(dir.resolve("camel-fhir-component"));
-            case "camel-vertx-kafka":
-                return Collections.singletonList(dir.resolve("camel-vertx-kafka-component"));
-            case "camel-infinispan":
-                return Arrays.asList(dir.resolve("camel-infinispan"), dir.resolve("camel-infinispan-embedded"));
-            default:
-                return Collections.singletonList(dir);
-        }
     }
 
 }

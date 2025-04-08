@@ -49,7 +49,7 @@ public class RestDslGeneratorTest {
     @Test
     public void shouldCreateDefinitions() throws Exception {
         try (CamelContext context = new DefaultCamelContext()) {
-            final RestsDefinition definition = RestDslGenerator.toDefinition(document).generate(context);
+            final RestsDefinition definition = RestDslGenerator.toDefinition(document).generate();
             assertThat(definition).isNotNull();
             assertThat(definition.getRests()).hasSize(1);
             assertThat(definition.getRests().get(0).getPath()).isEqualTo("/v2");
@@ -103,6 +103,39 @@ public class RestDslGeneratorTest {
 
         oas30Document.servers = Collections.singletonList(server);
         assertThat(RestDslGenerator.determineBasePathFrom(oas30Document)).isEqualTo("/api/v3");
+    }
+
+    @Test
+    public void shouldDetermineBasePathFromParameterOverDocument() {
+        final Oas30Document oas30Document = new Oas30Document();
+        final Oas30Server server = new Oas30Server();
+        server.url = "/api/v3";
+
+        oas30Document.servers = Collections.singletonList(server);
+        assertThat(RestDslGenerator.determineBasePathFrom("/api/v4", oas30Document)).isEqualTo("/api/v4");
+    }
+
+    @Test
+    public void shouldDetermineBasePathFromParameterOverDocumentWithoutStartingSlash() {
+        final Oas30Document oas30Document = new Oas30Document();
+        final Oas30Server server = new Oas30Server();
+        server.url = "api/v3";
+
+        oas30Document.servers = Collections.singletonList(server);
+        assertThat(RestDslGenerator.determineBasePathFrom("api/v4", oas30Document)).isEqualTo("/api/v4");
+    }
+
+    @Test
+    public void shouldDetermineBasePathFromParameterOverDocumentWithEmptyParameter() {
+        final Oas30Document oas30Document = new Oas30Document();
+        final Oas30Server server = new Oas30Server();
+        server.url = "/api/v3";
+
+        oas30Document.servers = Collections.singletonList(server);
+        assertThat(RestDslGenerator.determineBasePathFrom(null, oas30Document)).isEqualTo("/api/v3");
+        assertThat(RestDslGenerator.determineBasePathFrom("/", oas30Document)).isEqualTo("");
+        assertThat(RestDslGenerator.determineBasePathFrom("", oas30Document)).isEqualTo("");
+        assertThat(RestDslGenerator.determineBasePathFrom("   ", oas30Document)).isEqualTo("");
     }
 
     @Test

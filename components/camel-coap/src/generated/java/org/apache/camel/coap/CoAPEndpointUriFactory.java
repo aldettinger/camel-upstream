@@ -20,25 +20,29 @@ public class CoAPEndpointUriFactory extends org.apache.camel.support.component.E
 
     private static final Set<String> PROPERTY_NAMES;
     private static final Set<String> SECRET_PROPERTY_NAMES;
+    private static final Set<String> MULTI_VALUE_PREFIXES;
     static {
         Set<String> props = new HashSet<>(15);
-        props.add("recommendedCipherSuitesOnly");
-        props.add("trustedRpkStore");
-        props.add("sslContextParameters");
-        props.add("exchangePattern");
-        props.add("publicKey");
-        props.add("uri");
-        props.add("privateKey");
-        props.add("lazyStartProducer");
+        props.add("alias");
         props.add("bridgeErrorHandler");
         props.add("cipherSuites");
-        props.add("pskStore");
-        props.add("alias");
         props.add("clientAuthentication");
         props.add("coapMethodRestrict");
         props.add("exceptionHandler");
+        props.add("exchangePattern");
+        props.add("lazyStartProducer");
+        props.add("privateKey");
+        props.add("pskStore");
+        props.add("publicKey");
+        props.add("recommendedCipherSuitesOnly");
+        props.add("sslContextParameters");
+        props.add("trustedRpkStore");
+        props.add("uri");
         PROPERTY_NAMES = Collections.unmodifiableSet(props);
-        SECRET_PROPERTY_NAMES = Collections.emptySet();
+        Set<String> secretProps = new HashSet<>(1);
+        secretProps.add("privateKey");
+        SECRET_PROPERTY_NAMES = Collections.unmodifiableSet(secretProps);
+        MULTI_VALUE_PREFIXES = Collections.emptySet();
     }
 
     @Override
@@ -71,6 +75,11 @@ public class CoAPEndpointUriFactory extends org.apache.camel.support.component.E
     @Override
     public Set<String> secretPropertyNames() {
         return SECRET_PROPERTY_NAMES;
+    }
+
+    @Override
+    public Set<String> multiValuePrefixes() {
+        return MULTI_VALUE_PREFIXES;
     }
 
     @Override

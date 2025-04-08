@@ -28,9 +28,10 @@ import org.apache.camel.spi.Metadata;
  * Archive files into tarballs or extract files from tarballs.
  */
 @Metadata(firstVersion = "2.16.0", label = "dataformat,transformation,file", title = "Tar File")
-@XmlRootElement(name = "tarfile")
+@XmlRootElement(name = "tarFile")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class TarFileDataFormat extends DataFormatDefinition {
+
     @XmlAttribute
     @Metadata(javaType = "java.lang.Boolean")
     private String usingIterator;
@@ -41,11 +42,11 @@ public class TarFileDataFormat extends DataFormatDefinition {
     @Metadata(javaType = "java.lang.Boolean")
     private String preservePathElements;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Long", defaultValue = "1073741824")
+    @Metadata(label = "advanced", javaType = "java.lang.Long", defaultValue = "1073741824")
     private String maxDecompressedSize;
 
     public TarFileDataFormat() {
-        super("tarfile");
+        super("tarFile");
     }
 
     public String getUsingIterator() {
@@ -65,7 +66,7 @@ public class TarFileDataFormat extends DataFormatDefinition {
     }
 
     /**
-     * If the tar file has more then one entry, the setting this option to true, allows to work with the splitter EIP,
+     * If the tar file has more than one entry, the setting this option to true, allows working with the splitter EIP,
      * to split the data using an iterator in a streaming mode.
      */
     public void setUsingIterator(String usingIterator) {
@@ -73,7 +74,7 @@ public class TarFileDataFormat extends DataFormatDefinition {
     }
 
     /**
-     * If the tar file has more then one entry, setting this option to true, allows to get the iterator even if the
+     * If the tar file has more than one entry, setting this option to true, allows to get the iterator even if the
      * directory is empty
      */
     public void setAllowEmptyDirectory(String allowEmptyDirectory) {

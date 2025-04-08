@@ -25,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -72,23 +73,11 @@ public class PackageJandexMojo extends AbstractGeneratorMojo {
         if (!classesDirectory.isDirectory()) {
             return;
         }
-        try {
-            List<Path> inputs = Files.walk(classesDirectory.toPath()).filter(f -> f.getFileName().toString().endsWith(".class"))
+        try (Stream<Path> pathStream = Files.walk(classesDirectory.toPath())) {
+            List<Path> inputs = pathStream.filter(f -> f.getFileName().toString().endsWith(".class"))
                     .collect(Collectors.toList());
             if (index.exists()) {
-                long lastmod = lastmod(index.toPath());
-                String stale = inputs.stream().filter(p -> lastmod(p) > lastmod).map(Path::toString)
-                        .collect(Collectors.joining(", "));
-                if (!stale.isEmpty()) {
-                    getLog().info("Stale files detected, re-generating index.");
-                    if (showStaleFiles) {
-                        getLog().info("Stale files: " + stale);
-                    } else if (getLog().isDebugEnabled()) {
-                        getLog().debug("Stale files: " + stale);
-                    }
-                } else {
-                    // everything is in order, skip
-                    getLog().info("Skipping index generation, everything is up to date.");
+                if (isUpToDate(inputs)) {
                     return;
                 }
             }
@@ -108,6 +97,32 @@ public class PackageJandexMojo extends AbstractGeneratorMojo {
         } catch (IOException e) {
             throw new MojoExecutionException(e.getMessage(), e);
         }
+    }
+
+    private boolean isUpToDate(List<Path> inputs) {
+        long lastMod = lastmod(index.toPath());
+
+        long staledFiles = inputs.stream().filter(p -> lastmod(p) > lastMod).count();
+
+        if (staledFiles > 0) {
+            getLog().info("Stale files detected, re-generating index.");
+
+            String stale = inputs.stream().filter(p -> lastmod(p) > lastMod).map(Path::toString)
+                    .collect(Collectors.joining(","));
+
+            if (showStaleFiles) {
+                getLog().info("Stale files: " + stale);
+            } else if (getLog().isDebugEnabled()) {
+                getLog().debug("Stale files: " + stale);
+            }
+
+            return false;
+        }
+
+        // everything is in order, skip
+        getLog().info("Skipping index generation, everything is up to date.");
+
+        return true;
     }
 
     private long lastmod(Path p) {

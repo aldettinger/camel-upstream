@@ -46,6 +46,8 @@ public class SftpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "bulkRequests": target.getConfiguration().setBulkRequests(property(camelContext, java.lang.Integer.class, value)); return true;
         case "charset": target.setCharset(property(camelContext, java.lang.String.class, value)); return true;
         case "chmod": target.getConfiguration().setChmod(property(camelContext, java.lang.String.class, value)); return true;
+        case "chmoddirectory":
+        case "chmodDirectory": target.getConfiguration().setChmodDirectory(property(camelContext, java.lang.String.class, value)); return true;
         case "ciphers": target.getConfiguration().setCiphers(property(camelContext, java.lang.String.class, value)); return true;
         case "compression": target.getConfiguration().setCompression(property(camelContext, int.class, value)); return true;
         case "connecttimeout":
@@ -106,6 +108,8 @@ public class SftpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "jschLoggingLevel": target.getConfiguration().setJschLoggingLevel(property(camelContext, org.apache.camel.LoggingLevel.class, value)); return true;
         case "keeplastmodified":
         case "keepLastModified": target.setKeepLastModified(property(camelContext, boolean.class, value)); return true;
+        case "keyexchangeprotocols":
+        case "keyExchangeProtocols": target.getConfiguration().setKeyExchangeProtocols(property(camelContext, java.lang.String.class, value)); return true;
         case "keypair":
         case "keyPair": target.getConfiguration().setKeyPair(property(camelContext, java.security.KeyPair.class, value)); return true;
         case "knownhosts":
@@ -220,7 +224,6 @@ public class SftpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "streamDownload": target.getConfiguration().setStreamDownload(property(camelContext, boolean.class, value)); return true;
         case "stricthostkeychecking":
         case "strictHostKeyChecking": target.getConfiguration().setStrictHostKeyChecking(property(camelContext, java.lang.String.class, value)); return true;
-        case "synchronous": target.setSynchronous(property(camelContext, boolean.class, value)); return true;
         case "tempfilename":
         case "tempFileName": target.setTempFileName(property(camelContext, java.lang.String.class, value)); return true;
         case "tempprefix":
@@ -269,6 +272,8 @@ public class SftpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "bulkRequests": return java.lang.Integer.class;
         case "charset": return java.lang.String.class;
         case "chmod": return java.lang.String.class;
+        case "chmoddirectory":
+        case "chmodDirectory": return java.lang.String.class;
         case "ciphers": return java.lang.String.class;
         case "compression": return int.class;
         case "connecttimeout":
@@ -329,6 +334,8 @@ public class SftpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "jschLoggingLevel": return org.apache.camel.LoggingLevel.class;
         case "keeplastmodified":
         case "keepLastModified": return boolean.class;
+        case "keyexchangeprotocols":
+        case "keyExchangeProtocols": return java.lang.String.class;
         case "keypair":
         case "keyPair": return java.security.KeyPair.class;
         case "knownhosts":
@@ -443,7 +450,6 @@ public class SftpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "streamDownload": return boolean.class;
         case "stricthostkeychecking":
         case "strictHostKeyChecking": return java.lang.String.class;
-        case "synchronous": return boolean.class;
         case "tempfilename":
         case "tempFileName": return java.lang.String.class;
         case "tempprefix":
@@ -493,6 +499,8 @@ public class SftpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "bulkRequests": return target.getConfiguration().getBulkRequests();
         case "charset": return target.getCharset();
         case "chmod": return target.getConfiguration().getChmod();
+        case "chmoddirectory":
+        case "chmodDirectory": return target.getConfiguration().getChmodDirectory();
         case "ciphers": return target.getConfiguration().getCiphers();
         case "compression": return target.getConfiguration().getCompression();
         case "connecttimeout":
@@ -553,6 +561,8 @@ public class SftpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "jschLoggingLevel": return target.getConfiguration().getJschLoggingLevel();
         case "keeplastmodified":
         case "keepLastModified": return target.isKeepLastModified();
+        case "keyexchangeprotocols":
+        case "keyExchangeProtocols": return target.getConfiguration().getKeyExchangeProtocols();
         case "keypair":
         case "keyPair": return target.getConfiguration().getKeyPair();
         case "knownhosts":
@@ -667,7 +677,6 @@ public class SftpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "streamDownload": return target.getConfiguration().isStreamDownload();
         case "stricthostkeychecking":
         case "strictHostKeyChecking": return target.getConfiguration().getStrictHostKeyChecking();
-        case "synchronous": return target.isSynchronous();
         case "tempfilename":
         case "tempFileName": return target.getTempFileName();
         case "tempprefix":

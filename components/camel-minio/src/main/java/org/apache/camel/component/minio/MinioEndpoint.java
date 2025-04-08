@@ -16,13 +16,6 @@
  */
 package org.apache.camel.component.minio;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
-
 import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
@@ -32,17 +25,12 @@ import io.minio.StatObjectResponse;
 import org.apache.camel.Category;
 import org.apache.camel.Component;
 import org.apache.camel.Consumer;
-import org.apache.camel.Exchange;
-import org.apache.camel.ExchangePattern;
-import org.apache.camel.ExtendedExchange;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.support.ScheduledPollEndpoint;
-import org.apache.camel.support.SynchronizationAdapter;
-import org.apache.camel.util.IOHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,7 +40,7 @@ import static org.apache.camel.util.ObjectHelper.isNotEmpty;
  * Store and retrieve objects from Minio Storage Service using Minio SDK.
  */
 @UriEndpoint(firstVersion = "3.5.0", scheme = "minio", title = "Minio", syntax = "minio:bucketName",
-             category = { Category.CLOUD, Category.FILE })
+             category = { Category.CLOUD, Category.FILE }, headersClass = MinioConstants.class)
 public class MinioEndpoint extends ScheduledPollEndpoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(MinioEndpoint.class);
@@ -123,37 +111,6 @@ public class MinioEndpoint extends ScheduledPollEndpoint {
         super.doStop();
     }
 
-    public Exchange createExchange(InputStream minioObject, String objectName) throws Exception {
-        return createExchange(getExchangePattern(), minioObject, objectName);
-    }
-
-    public Exchange createExchange(ExchangePattern pattern, InputStream minioObject, String objectName) throws Exception {
-        LOG.trace("Getting object with objectName {} from bucket {}...", objectName, getConfiguration().getBucketName());
-
-        Exchange exchange = super.createExchange(pattern);
-        Message message = exchange.getIn();
-        LOG.trace("Got object!");
-
-        getObjectStat(objectName, message);
-
-        if (getConfiguration().isIncludeBody()) {
-            message.setBody(readInputStream(minioObject));
-            if (getConfiguration().isAutoCloseBody()) {
-                exchange.adapt(ExtendedExchange.class).addOnCompletion(new SynchronizationAdapter() {
-                    @Override
-                    public void onDone(Exchange exchange) {
-                        IOHelper.close(minioObject);
-                    }
-                });
-            }
-        } else {
-            message.setBody(null);
-            IOHelper.close(minioObject);
-        }
-
-        return exchange;
-    }
-
     public MinioConfiguration getConfiguration() {
         return configuration;
     }
@@ -196,17 +153,6 @@ public class MinioEndpoint extends ScheduledPollEndpoint {
         }
     }
 
-    private String readInputStream(InputStream minioObject) throws IOException {
-        StringBuilder textBuilder = new StringBuilder();
-        try (Reader reader = new BufferedReader(new InputStreamReader(minioObject, StandardCharsets.UTF_8))) {
-            int c;
-            while ((c = reader.read()) != -1) {
-                textBuilder.append((char) c);
-            }
-        }
-        return textBuilder.toString();
-    }
-
     private boolean bucketExists(String bucketName) throws Exception {
         return minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucketName).build());
     }
@@ -227,7 +173,7 @@ public class MinioEndpoint extends ScheduledPollEndpoint {
         LOG.trace("Bucket policy updated");
     }
 
-    private void getObjectStat(String objectName, Message message) throws Exception {
+    void getObjectStat(String objectName, Message message) throws Exception {
 
         String bucketName = getConfiguration().getBucketName();
         StatObjectArgs.Builder statObjectRequest = StatObjectArgs.builder().bucket(bucketName).object(objectName);

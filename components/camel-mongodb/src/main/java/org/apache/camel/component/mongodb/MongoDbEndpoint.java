@@ -27,12 +27,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mongodb.ReadPreference;
 import com.mongodb.WriteConcern;
 import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import org.apache.camel.Category;
 import org.apache.camel.Consumer;
-import org.apache.camel.Exchange;
-import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.spi.Metadata;
@@ -59,7 +58,7 @@ import static org.apache.camel.component.mongodb.MongoDbOutputType.MongoIterable
  * Perform operations on MongoDB documents and collections.
  */
 @UriEndpoint(firstVersion = "2.19.0", scheme = "mongodb", title = "MongoDB", syntax = "mongodb:connectionBean",
-             category = { Category.DATABASE, Category.NOSQL })
+             category = { Category.DATABASE, Category.NOSQL }, headersClass = MongoDbConstants.class)
 public class MongoDbEndpoint extends DefaultEndpoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(MongoDbEndpoint.class);
@@ -67,9 +66,18 @@ public class MongoDbEndpoint extends DefaultEndpoint {
     @UriParam(description = "Sets the connection bean used as a client for connecting to a database.")
     private MongoClient mongoConnection;
 
-    @UriPath(description = "Sets the connection bean reference used to lookup a client for connecting to a database.")
+    @UriPath(description = "Sets the connection bean reference used to lookup a client for connecting to a database if no hosts parameter is present.")
     @Metadata(required = true)
     private String connectionBean;
+
+    @UriParam(label = "security", secret = true)
+    private String username;
+    @UriParam(label = "security", secret = true)
+    private String password;
+    @UriParam
+    private String hosts;
+    @UriParam(label = "security")
+    private String authSource;
     @UriParam
     private String database;
     @UriParam
@@ -95,22 +103,20 @@ public class MongoDbEndpoint extends DefaultEndpoint {
     private String consumerType;
     @UriParam(label = "advanced", defaultValue = "1000", javaType = "java.time.Duration")
     private long cursorRegenerationDelay = 1000L;
-    @UriParam(label = "tail")
+    @UriParam(label = "consumer,tail")
     private String tailTrackIncreasingField;
-
-    @UriParam(label = "changeStream")
+    @UriParam(label = "consumer,changeStream")
     private String streamFilter;
-
     // persistent tail tracking
-    @UriParam(label = "tail")
+    @UriParam(label = "consumer,tail")
     private boolean persistentTailTracking;
-    @UriParam(label = "tail")
+    @UriParam(label = "consumer,tail")
     private String persistentId;
-    @UriParam(label = "tail")
+    @UriParam(label = "consumer,tail")
     private String tailTrackDb;
-    @UriParam(label = "tail")
+    @UriParam(label = "consumer,tail")
     private String tailTrackCollection;
-    @UriParam(label = "tail")
+    @UriParam(label = "consumer,tail")
     private String tailTrackField;
     @UriParam(label = "common")
     private MongoDbOutputType outputType;
@@ -229,7 +235,7 @@ public class MongoDbEndpoint extends DefaultEndpoint {
      */
     public void initializeConnection() throws CamelMongoDbException {
         LOG.info("Initialising MongoDb endpoint: {}", this);
-        if (database == null || (collection == null && !(getDbStats.equals(operation) || command.equals(operation)))) {
+        if (database == null || collection == null && !(getDbStats.equals(operation) || command.equals(operation))) {
             throw new CamelMongoDbException("Missing required endpoint configuration: database and/or collection");
         }
 
@@ -256,7 +262,7 @@ public class MongoDbEndpoint extends DefaultEndpoint {
 
             LOG.debug("MongoDb component initialised and endpoint bound to MongoDB collection with the following parameters. "
                       + "Cluster description: {}, Db: {}, Collection: {}",
-                    new Object[] { mongoConnection.getClusterDescription(), mongoDatabase.getName(), collection });
+                    mongoConnection.getClusterDescription(), mongoDatabase.getName(), collection);
 
             try {
                 if (ObjectHelper.isNotEmpty(collectionIndex)) {
@@ -318,16 +324,6 @@ public class MongoDbEndpoint extends DefaultEndpoint {
         }
     }
 
-    public Exchange createMongoDbExchange(Document dbObj) {
-        Exchange exchange = super.createExchange();
-        Message message = exchange.getIn();
-        message.setHeader(MongoDbConstants.DATABASE, database);
-        message.setHeader(MongoDbConstants.COLLECTION, collection);
-        message.setHeader(MongoDbConstants.FROM_TAILABLE, true);
-        message.setBody(dbObj);
-        return exchange;
-    }
-
     @Override
     protected void doStart() throws Exception {
         if (mongoConnection == null) {
@@ -339,9 +335,23 @@ public class MongoDbEndpoint extends DefaultEndpoint {
     }
 
     private MongoClient resolveMongoConnection() {
-        MongoClient mongoClient = CamelContextHelper.mandatoryLookup(getCamelContext(), connectionBean, MongoClient.class);
-        LOG.debug("Resolved the connection provided by {} context reference as {}", connectionBean,
-                mongoConnection);
+        MongoClient mongoClient;
+        if (this.hosts != null) {
+            String credentials = username == null ? "" : username;
+
+            if (!credentials.equals("")) {
+                credentials += this.password == null ? "@" : ":" + password + "@";
+            }
+
+            String connectionOptions = authSource == null ? "" : "/?authSource=" + authSource;
+
+            mongoClient = MongoClients.create(String.format("mongodb://%s%s%s", credentials, hosts, connectionOptions));
+            LOG.debug("Connection created using provided credentials");
+        } else {
+            mongoClient = CamelContextHelper.mandatoryLookup(getCamelContext(), connectionBean, MongoClient.class);
+            LOG.debug("Resolved the connection provided by {} context reference as {}", connectionBean,
+                    mongoConnection);
+        }
 
         return mongoClient;
     }
@@ -448,10 +458,10 @@ public class MongoDbEndpoint extends DefaultEndpoint {
      * otherwise static endpoint URI. It is disabled by default to boost performance. Enabling it will take a minimal
      * performance hit.
      *
-     * @see              MongoDbConstants#DATABASE
-     * @see              MongoDbConstants#COLLECTION
      * @param dynamicity true or false indicated whether target database and collection should be calculated dynamically
      *                   based on Exchange properties.
+     * @see              MongoDbConstants#DATABASE
+     * @see              MongoDbConstants#COLLECTION
      */
     public void setDynamicity(boolean dynamicity) {
         this.dynamicity = dynamicity;
@@ -626,7 +636,7 @@ public class MongoDbEndpoint extends DefaultEndpoint {
     /**
      * Convert the output of the producer to the selected type : DocumentList Document or MongoIterable. DocumentList or
      * MongoIterable applies to findAll and aggregate. Document applies to all other operations.
-     * 
+     *
      * @param outputType
      */
     public void setOutputType(MongoDbOutputType outputType) {
@@ -694,4 +704,57 @@ public class MongoDbEndpoint extends DefaultEndpoint {
         return ReadPreference.valueOf(getReadPreference());
     }
 
+    public String getUsername() {
+        return username;
+    }
+
+    /**
+     * Username for mongodb connection
+     *
+     * @param username
+     */
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    /**
+     * User password for mongodb connection
+     *
+     * @param password
+     */
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getHosts() {
+        return hosts;
+    }
+
+    /**
+     * Host address of mongodb server in `[host]:[port]` format. It's possible also use more than one address, as comma
+     * separated list of hosts: `[host1]:[port1],[host2]:[port2]`. If the hosts parameter is specified, the provided
+     * connectionBean is ignored.
+     *
+     * @param hosts
+     */
+    public void setHosts(String hosts) {
+        this.hosts = hosts;
+    }
+
+    public String getAuthSource() {
+        return authSource;
+    }
+
+    /**
+     * The database name associated with the user's credentials.
+     * 
+     * @param authSource
+     */
+    public void setAuthSource(String authSource) {
+        this.authSource = authSource;
+    }
 }

@@ -16,28 +16,56 @@
  */
 package org.apache.camel.test.infra.arangodb.services;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.camel.test.infra.common.services.SimpleTestServiceBuilder;
+import org.apache.camel.test.infra.common.services.SingletonService;
+import org.junit.jupiter.api.extension.ExtensionContext;
 
 public final class ArangoDBServiceFactory {
-    private static final Logger LOG = LoggerFactory.getLogger(ArangoDBServiceFactory.class);
+    private static class SingletonArangoDBService extends SingletonService<ArangoDBService> implements ArangoDBService {
+        public SingletonArangoDBService(ArangoDBService service, String name) {
+            super(service, name);
+        }
+
+        @Override
+        public void beforeAll(ExtensionContext extensionContext) {
+            addToStore(extensionContext);
+        }
+
+        @Override
+        public void afterAll(ExtensionContext extensionContext) {
+            // NO-OP
+        }
+
+        @Override
+        public int getPort() {
+            return getService().getPort();
+        }
+
+        @Override
+        public String getHost() {
+            return getService().getHost();
+        }
+    }
 
     private ArangoDBServiceFactory() {
 
     }
 
+    public static SimpleTestServiceBuilder<ArangoDBService> builder() {
+        return new SimpleTestServiceBuilder<>("arangodb");
+    }
+
     public static ArangoDBService createService() {
-        String instanceType = System.getProperty("arangodb.instance.type");
+        return builder()
+                .addLocalMapping(ArangoDBLocalContainerService::new)
+                .addRemoteMapping(ArangoDBRemoteService::new)
+                .build();
+    }
 
-        if (instanceType == null || instanceType.equals("local-arangodb-container")) {
-            return new ArangoDBLocalContainerService();
-        }
-
-        if (instanceType.equals("remote")) {
-            return new ArangoDBRemoteService();
-        }
-
-        LOG.error("ArangoDB instance must be one of 'local-arangodb-container' or 'remote");
-        throw new UnsupportedOperationException("Invalid ArangoDB instance type");
+    public static ArangoDBService createSingletonService() {
+        return builder()
+                .addLocalMapping(() -> new SingletonArangoDBService(new ArangoDBLocalContainerService(), "arangoDB"))
+                .addRemoteMapping(ArangoDBRemoteService::new)
+                .build();
     }
 }

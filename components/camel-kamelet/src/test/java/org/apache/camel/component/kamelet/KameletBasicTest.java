@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class KameletBasicTest extends CamelTestSupport {
+
     @Test
     public void canProduceToKamelet() {
         String body = UUID.randomUUID().toString();
@@ -67,10 +68,10 @@ public class KameletBasicTest extends CamelTestSupport {
     // **********************************************
 
     @Override
-    protected RoutesBuilder createRouteBuilder() throws Exception {
+    protected RoutesBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 routeTemplate("setBody")
                         .templateParameter("bodyValue")
                         .from("kamelet:source")

@@ -16,6 +16,8 @@
  */
 package org.apache.camel.component.sql.stored;
 
+import java.util.Map;
+
 import javax.sql.DataSource;
 
 import org.apache.camel.Consumer;
@@ -34,7 +36,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Perform SQL queries as a JDBC Stored Procedures using Spring JDBC.
  */
 @UriEndpoint(firstVersion = "2.17.0", scheme = "sql-stored", title = "SQL Stored Procedure", syntax = "sql-stored:template",
-             producerOnly = true, label = "database,sql")
+             producerOnly = true, label = "database,sql", headersClass = SqlStoredConstants.class)
 public class SqlStoredEndpoint extends DefaultEndpoint {
 
     private CallableStatementWrapperFactory wrapperFactory;
@@ -58,6 +60,9 @@ public class SqlStoredEndpoint extends DefaultEndpoint {
     private String outputHeader;
     @UriParam(description = "Whether this call is for a function.")
     private boolean function;
+    @UriParam(label = "advanced", prefix = "template.", multiValue = true,
+              description = "Configures the Spring JdbcTemplate with the key/values from the Map")
+    private Map<String, Object> templateOptions;
 
     public SqlStoredEndpoint(String uri, SqlStoredComponent component, JdbcTemplate jdbcTemplate) {
         super(uri, component);
@@ -163,4 +168,11 @@ public class SqlStoredEndpoint extends DefaultEndpoint {
         this.function = function;
     }
 
+    public Map<String, Object> getTemplateOptions() {
+        return templateOptions;
+    }
+
+    public void setTemplateOptions(Map<String, Object> templateOptions) {
+        this.templateOptions = templateOptions;
+    }
 }

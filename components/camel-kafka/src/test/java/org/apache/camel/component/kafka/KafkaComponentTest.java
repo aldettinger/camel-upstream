@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 public class KafkaComponentTest extends CamelTestSupport {
 
     @Test
-    public void testPropertiesSet() throws Exception {
+    public void testPropertiesSet() {
         String uri = "kafka:mytopic?brokers=broker1:12345,broker2:12566&partitioner=com.class.Party";
 
         KafkaEndpoint endpoint = context.getEndpoint(uri, KafkaEndpoint.class);
@@ -46,7 +46,7 @@ public class KafkaComponentTest extends CamelTestSupport {
     }
 
     @Test
-    public void testBrokersOnComponent() throws Exception {
+    public void testBrokersOnComponent() {
         KafkaComponent kafka = context.getComponent("kafka", KafkaComponent.class);
         kafka.getConfiguration().setBrokers("broker1:12345,broker2:12566");
 
@@ -117,6 +117,7 @@ public class KafkaComponentTest extends CamelTestSupport {
         assertEquals(Integer.valueOf(1), endpoint.getConfiguration().getLingerMs());
         assertEquals(Integer.valueOf(100), endpoint.getConfiguration().getMaxRequestSize());
         assertEquals(100, endpoint.getConfiguration().getRequestTimeoutMs().intValue());
+        assertEquals(200, endpoint.getConfiguration().getDeliveryTimeoutMs().intValue());
         assertEquals(Integer.valueOf(1029), endpoint.getConfiguration().getMetadataMaxAgeMs());
         assertEquals(Integer.valueOf(23), endpoint.getConfiguration().getReceiveBufferBytes());
         assertEquals(Integer.valueOf(234), endpoint.getConfiguration().getReconnectBackoffMs());
@@ -154,7 +155,7 @@ public class KafkaComponentTest extends CamelTestSupport {
     }
 
     @Test
-    public void testAllProducerKeys() throws Exception {
+    public void testAllProducerKeysPlainText() throws Exception {
         Map<String, Object> params = new HashMap<>();
 
         String uri = "kafka:mytopic?brokers=dev1:12345,dev2:12566";
@@ -178,6 +179,7 @@ public class KafkaComponentTest extends CamelTestSupport {
         props.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, KafkaConstants.KAFKA_DEFAULT_PARTITIONER);
         props.put(ProducerConfig.RECEIVE_BUFFER_CONFIG, "32768");
         props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "30000");
+        props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, "120000");
         props.put(ProducerConfig.SEND_BUFFER_CONFIG, "131072");
         props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "5");
         props.put(ProducerConfig.METADATA_MAX_AGE_CONFIG, "300000");
@@ -190,20 +192,55 @@ public class KafkaComponentTest extends CamelTestSupport {
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, KafkaConstants.KAFKA_DEFAULT_SERIALIZER);
         props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "false");
         props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "PLAINTEXT");
-        props.put(SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, "TLSv1.2, TLSv1.1, TLSv1");
-        props.put(SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, "JKS");
-        props.put(SslConfigs.SSL_PROTOCOL_CONFIG, "TLS");
-        props.put(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, "JKS");
+
+        return props;
+    }
+
+    private Properties getProducerKeysSASL() {
+        Properties props = getProducerKeys();
+
         props.put(SaslConfigs.SASL_KERBEROS_KINIT_CMD, "/usr/bin/kinit");
         props.put(SaslConfigs.SASL_KERBEROS_MIN_TIME_BEFORE_RELOGIN, "60000");
         props.put(SaslConfigs.SASL_KERBEROS_TICKET_RENEW_JITTER, "0.05");
         props.put(SaslConfigs.SASL_KERBEROS_TICKET_RENEW_WINDOW_FACTOR, "0.8");
         props.put(SaslConfigs.SASL_MECHANISM, "PLAIN");
+
+        return props;
+    }
+
+    private Properties getProducerKeysSSL() {
+        Properties props = getProducerKeys();
+
+        props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SSL");
+        props.put(SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, "TLSv1.2, TLSv1.1, TLSv1");
+        props.put(SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, "JKS");
+        props.put(SslConfigs.SSL_PROTOCOL_CONFIG, "TLS");
+        props.put(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, "JKS");
         props.put(SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG, "SunX509");
         props.put(SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, "PKIX");
         props.put(SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "https");
 
         return props;
+    }
+
+    @Test
+    public void testAllProducerKeysPlainTextSsl() throws Exception {
+        Map<String, Object> params = new HashMap<>();
+
+        String uri = "kafka:mytopic?brokers=dev1:12345,dev2:12566&securityProtocol=SSL";
+
+        KafkaEndpoint endpoint = (KafkaEndpoint) context.getComponent("kafka").createEndpoint(uri, params);
+        assertEquals(endpoint.getConfiguration().createProducerProperties().keySet(), getProducerKeysSSL().keySet());
+    }
+
+    @Test
+    public void testAllProducerKeysPlainTextSasl() throws Exception {
+        Map<String, Object> params = new HashMap<>();
+
+        String uri = "kafka:mytopic?brokers=dev1:12345,dev2:12566&securityProtocol=SASL_PLAINTEXT";
+
+        KafkaEndpoint endpoint = (KafkaEndpoint) context.getComponent("kafka").createEndpoint(uri, params);
+        assertEquals(endpoint.getConfiguration().createProducerProperties().keySet(), getProducerKeysSASL().keySet());
     }
 
     private void setProducerProperty(Map<String, Object> params) {
@@ -218,6 +255,7 @@ public class KafkaComponentTest extends CamelTestSupport {
         params.put("maxRequestSize", 100);
         params.put("receiveBufferBytes", 23);
         params.put("requestTimeoutMs", 100);
+        params.put("deliveryTimeoutMs", 200);
         params.put("sendBufferBytes", 765);
         params.put("maxInFlightRequest", 1);
         params.put("metadataMaxAgeMs", 1029);
@@ -252,7 +290,7 @@ public class KafkaComponentTest extends CamelTestSupport {
     }
 
     @Test
-    public void testCreateProducerConfigTruststorePassword() throws Exception {
+    public void testCreateProducerConfigTruststorePassword() {
         KeyStoreParameters keyStoreParameters = new KeyStoreParameters();
         keyStoreParameters.setPassword("my-password");
 
@@ -272,7 +310,7 @@ public class KafkaComponentTest extends CamelTestSupport {
     }
 
     @Test
-    public void testCreateConsumerConfigTruststorePassword() throws Exception {
+    public void testCreateConsumerConfigTruststorePassword() {
         KeyStoreParameters keyStoreParameters = new KeyStoreParameters();
         keyStoreParameters.setPassword("my-password");
 
@@ -290,5 +328,4 @@ public class KafkaComponentTest extends CamelTestSupport {
         assertEquals("my-password", props.getProperty("ssl.truststore.password"));
         assertNull(props.getProperty("ssl.keystore.password"));
     }
-
 }

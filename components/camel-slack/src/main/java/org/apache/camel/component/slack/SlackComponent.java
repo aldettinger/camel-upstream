@@ -30,6 +30,9 @@ public class SlackComponent extends DefaultComponent {
     @Metadata(label = "webhook")
     private String webhookUrl;
 
+    @Metadata(label = "token")
+    private String token;
+
     public SlackComponent() {
         this(null);
     }
@@ -55,5 +58,17 @@ public class SlackComponent extends DefaultComponent {
      */
     public void setWebhookUrl(String webhookUrl) {
         this.webhookUrl = webhookUrl;
+    }
+
+    public String getToken() {
+        return token;
+    }
+
+    /**
+     * The token to access Slack. This app needs to have channels:history, groups:history, im:history, mpim:history,
+     * channels:read, groups:read, im:read and mpim:read permissions. The User OAuth Token is the kind of token needed.
+     */
+    public void setToken(String token) {
+        this.token = token;
     }
 }

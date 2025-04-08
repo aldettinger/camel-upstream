@@ -16,6 +16,7 @@
  */
 package org.apache.camel.main;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -28,9 +29,15 @@ import org.apache.camel.ExtendedCamelContext;
 import org.apache.camel.TypeConverters;
 import org.apache.camel.cloud.ServiceRegistry;
 import org.apache.camel.cluster.CamelClusterService;
+import org.apache.camel.console.DevConsole;
+import org.apache.camel.console.DevConsoleRegistry;
 import org.apache.camel.health.HealthCheckRegistry;
 import org.apache.camel.health.HealthCheckRepository;
 import org.apache.camel.impl.debugger.BacklogTracer;
+import org.apache.camel.impl.engine.PooledExchangeFactory;
+import org.apache.camel.impl.engine.PooledProcessorExchangeFactory;
+import org.apache.camel.impl.engine.PrototypeExchangeFactory;
+import org.apache.camel.impl.engine.PrototypeProcessorExchangeFactory;
 import org.apache.camel.model.Model;
 import org.apache.camel.model.ModelCamelContext;
 import org.apache.camel.model.ModelLifecycleStrategy;
@@ -40,6 +47,7 @@ import org.apache.camel.spi.Debugger;
 import org.apache.camel.spi.EndpointStrategy;
 import org.apache.camel.spi.EventFactory;
 import org.apache.camel.spi.EventNotifier;
+import org.apache.camel.spi.ExchangeFactory;
 import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.FactoryFinderResolver;
 import org.apache.camel.spi.InflightRepository;
@@ -66,9 +74,19 @@ import org.apache.camel.spi.ThreadPoolFactory;
 import org.apache.camel.spi.ThreadPoolProfile;
 import org.apache.camel.spi.UnitOfWorkFactory;
 import org.apache.camel.spi.UuidGenerator;
+import org.apache.camel.support.ClassicUuidGenerator;
+import org.apache.camel.support.DefaultUuidGenerator;
+import org.apache.camel.support.OffUuidGenerator;
+import org.apache.camel.support.RouteWatcherReloadStrategy;
+import org.apache.camel.support.ShortUuidGenerator;
+import org.apache.camel.support.SimpleUuidGenerator;
 import org.apache.camel.support.jsse.GlobalSSLContextParametersSupplier;
 import org.apache.camel.support.startup.LoggingStartupStepRecorder;
 import org.apache.camel.util.ObjectHelper;
+import org.apache.camel.vault.AwsVaultConfiguration;
+import org.apache.camel.vault.AzureVaultConfiguration;
+import org.apache.camel.vault.GcpVaultConfiguration;
+import org.apache.camel.vault.VaultConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -120,6 +138,18 @@ public final class DefaultConfigurationConfigurer {
         }
         ecc.getBeanIntrospection().afterPropertiesConfigured(camelContext);
 
+        if ("pooled".equals(config.getExchangeFactory())) {
+            ecc.setExchangeFactory(new PooledExchangeFactory());
+            ecc.setProcessorExchangeFactory(new PooledProcessorExchangeFactory());
+        } else if ("prototype".equals(config.getExchangeFactory())) {
+            ecc.setExchangeFactory(new PrototypeExchangeFactory());
+            ecc.setProcessorExchangeFactory(new PrototypeProcessorExchangeFactory());
+        }
+        ecc.getExchangeFactory().setCapacity(config.getExchangeFactoryCapacity());
+        ecc.getProcessorExchangeFactory().setCapacity(config.getExchangeFactoryCapacity());
+        ecc.getExchangeFactory().setStatisticsEnabled(config.isExchangeFactoryStatisticsEnabled());
+        ecc.getProcessorExchangeFactory().setStatisticsEnabled(config.isExchangeFactoryStatisticsEnabled());
+
         if (!config.isJmxEnabled()) {
             camelContext.disableJMX();
         }
@@ -147,6 +177,7 @@ public final class DefaultConfigurationConfigurer {
 
         // stream caching
         camelContext.setStreamCaching(config.isStreamCachingEnabled());
+        camelContext.getStreamCachingStrategy().setSpoolEnabled(config.isStreamCachingSpoolEnabled());
         camelContext.getStreamCachingStrategy().setAnySpoolRules(config.isStreamCachingAnySpoolRules());
         camelContext.getStreamCachingStrategy().setBufferSize(config.getStreamCachingBufferSize());
         camelContext.getStreamCachingStrategy()
@@ -176,7 +207,19 @@ public final class DefaultConfigurationConfigurer {
                     .setSpoolUsedHeapMemoryThreshold(config.getStreamCachingSpoolUsedHeapMemoryThreshold());
         }
 
-        camelContext.setMessageHistory(config.isMessageHistory());
+        if ("default".equals(config.getUuidGenerator())) {
+            camelContext.setUuidGenerator(new DefaultUuidGenerator());
+        } else if ("short".equals(config.getUuidGenerator())) {
+            camelContext.setUuidGenerator(new ShortUuidGenerator());
+        } else if ("classic".equals(config.getUuidGenerator())) {
+            camelContext.setUuidGenerator(new ClassicUuidGenerator());
+        } else if ("simple".equals(config.getUuidGenerator())) {
+            camelContext.setUuidGenerator(new SimpleUuidGenerator());
+        } else if ("off".equals(config.getUuidGenerator())) {
+            camelContext.setUuidGenerator(new OffUuidGenerator());
+            LOG.warn("Using OffUuidGenerator (Only intended for development purposes)");
+        }
+
         camelContext.setLogMask(config.isLogMask());
         camelContext.setLogExhaustedMessageBody(config.isLogExhaustedMessageBody());
         camelContext.setAutoStartup(config.isAutoStartup());
@@ -185,9 +228,20 @@ public final class DefaultConfigurationConfigurer {
         camelContext.setAutowiredEnabled(config.isAutowiredEnabled());
         camelContext.setUseBreadcrumb(config.isUseBreadcrumb());
         camelContext.setUseDataType(config.isUseDataType());
+        camelContext.setDumpRoutes(config.isDumpRoutes());
         camelContext.setUseMDCLogging(config.isUseMdcLogging());
         camelContext.setMDCLoggingKeysPattern(config.getMdcLoggingKeysPattern());
         camelContext.setLoadTypeConverters(config.isLoadTypeConverters());
+        camelContext.setLoadHealthChecks(config.isLoadHealthChecks());
+        camelContext.setDevConsole(config.isDevConsoleEnabled());
+        camelContext.setModeline(config.isModeline());
+        if (config.isRoutesReloadEnabled()) {
+            RouteWatcherReloadStrategy reloader = new RouteWatcherReloadStrategy(
+                    config.getRoutesReloadDirectory(), config.isRoutesReloadDirectoryRecursive());
+            reloader.setPattern(config.getRoutesReloadPattern());
+            reloader.setRemoveAllRoutes(config.isRoutesReloadRemoveAllRoutes());
+            camelContext.addService(reloader);
+        }
 
         if (camelContext.getManagementStrategy().getManagementAgent() != null) {
             camelContext.getManagementStrategy().getManagementAgent()
@@ -195,7 +249,22 @@ public final class DefaultConfigurationConfigurer {
             camelContext.getManagementStrategy().getManagementAgent()
                     .setStatisticsLevel(config.getJmxManagementStatisticsLevel());
             camelContext.getManagementStrategy().getManagementAgent()
+                    .setMBeansLevel(config.getJmxManagementMBeansLevel());
+            camelContext.getManagementStrategy().getManagementAgent()
                     .setManagementNamePattern(config.getJmxManagementNamePattern());
+        }
+        if (config.isCamelEventsTimestampEnabled()) {
+            camelContext.getManagementStrategy().getEventFactory().setTimestampEnabled(true);
+        }
+
+        // global options
+        if (config.getGlobalOptions() != null) {
+            Map<String, String> map = camelContext.getGlobalOptions();
+            if (map == null) {
+                map = new HashMap<>();
+            }
+            map.putAll(config.getGlobalOptions());
+            camelContext.setGlobalOptions(map);
         }
 
         // global endpoint configurations
@@ -203,9 +272,23 @@ public final class DefaultConfigurationConfigurer {
         camelContext.getGlobalEndpointConfiguration().setBridgeErrorHandler(config.isEndpointBridgeErrorHandler());
         camelContext.getGlobalEndpointConfiguration().setLazyStartProducer(config.isEndpointLazyStartProducer());
 
+        // debug may be enabled via camel-debug JAR on classpath so if config is false (default)
+        // then do not change setting on camel-context
+        if (config.isDebugging()) {
+            camelContext.setDebugging(true);
+        }
+        if (config.isMessageHistory()) {
+            camelContext.setMessageHistory(true);
+        }
+        if (config.isSourceLocationEnabled()) {
+            camelContext.setSourceLocationEnabled(true);
+        }
+
         camelContext.setBacklogTracing(config.isBacklogTracing());
         camelContext.setTracing(config.isTracing());
+        camelContext.setTracingStandby(config.isTracingStandby());
         camelContext.setTracingPattern(config.getTracingPattern());
+        camelContext.setTracingLoggingFormat(config.getTracingLoggingFormat());
 
         if (config.getThreadNamePattern() != null) {
             camelContext.getExecutorServiceManager().setThreadNamePattern(config.getThreadNamePattern());
@@ -257,8 +340,7 @@ public final class DefaultConfigurationConfigurer {
      * Performs additional configuration to lookup beans of Camel types to configure additional configurations on the
      * Camel context.
      * <p/>
-     * Similar code in camel-core-xml module in class org.apache.camel.core.xml.AbstractCamelContextFactoryBean or in
-     * camel-spring-boot module in class org.apache.camel.spring.boot.CamelAutoConfiguration.
+     * Similar code in camel-core-xml module in class org.apache.camel.core.xml.AbstractCamelContextFactoryBean.
      */
     public static void afterConfigure(final CamelContext camelContext) throws Exception {
         final Registry registry = camelContext.getRegistry();
@@ -357,6 +439,10 @@ public final class DefaultConfigurationConfigurer {
         if (ss != null) {
             ecc.setShutdownStrategy(ss);
         }
+        ExchangeFactory exf = getSingleBeanOfType(registry, ExchangeFactory.class);
+        if (exf != null) {
+            ecc.setExchangeFactory(exf);
+        }
         Set<TypeConverters> tcs = registry.findByType(TypeConverters.class);
         if (!tcs.isEmpty()) {
             tcs.forEach(t -> camelContext.getTypeConverterRegistry().addTypeConverters(t));
@@ -407,12 +493,10 @@ public final class DefaultConfigurationConfigurer {
         if (serviceRegistries != null && !serviceRegistries.isEmpty()) {
             for (Map.Entry<String, ServiceRegistry> entry : serviceRegistries.entrySet()) {
                 ServiceRegistry service = entry.getValue();
-
                 if (service.getId() == null) {
                     service.setGeneratedId(camelContext.getUuidGenerator().generateUuid());
                 }
-
-                LOG.info("Using ServiceRegistry with id: {} and implementation: {}", service.getId(), service);
+                LOG.info("Adding Camel Cloud ServiceRegistry with id: {} and implementation: {}", service.getId(), service);
                 camelContext.addService(service);
             }
         }
@@ -445,6 +529,41 @@ public final class DefaultConfigurationConfigurer {
                     healthCheckRegistry.register(repository);
                 }
             }
+        }
+        // dev console
+        DevConsoleRegistry devConsoleRegistry = getSingleBeanOfType(registry, DevConsoleRegistry.class);
+        if (devConsoleRegistry != null) {
+            devConsoleRegistry.setCamelContext(camelContext);
+            LOG.debug("Using DevConsoleRegistry: {}", devConsoleRegistry);
+            camelContext.setExtension(DevConsoleRegistry.class, devConsoleRegistry);
+        } else {
+            // okay attempt to inject this camel context into existing dev console (if any)
+            devConsoleRegistry = DevConsoleRegistry.get(camelContext);
+            if (devConsoleRegistry != null) {
+                devConsoleRegistry.setCamelContext(camelContext);
+            }
+        }
+        if (devConsoleRegistry != null) {
+            Set<DevConsole> consoles = registry.findByType(DevConsole.class);
+            for (DevConsole console : consoles) {
+                devConsoleRegistry.register(console);
+            }
+        }
+        // vaults
+        AwsVaultConfiguration aws = getSingleBeanOfType(registry, AwsVaultConfiguration.class);
+        if (aws != null) {
+            VaultConfiguration vault = camelContext.getVaultConfiguration();
+            vault.setAwsVaultConfiguration(aws);
+        }
+        GcpVaultConfiguration gcp = getSingleBeanOfType(registry, GcpVaultConfiguration.class);
+        if (gcp != null) {
+            VaultConfiguration vault = camelContext.getVaultConfiguration();
+            vault.setGcpVaultConfiguration(gcp);
+        }
+        AzureVaultConfiguration azure = getSingleBeanOfType(registry, AzureVaultConfiguration.class);
+        if (gcp != null) {
+            VaultConfiguration vault = camelContext.getVaultConfiguration();
+            vault.setAzureVaultConfiguration(azure);
         }
 
         // set the default thread pool profile if defined
@@ -479,16 +598,6 @@ public final class DefaultConfigurationConfigurer {
                 propertySetter.accept(bean);
             }
         });
-    }
-
-    private static <T> Consumer<T> addServiceToContext(final CamelContext camelContext) {
-        return service -> {
-            try {
-                camelContext.addService(service);
-            } catch (Exception e) {
-                throw new RuntimeException("Unable to add service to Camel context", e);
-            }
-        };
     }
 
     private static void initThreadPoolProfiles(Registry registry, CamelContext camelContext) {

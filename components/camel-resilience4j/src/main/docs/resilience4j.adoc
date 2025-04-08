@@ -1,11 +1,12 @@
-[[resilience4j-other]]
 = Resilience4j Component
-:docTitle: Resilience4j
-:artifactId: camel-resilience4j
+:doctitle: Resilience4j
+:shortname: resilience4j
+:artifactid: camel-resilience4j
 :description: Circuit Breaker EIP using Resilience4j
 :since: 3.0
-:supportLevel: Stable
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/others/resilience4j.adoc[opts=optional]
+:supportlevel: Stable
+//Manually maintained attributes
+:camel-spring-boot-name: resilience4j
 
 *Since Camel {since}*
 
@@ -25,3 +26,5 @@ for this component:
     <!-- use the same version as your Camel core version -->
 </dependency>
 ----
+
+include::spring-boot:partial$starter.adoc[]

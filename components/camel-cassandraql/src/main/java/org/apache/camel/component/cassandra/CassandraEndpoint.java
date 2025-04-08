@@ -45,7 +45,7 @@ import org.apache.camel.utils.cassandra.CassandraSessionHolder;
  * DataStax.
  */
 @UriEndpoint(firstVersion = "2.15.0", scheme = "cql", title = "Cassandra CQL", syntax = "cql:beanRef:hosts:port/keyspace",
-             category = { Category.DATABASE, Category.NOSQL })
+             category = { Category.DATABASE, Category.NOSQL }, headersClass = CassandraConstants.class)
 public class CassandraEndpoint extends ScheduledPollEndpoint {
 
     private volatile CassandraSessionHolder sessionHolder;
@@ -136,7 +136,7 @@ public class CassandraEndpoint extends ScheduledPollEndpoint {
         return sessionHolder;
     }
 
-    protected CqlSessionBuilder createSessionBuilder() throws Exception {
+    protected CqlSessionBuilder createSessionBuilder() {
         CqlSessionBuilder sessionBuilder = CqlSession.builder();
         for (String host : hosts.split(",")) {
             sessionBuilder.addContactPoint(new InetSocketAddress(host, port == null ? 9042 : port));
@@ -153,6 +153,12 @@ public class CassandraEndpoint extends ScheduledPollEndpoint {
 
         sessionBuilder.withLocalDatacenter(datacenter);
         sessionBuilder.withKeyspace(keyspace);
+
+        ClassLoader classLoader = getCamelContext().getApplicationContextClassLoader();
+        if (classLoader != null) {
+            sessionBuilder.withClassLoader(classLoader);
+        }
+
         return sessionBuilder;
     }
 
@@ -206,7 +212,7 @@ public class CassandraEndpoint extends ScheduledPollEndpoint {
     }
 
     /**
-     * Hostname(s) cassansdra server(s). Multiple hosts can be separated by comma.
+     * Hostname(s) Cassandra server(s). Multiple hosts can be separated by comma.
      */
     public void setHosts(String hosts) {
         this.hosts = hosts;
@@ -217,7 +223,7 @@ public class CassandraEndpoint extends ScheduledPollEndpoint {
     }
 
     /**
-     * Port number of cassansdra server(s)
+     * Port number of Cassandra server(s)
      */
     public void setPort(Integer port) {
         this.port = port;

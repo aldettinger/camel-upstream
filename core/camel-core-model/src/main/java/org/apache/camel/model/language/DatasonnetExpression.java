@@ -26,22 +26,19 @@ import org.apache.camel.Expression;
 import org.apache.camel.spi.Metadata;
 
 /**
- * To use DataSonnet scripts in Camel expressions or predicates.
+ * To use DataSonnet scripts for message transformations.
  */
-@Metadata(firstVersion = "3.7.0", label = "language,script", title = "DataSonnet")
+@Metadata(firstVersion = "3.7.0", label = "language,transformation", title = "DataSonnet")
 @XmlRootElement(name = "datasonnet")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class DatasonnetExpression extends ExpressionDefinition {
 
     @XmlAttribute(name = "bodyMediaType")
     private String bodyMediaType;
-
     @XmlAttribute(name = "outputMediaType")
     private String outputMediaType;
-
     @XmlAttribute(name = "resultType")
     private String resultTypeName;
-
     @XmlTransient
     private Class<?> resultType;
 

@@ -76,7 +76,7 @@ public class SalesforceConsumer extends DefaultConsumer {
     private final ObjectMapper objectMapper;
 
     private final boolean rawPayload;
-    private final Class<?> sObjectClass;
+    private Class<?> sObjectClass;
     private boolean subscribed;
     private final SubscriptionHelper subscriptionHelper;
     private final String topicName;
@@ -102,30 +102,6 @@ public class SalesforceConsumer extends DefaultConsumer {
         messageKind = MessageKind.fromTopicName(topicName);
 
         rawPayload = endpoint.getConfiguration().isRawPayload();
-
-        // get sObjectClass to convert to
-        if (!rawPayload) {
-            final String sObjectName = endpoint.getConfiguration().getSObjectName();
-            if (sObjectName != null) {
-                sObjectClass = endpoint.getComponent().getClassMap().get(sObjectName);
-                if (sObjectClass == null) {
-                    throw new IllegalArgumentException(String.format("SObject Class not found for %s", sObjectName));
-                }
-            } else {
-                final String className = endpoint.getConfiguration().getSObjectClass();
-                if (className != null) {
-                    sObjectClass = endpoint.getComponent().getCamelContext().getClassResolver().resolveClass(className);
-                    if (sObjectClass == null) {
-                        throw new IllegalArgumentException(String.format("SObject Class not found %s", className));
-                    }
-                } else {
-                    LOG.warn("Property sObjectName or sObjectClass NOT set, messages will be of type java.lang.Map");
-                    sObjectClass = null;
-                }
-            }
-        } else {
-            sObjectClass = null;
-        }
     }
 
     public String getTopicName() {
@@ -142,7 +118,7 @@ public class SalesforceConsumer extends DefaultConsumer {
             LOG.debug("Received event {} on channel {}", channel.getId(), channel.getChannelId());
         }
 
-        final Exchange exchange = endpoint.createExchange();
+        final Exchange exchange = createExchange(true);
         final org.apache.camel.Message in = exchange.getIn();
 
         switch (messageKind) {
@@ -159,27 +135,9 @@ public class SalesforceConsumer extends DefaultConsumer {
                 throw new IllegalStateException("Unknown message kind: " + messageKind);
         }
 
-        try {
-            getAsyncProcessor().process(exchange, new AsyncCallback() {
-                @Override
-                public void done(boolean doneSync) {
-                    // noop
-                    if (LOG.isTraceEnabled()) {
-                        LOG.trace("Done processing event: {} {}", channel.getId(),
-                                doneSync ? "synchronously" : "asynchronously");
-                    }
-                }
-            });
-        } catch (final Exception e) {
-            final String msg = String.format("Error processing %s: %s", exchange, e);
-            handleException(msg, new SalesforceException(msg, e));
-        } finally {
-            final Exception ex = exchange.getException();
-            if (ex != null) {
-                final String msg = String.format("Unhandled exception: %s", ex.getMessage());
-                handleException(msg, new SalesforceException(msg, ex));
-            }
-        }
+        // use default consumer callback
+        AsyncCallback cb = defaultConsumerCallback(exchange, true);
+        getAsyncProcessor().process(exchange, cb);
     }
 
     @SuppressWarnings("unchecked")
@@ -191,27 +149,28 @@ public class SalesforceConsumer extends DefaultConsumer {
         final Map<String, Object> event = (Map<String, Object>) data.get(EVENT_PROPERTY);
         final Object replayId = event.get(REPLAY_ID_PROPERTY);
         if (replayId != null) {
-            in.setHeader("CamelSalesforceReplayId", replayId);
+            in.setHeader(SalesforceConstants.HEADER_SALESFORCE_REPLAY_ID, replayId);
         }
 
-        in.setHeader("CamelSalesforceChangeEventSchema", data.get(SCHEMA_PROPERTY));
-        in.setHeader("CamelSalesforceEventType", topicName.substring(topicName.lastIndexOf('/') + 1));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_CHANGE_EVENT_SCHEMA, data.get(SCHEMA_PROPERTY));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_EVENT_TYPE, topicName.substring(topicName.lastIndexOf('/') + 1));
 
         final Map<String, Object> payload = (Map<String, Object>) data.get(PAYLOAD_PROPERTY);
         final Map<String, Object> changeEventHeader = (Map<String, Object>) payload.get("ChangeEventHeader");
-        in.setHeader("CamelSalesforceChangeType", changeEventHeader.get("changeType"));
-        in.setHeader("CamelSalesforceChangeOrigin", changeEventHeader.get("changeOrigin"));
-        in.setHeader("CamelSalesforceTransactionKey", changeEventHeader.get("transactionKey"));
-        in.setHeader("CamelSalesforceSequenceNumber", changeEventHeader.get("sequenceNumber"));
-        in.setHeader("CamelSalesforceIsTransactionEnd", changeEventHeader.get("isTransactionEnd"));
-        in.setHeader("CamelSalesforceCommitTimestamp", changeEventHeader.get("commitTimestamp"));
-        in.setHeader("CamelSalesforceCommitUser", changeEventHeader.get("commitUser"));
-        in.setHeader("CamelSalesforceCommitNumber", changeEventHeader.get("commitNumber"));
-        in.setHeader("CamelSalesforceEntityName", changeEventHeader.get("entityName"));
-        in.setHeader("CamelSalesforceRecordIds", changeEventHeader.get("recordIds"));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_CHANGE_TYPE, changeEventHeader.get("changeType"));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_CHANGE_ORIGIN, changeEventHeader.get("changeOrigin"));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_TRANSACTION_KEY, changeEventHeader.get("transactionKey"));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_SEQUENCE_NUMBER, changeEventHeader.get("sequenceNumber"));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_IS_TRANSACTION_END, changeEventHeader.get("isTransactionEnd"));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_COMMIT_TIMESTAMP, changeEventHeader.get("commitTimestamp"));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_COMMIT_USER, changeEventHeader.get("commitUser"));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_COMMIT_NUMBER, changeEventHeader.get("commitNumber"));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_ENTITY_NAME, changeEventHeader.get("entityName"));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_RECORD_IDS, changeEventHeader.get("recordIds"));
 
         if (rawPayload) {
-            in.setBody(message);
+            // getJSON is used for raw payload
+            in.setBody(message.getJSON());
         } else {
             payload.remove("ChangeEventHeader");
             in.setBody(payload);
@@ -228,19 +187,20 @@ public class SalesforceConsumer extends DefaultConsumer {
 
         final Object replayId = event.get(REPLAY_ID_PROPERTY);
         if (replayId != null) {
-            in.setHeader("CamelSalesforceReplayId", replayId);
+            in.setHeader(SalesforceConstants.HEADER_SALESFORCE_REPLAY_ID, replayId);
         }
 
-        in.setHeader("CamelSalesforcePlatformEventSchema", data.get(SCHEMA_PROPERTY));
-        in.setHeader("CamelSalesforceEventType", topicName.substring(topicName.lastIndexOf('/') + 1));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_PLATFORM_EVENT_SCHEMA, data.get(SCHEMA_PROPERTY));
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_EVENT_TYPE, topicName.substring(topicName.lastIndexOf('/') + 1));
 
         final Object payload = data.get(PAYLOAD_PROPERTY);
 
         final PlatformEvent platformEvent = objectMapper.convertValue(payload, PlatformEvent.class);
-        in.setHeader("CamelSalesforceCreatedDate", platformEvent.getCreated());
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_CREATED_DATE, platformEvent.getCreated());
 
         if (rawPayload) {
-            in.setBody(message);
+            // getJSON is used for raw payload
+            in.setBody(message.getJSON());
         } else {
             in.setBody(platformEvent);
         }
@@ -258,11 +218,11 @@ public class SalesforceConsumer extends DefaultConsumer {
         final Object createdDate = event.get(CREATED_DATE_PROPERTY);
         final Object replayId = event.get(REPLAY_ID_PROPERTY);
 
-        in.setHeader("CamelSalesforceTopicName", topicName);
-        in.setHeader("CamelSalesforceEventType", eventType);
-        in.setHeader("CamelSalesforceCreatedDate", createdDate);
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_TOPIC_NAME, topicName);
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_EVENT_TYPE, eventType);
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_CREATED_DATE, createdDate);
         if (replayId != null) {
-            in.setHeader("CamelSalesforceReplayId", replayId);
+            in.setHeader(SalesforceConstants.HEADER_SALESFORCE_REPLAY_ID, replayId);
         }
 
         // get SObject
@@ -291,10 +251,10 @@ public class SalesforceConsumer extends DefaultConsumer {
     }
 
     void setHeaders(final org.apache.camel.Message in, final Message message) {
-        in.setHeader("CamelSalesforceChannel", message.getChannel());
+        in.setHeader(SalesforceConstants.HEADER_SALESFORCE_CHANNEL, message.getChannel());
         final String clientId = message.getClientId();
         if (ObjectHelper.isNotEmpty(clientId)) {
-            in.setHeader("CamelSalesforceClientId", clientId);
+            in.setHeader(SalesforceConstants.HEADER_SALESFORCE_CLIENT_ID, clientId);
         }
     }
 
@@ -302,6 +262,7 @@ public class SalesforceConsumer extends DefaultConsumer {
     protected void doStart() throws Exception {
         super.doStart();
 
+        determineSObjectClass();
         final SalesforceEndpointConfig config = endpoint.getConfiguration();
 
         // is a query configured in the endpoint?
@@ -332,7 +293,6 @@ public class SalesforceConsumer extends DefaultConsumer {
     @Override
     protected void doStop() throws Exception {
         super.doStop();
-
         if (subscribed) {
             subscribed = false;
             // unsubscribe from topic
@@ -340,4 +300,30 @@ public class SalesforceConsumer extends DefaultConsumer {
         }
     }
 
+    // May be necessary to call from some unit tests.
+    void determineSObjectClass() {
+        // get sObjectClass to convert to
+        if (!rawPayload) {
+            final String sObjectName = endpoint.getConfiguration().getSObjectName();
+            if (sObjectName != null) {
+                sObjectClass = endpoint.getComponent().getClassMap().get(sObjectName);
+                if (sObjectClass == null) {
+                    throw new IllegalArgumentException(String.format("SObject Class not found for %s", sObjectName));
+                }
+            } else {
+                final String className = endpoint.getConfiguration().getSObjectClass();
+                if (className != null) {
+                    sObjectClass = endpoint.getComponent().getCamelContext().getClassResolver().resolveClass(className);
+                    if (sObjectClass == null) {
+                        throw new IllegalArgumentException(String.format("SObject Class not found %s", className));
+                    }
+                } else {
+                    LOG.warn("Property sObjectName or sObjectClass NOT set, messages will be of type java.lang.Map");
+                    sObjectClass = null;
+                }
+            }
+        } else {
+            sObjectClass = null;
+        }
+    }
 }

@@ -45,10 +45,10 @@ public class RestSwaggerReaderModelApiSecurityTest extends CamelTestSupport {
     private Object dummy = new Object();
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 rest("/user").tag("dude").description("User rest service")
                         // setup security definitions
                         .securityDefinitions().oauth2("petstore_auth")
@@ -89,7 +89,7 @@ public class RestSwaggerReaderModelApiSecurityTest extends CamelTestSupport {
         RestSwaggerReader reader = new RestSwaggerReader();
 
         Swagger swagger
-                = reader.read(context.getRestDefinitions(), null, config, context.getName(), new DefaultClassResolver());
+                = reader.read(context, context.getRestDefinitions(), config, context.getName(), new DefaultClassResolver());
         assertNotNull(swagger);
 
         ObjectMapper mapper = new ObjectMapper();

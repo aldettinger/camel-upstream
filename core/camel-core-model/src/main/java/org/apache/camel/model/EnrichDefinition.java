@@ -16,8 +16,6 @@
  */
 package org.apache.camel.model;
 
-import java.util.function.Supplier;
-
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
@@ -36,34 +34,42 @@ import org.apache.camel.spi.Metadata;
 @Metadata(label = "eip,transformation")
 @XmlRootElement(name = "enrich")
 @XmlAccessorType(XmlAccessType.FIELD)
-public class EnrichDefinition extends ExpressionNode {
-    @XmlAttribute(name = "strategyRef")
-    private String aggregationStrategyRef;
-    @XmlAttribute(name = "strategyMethodName")
+public class EnrichDefinition extends ExpressionNode implements AggregationStrategyAwareDefinition<EnrichDefinition> {
+
+    @XmlTransient
+    private AggregationStrategy aggregationStrategyBean;
+
+    @XmlAttribute
+    @Metadata(javaType = "org.apache.camel.AggregationStrategy")
+    private String aggregationStrategy;
+    @XmlAttribute
+    @Metadata(label = "advanced")
     private String aggregationStrategyMethodName;
-    @XmlAttribute(name = "strategyMethodAllowNull")
+    @XmlAttribute
+    @Metadata(label = "advanced")
     private String aggregationStrategyMethodAllowNull;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String aggregateOnException;
-    @XmlTransient
-    private AggregationStrategy aggregationStrategy;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String shareUnitOfWork;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Integer")
+    @Metadata(label = "advanced", javaType = "java.lang.Integer")
     private String cacheSize;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String ignoreInvalidEndpoint;
+    @XmlAttribute
+    @Metadata(label = "advanced", defaultValue = "true", javaType = "java.lang.Boolean")
+    private String allowOptimisedComponents;
 
     public EnrichDefinition() {
         this(null);
     }
 
     public EnrichDefinition(AggregationStrategy aggregationStrategy) {
-        this.aggregationStrategy = aggregationStrategy;
+        this.aggregationStrategyBean = aggregationStrategy;
     }
 
     @Override
@@ -88,17 +94,9 @@ public class EnrichDefinition extends ExpressionNode {
      * Sets the AggregationStrategy to be used to merge the reply from the external service, into a single outgoing
      * message. By default Camel will use the reply from the external service as outgoing message.
      */
+    @Override
     public EnrichDefinition aggregationStrategy(AggregationStrategy aggregationStrategy) {
         setAggregationStrategy(aggregationStrategy);
-        return this;
-    }
-
-    /**
-     * Sets the AggregationStrategy to be used to merge the reply from the external service, into a single outgoing
-     * message. By default Camel will use the reply from the external service as outgoing message.
-     */
-    public EnrichDefinition aggregationStrategy(Supplier<AggregationStrategy> aggregationStrategy) {
-        setAggregationStrategy(aggregationStrategy.get());
         return this;
     }
 
@@ -106,8 +104,9 @@ public class EnrichDefinition extends ExpressionNode {
      * Refers to an AggregationStrategy to be used to merge the reply from the external service, into a single outgoing
      * message. By default Camel will use the reply from the external service as outgoing message.
      */
-    public EnrichDefinition aggregationStrategyRef(String aggregationStrategyRef) {
-        setAggregationStrategyRef(aggregationStrategyRef);
+    @Override
+    public EnrichDefinition aggregationStrategy(String aggregationStrategy) {
+        setAggregationStrategy(aggregationStrategy);
         return this;
     }
 
@@ -208,8 +207,36 @@ public class EnrichDefinition extends ExpressionNode {
         return this;
     }
 
+    /**
+     * Whether to allow components to optimise enricher if they are {@link org.apache.camel.spi.SendDynamicAware}.
+     *
+     * @return the builder
+     */
+    public EnrichDefinition allowOptimisedComponents(boolean allowOptimisedComponents) {
+        return allowOptimisedComponents(Boolean.toString(allowOptimisedComponents));
+    }
+
+    /**
+     * Whether to allow components to optimise enricher if they are {@link org.apache.camel.spi.SendDynamicAware}.
+     *
+     * @return the builder
+     */
+    public EnrichDefinition allowOptimisedComponents(String allowOptimisedComponents) {
+        setAllowOptimisedComponents(allowOptimisedComponents);
+        return this;
+    }
+
     // Properties
     // -------------------------------------------------------------------------
+
+    public AggregationStrategy getAggregationStrategyBean() {
+        return aggregationStrategyBean;
+    }
+
+    @Override
+    public String getAggregationStrategyRef() {
+        return aggregationStrategy;
+    }
 
     /**
      * Expression that computes the endpoint uri to use as the resource endpoint to enrich from
@@ -220,12 +247,16 @@ public class EnrichDefinition extends ExpressionNode {
         super.setExpression(expression);
     }
 
-    public String getAggregationStrategyRef() {
-        return aggregationStrategyRef;
+    public String getAggregationStrategy() {
+        return aggregationStrategy;
     }
 
-    public void setAggregationStrategyRef(String aggregationStrategyRef) {
-        this.aggregationStrategyRef = aggregationStrategyRef;
+    public void setAggregationStrategy(String aggregationStrategy) {
+        this.aggregationStrategy = aggregationStrategy;
+    }
+
+    public void setAggregationStrategy(AggregationStrategy aggregationStrategy) {
+        this.aggregationStrategyBean = aggregationStrategy;
     }
 
     public String getAggregationStrategyMethodName() {
@@ -242,14 +273,6 @@ public class EnrichDefinition extends ExpressionNode {
 
     public void setAggregationStrategyMethodAllowNull(String aggregationStrategyMethodAllowNull) {
         this.aggregationStrategyMethodAllowNull = aggregationStrategyMethodAllowNull;
-    }
-
-    public AggregationStrategy getAggregationStrategy() {
-        return aggregationStrategy;
-    }
-
-    public void setAggregationStrategy(AggregationStrategy aggregationStrategy) {
-        this.aggregationStrategy = aggregationStrategy;
     }
 
     public String getAggregateOnException() {
@@ -283,4 +306,13 @@ public class EnrichDefinition extends ExpressionNode {
     public void setIgnoreInvalidEndpoint(String ignoreInvalidEndpoint) {
         this.ignoreInvalidEndpoint = ignoreInvalidEndpoint;
     }
+
+    public String getAllowOptimisedComponents() {
+        return allowOptimisedComponents;
+    }
+
+    public void setAllowOptimisedComponents(String allowOptimisedComponents) {
+        this.allowOptimisedComponents = allowOptimisedComponents;
+    }
+
 }

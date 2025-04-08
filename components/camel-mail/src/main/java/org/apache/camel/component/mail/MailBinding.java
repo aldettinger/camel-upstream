@@ -68,19 +68,27 @@ import org.slf4j.LoggerFactory;
 public class MailBinding {
 
     private static final Logger LOG = LoggerFactory.getLogger(MailBinding.class);
-    private HeaderFilterStrategy headerFilterStrategy;
+    private final HeaderFilterStrategy headerFilterStrategy;
     private ContentTypeResolver contentTypeResolver;
     private boolean decodeFilename;
+    private boolean mapMailMessage = true;
 
     public MailBinding() {
         headerFilterStrategy = new DefaultHeaderFilterStrategy();
     }
 
+    @Deprecated
     public MailBinding(HeaderFilterStrategy headerFilterStrategy, ContentTypeResolver contentTypeResolver,
                        boolean decodeFilename) {
+        this(headerFilterStrategy, contentTypeResolver, decodeFilename, true);
+    }
+
+    public MailBinding(HeaderFilterStrategy headerFilterStrategy, ContentTypeResolver contentTypeResolver,
+                       boolean decodeFilename, boolean mapMailMessage) {
         this.headerFilterStrategy = headerFilterStrategy;
         this.contentTypeResolver = contentTypeResolver;
         this.decodeFilename = decodeFilename;
+        this.mapMailMessage = mapMailMessage;
     }
 
     public void populateMailMessage(MailEndpoint endpoint, MimeMessage mimeMessage, Exchange exchange)
@@ -96,7 +104,7 @@ public class MailBinding {
 
         // set the replyTo if it was passed in as an option in the uri. Note: if it is in both the URI
         // and headers the headers win.
-        String replyTo = exchange.getIn().getHeader("Reply-To", String.class);
+        String replyTo = exchange.getIn().getHeader(MailConstants.MAIL_REPLY_TO, String.class);
         if (replyTo == null) {
             replyTo = endpoint.getConfiguration().getReplyTo();
         }
@@ -145,8 +153,8 @@ public class MailBinding {
     protected String determineContentType(MailConfiguration configuration, Exchange exchange) {
         // see if we got any content type set
         String contentType = configuration.getContentType();
-        if (exchange.getIn().getHeader("contentType") != null) {
-            contentType = exchange.getIn().getHeader("contentType", String.class);
+        if (exchange.getIn().getHeader(MailConstants.MAIL_CONTENT_TYPE) != null) {
+            contentType = exchange.getIn().getHeader(MailConstants.MAIL_CONTENT_TYPE, String.class);
         } else if (exchange.getIn().getHeader(Exchange.CONTENT_TYPE) != null) {
             contentType = exchange.getIn().getHeader(Exchange.CONTENT_TYPE, String.class);
         }
@@ -172,8 +180,8 @@ public class MailBinding {
 
         // see if we got any content type set
         String contentType = configuration.getContentType();
-        if (exchange.getIn().getHeader("contentType") != null) {
-            contentType = exchange.getIn().getHeader("contentType", String.class);
+        if (exchange.getIn().getHeader(MailConstants.MAIL_CONTENT_TYPE) != null) {
+            contentType = exchange.getIn().getHeader(MailConstants.MAIL_CONTENT_TYPE, String.class);
         } else if (exchange.getIn().getHeader(Exchange.CONTENT_TYPE) != null) {
             contentType = exchange.getIn().getHeader(Exchange.CONTENT_TYPE, String.class);
         }
@@ -255,7 +263,7 @@ public class MailBinding {
     public Object extractBodyFromMail(Exchange exchange, MailMessage mailMessage) {
         Message message = mailMessage.getMessage();
         try {
-            if (((MailEndpoint) exchange.getFromEndpoint()).getConfiguration().isMapMailMessage()) {
+            if (mapMailMessage) {
                 return message.getContent();
             }
             return message; // raw message
@@ -510,7 +518,7 @@ public class MailBinding {
                 LOG.trace("Attachment #{}: FileName: {}", i, attachmentFilename);
             }
             if (attachment != null) {
-                if (shouldAddAttachment(exchange, attachmentFilename, attachment.getDataHandler())) {
+                if (shouldAddAttachment()) {
                     // Create another body part
                     BodyPart messageBodyPart = new MimeBodyPart();
                     // Set the data handler to the attachment
@@ -631,7 +639,7 @@ public class MailBinding {
     /**
      * Strategy to allow filtering of attachments which are added on the Mail message
      */
-    protected boolean shouldAddAttachment(Exchange exchange, String attachmentFilename, DataHandler handler) {
+    protected boolean shouldAddAttachment() {
         return true;
     }
 
@@ -655,7 +663,7 @@ public class MailBinding {
             }
         }
         // if the message is a multipart message, do not set the content type to multipart/*
-        if (mailConfiguration.isMapMailMessage()) {
+        if (mapMailMessage) {
             Object content = mailMessage.getContent();
             if (content instanceof MimeMultipart) {
                 MimeMultipart multipart = (MimeMultipart) content;
@@ -679,6 +687,10 @@ public class MailBinding {
                     }
                 }
             }
+        }
+
+        if (mailMessage.getSentDate() != null) {
+            answer.put(Exchange.MESSAGE_TIMESTAMP, mailMessage.getSentDate().getTime());
         }
 
         return answer;
@@ -777,7 +789,7 @@ public class MailBinding {
     }
 
     private static boolean isCollection(Object value) {
-        return value instanceof Collection || (value != null && value.getClass().isArray());
+        return value instanceof Collection || value != null && value.getClass().isArray();
     }
 
 }

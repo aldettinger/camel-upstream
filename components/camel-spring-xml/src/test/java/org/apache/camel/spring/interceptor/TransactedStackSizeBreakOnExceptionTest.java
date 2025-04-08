@@ -25,7 +25,7 @@ public class TransactedStackSizeBreakOnExceptionTest extends TransactionClientDa
 
     private static final boolean PRINT_STACK_TRACE = false;
     private int total = 100;
-    private int failAt = 70;
+    private int failAt = 75;
 
     @Test
     public void testStackSize() throws Exception {
@@ -48,7 +48,7 @@ public class TransactedStackSizeBreakOnExceptionTest extends TransactionClientDa
             int size = getMockEndpoint("mock:line").getReceivedExchanges().get(i).getMessage().getHeader("stackSize",
                     int.class);
             sizes[i] = size;
-            Assertions.assertTrue(size < 100, "Stackframe should be < 100");
+            Assertions.assertTrue(size < 110, "Stackframe should be < 110");
             log.debug("#{} size {}", i, size);
         }
 

@@ -21,8 +21,10 @@ import java.util.Map;
 
 import org.apache.camel.AsyncCallback;
 import org.apache.camel.Exchange;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.Processor;
 import org.apache.camel.Route;
+import org.apache.camel.Service;
 import org.apache.camel.spi.InflightRepository;
 import org.apache.camel.spi.UnitOfWork;
 import org.apache.camel.support.PatternHelper;
@@ -33,7 +35,7 @@ import org.slf4j.MDC;
 /**
  * This unit of work supports <a href="http://www.slf4j.org/api/org/slf4j/MDC.html">MDC</a>.
  */
-public class MDCUnitOfWork extends DefaultUnitOfWork {
+public class MDCUnitOfWork extends DefaultUnitOfWork implements Service {
 
     private static final Logger LOG = LoggerFactory.getLogger(MDCUnitOfWork.class);
 
@@ -63,6 +65,10 @@ public class MDCUnitOfWork extends DefaultUnitOfWork {
         this.originalCamelContextId = MDC.get(MDC_CAMEL_CONTEXT_ID);
         this.originalTransactionKey = MDC.get(MDC_TRANSACTION_KEY);
 
+        prepareMDC(exchange);
+    }
+
+    protected void prepareMDC(Exchange exchange) {
         // must add exchange and message id in constructor
         MDC.put(MDC_EXCHANGE_ID, exchange.getExchangeId());
         String msgId = exchange.getMessage().getMessageId();
@@ -70,7 +76,7 @@ public class MDCUnitOfWork extends DefaultUnitOfWork {
         // the camel context id is from exchange
         MDC.put(MDC_CAMEL_CONTEXT_ID, exchange.getContext().getName());
         // and add optional correlation id
-        String corrId = exchange.getProperty(Exchange.CORRELATION_ID, String.class);
+        String corrId = exchange.getProperty(ExchangePropertyKey.CORRELATION_ID, String.class);
         if (corrId != null) {
             MDC.put(MDC_CORRELATION_ID, corrId);
         }
@@ -84,13 +90,6 @@ public class MDCUnitOfWork extends DefaultUnitOfWork {
     @Override
     public UnitOfWork newInstance(Exchange exchange) {
         return new MDCUnitOfWork(exchange, inflightRepository, pattern, allowUseOriginalMessage, useBreadcrumb);
-    }
-
-    @Override
-    public void stop() {
-        super.stop();
-        // and remove when stopping
-        clear();
     }
 
     @Override
@@ -138,21 +137,27 @@ public class MDCUnitOfWork extends DefaultUnitOfWork {
 
     @Override
     public AsyncCallback beforeProcess(Processor processor, Exchange exchange, AsyncCallback callback) {
+        // prepare MDC before processing
+        prepareMDC(exchange);
         // add optional step id
-        String stepId = exchange.getProperty(Exchange.STEP_ID, String.class);
+        String stepId = exchange.getProperty(ExchangePropertyKey.STEP_ID, String.class);
         if (stepId != null) {
             MDC.put(MDC_STEP_ID, stepId);
         }
+        // return callback with after processing work
         return new MDCCallback(callback, pattern);
     }
 
     @Override
     public void afterProcess(Processor processor, Exchange exchange, AsyncCallback callback, boolean doneSync) {
         // if we are no longer under step then remove it
-        String stepId = exchange.getProperty(Exchange.STEP_ID, String.class);
+        String stepId = exchange.getProperty(ExchangePropertyKey.STEP_ID, String.class);
         if (stepId == null) {
             MDC.remove(MDC_STEP_ID);
         }
+        // clear MDC to avoid leaking to current thread when
+        // the exchange is continued routed asynchronously
+        clear();
     }
 
     /**
@@ -202,17 +207,31 @@ public class MDCUnitOfWork extends DefaultUnitOfWork {
     }
 
     @Override
-    public String toString() {
-        return "MDCUnitOfWork";
+    protected void onDone() {
+        super.onDone();
+        // clear MDC, so we do not leak as Camel is done using this UoW
+        clear();
     }
 
-    private static boolean matchPatterns(String value, String[] patterns) {
-        for (String pattern : patterns) {
-            if (PatternHelper.matchPattern(value, pattern)) {
-                return true;
-            }
-        }
-        return false;
+    @Override
+    public void reset() {
+        super.reset();
+        clear();
+    }
+
+    @Override
+    public void start() {
+        // noop
+    }
+
+    @Override
+    public void stop() {
+        clear();
+    }
+
+    @Override
+    public String toString() {
+        return "MDCUnitOfWork";
     }
 
     /**
@@ -247,7 +266,7 @@ public class MDCUnitOfWork extends DefaultUnitOfWork {
                     } else {
                         final String[] patterns = pattern.split(",");
                         mdc.forEach((k, v) -> {
-                            if (matchPatterns(k, patterns)) {
+                            if (PatternHelper.matchPatterns(k, patterns)) {
                                 custom.put(k, v);
                             }
                         });

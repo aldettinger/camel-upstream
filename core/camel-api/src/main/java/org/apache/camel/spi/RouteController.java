@@ -77,6 +77,20 @@ public interface RouteController extends CamelContextAware, StaticService {
     void startAllRoutes() throws Exception;
 
     /**
+     * Stops all the routes
+     *
+     * @throws Exception is thrown if a route could not be stopped for whatever reason
+     */
+    void stopAllRoutes() throws Exception;
+
+    /**
+     * Stops and removes all the routes
+     *
+     * @throws Exception is thrown if a route could not be stopped or removed for whatever reason
+     */
+    void removeAllRoutes() throws Exception;
+
+    /**
      * Indicates whether current thread is starting route(s).
      * <p/>
      * This can be useful to know by {@link LifecycleStrategy} or the likes, in case they need to react differently.
@@ -109,6 +123,16 @@ public interface RouteController extends CamelContextAware, StaticService {
      * @see              #suspendRoute(String)
      */
     void stopRoute(String routeId) throws Exception;
+
+    /**
+     * Stops and marks the given route as failed (health check is DOWN) due to a caused exception.
+     *
+     * @param  routeId   the route id
+     * @param  cause     the exception that is causing this route to be stopped and marked as failed
+     * @throws Exception is thrown if the route could not be stopped for whatever reason
+     * @see              #suspendRoute(String)
+     */
+    void stopRoute(String routeId, Throwable cause) throws Exception;
 
     /**
      * Stops the given route using {@link org.apache.camel.spi.ShutdownStrategy} with a specified timeout.

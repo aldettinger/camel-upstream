@@ -18,8 +18,10 @@ package org.apache.camel.spi;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Set;
 
 import org.apache.camel.CamelContextAware;
+import org.apache.camel.RouteConfigurationsBuilder;
 import org.apache.camel.RoutesBuilder;
 
 /**
@@ -33,13 +35,29 @@ public interface RoutesLoader extends CamelContextAware {
     String FACTORY = "routes-loader";
 
     /**
+     * Looks up a {@link RoutesBuilderLoader} in the registry or fallback to a factory finder mechanism if none found.
+     *
+     * @param  extension                the file extension for which a loader should be found.
+     * @return                          a {@link RoutesBuilderLoader}
+     * @throws IllegalArgumentException if no {@link RoutesBuilderLoader} can be found for the given file extension
+     */
+    RoutesBuilderLoader getRoutesLoader(String extension) throws Exception;
+
+    /**
      * Loads {@link RoutesBuilder} from the give list of {@link Resource} into the current
      * {@link org.apache.camel.CamelContext}.
      *
      * @param resources the resources to be loaded.
      */
     default void loadRoutes(Collection<Resource> resources) throws Exception {
-        for (RoutesBuilder builder : findRoutesBuilders(resources)) {
+        Collection<RoutesBuilder> builders = findRoutesBuilders(resources);
+        // add configuration first before the routes
+        for (RoutesBuilder builder : builders) {
+            if (builder instanceof RouteConfigurationsBuilder) {
+                getCamelContext().addRoutesConfigurations((RouteConfigurationsBuilder) builder);
+            }
+        }
+        for (RoutesBuilder builder : builders) {
             getCamelContext().addRoutes(builder);
         }
     }
@@ -51,10 +69,43 @@ public interface RoutesLoader extends CamelContextAware {
      * @param resources the resources to be loaded.
      */
     default void loadRoutes(Resource... resources) throws Exception {
-        for (RoutesBuilder builder : findRoutesBuilders(resources)) {
+        Collection<RoutesBuilder> builders = findRoutesBuilders(resources);
+        // add configuration first before the routes
+        for (RoutesBuilder builder : builders) {
+            if (builder instanceof RouteConfigurationsBuilder) {
+                getCamelContext().addRoutesConfigurations((RouteConfigurationsBuilder) builder);
+            }
+        }
+        for (RoutesBuilder builder : builders) {
             getCamelContext().addRoutes(builder);
         }
     }
+
+    /**
+     * Loads or updates existing {@link RoutesBuilder} from the give list of {@link Resource} into the current
+     * {@link org.apache.camel.CamelContext}.
+     *
+     * If a route is loaded with a route id for an existing route, then the existing route is stopped and remove, so it
+     * can be updated.
+     *
+     * @param  resources the resources to be loaded or updated.
+     * @return           route ids for the routes that was loaded or updated.
+     */
+    default Set<String> updateRoutes(Resource... resources) throws Exception {
+        return updateRoutes(Arrays.asList(resources));
+    }
+
+    /**
+     * Loads or updates existing {@link RoutesBuilder} from the give list of {@link Resource} into the current
+     * {@link org.apache.camel.CamelContext}.
+     *
+     * If a route is loaded with a route id for an existing route, then the existing route is stopped and remove, so it
+     * can be updated.
+     *
+     * @param  resources the resources to be loaded or updated.
+     * @return           route ids for the routes that was loaded or updated.
+     */
+    Set<String> updateRoutes(Collection<Resource> resources) throws Exception;
 
     /**
      * Find {@link RoutesBuilder} from the give list of {@link Resource}.
@@ -73,4 +124,23 @@ public interface RoutesLoader extends CamelContextAware {
      * @return           a collection {@link RoutesBuilder}
      */
     Collection<RoutesBuilder> findRoutesBuilders(Collection<Resource> resources) throws Exception;
+
+    /**
+     * Pre-parses the {@link RoutesBuilder} from {@link Resource}.
+     *
+     * This is used during bootstrap, to eager detect configurations from route DSL resources which makes it possible to
+     * specify configurations that affect the bootstrap, such as by camel-jbang and camel-yaml-dsl.
+     *
+     * @param resource the resource to be pre parsed.
+     */
+    default void preParseRoute(Resource resource) throws Exception {
+        // noop
+    }
+
+    /**
+     * Initializes the discovered {@link RoutesBuilderLoader} before its started and used for the first time.
+     */
+    default void initRoutesBuilderLoader(RoutesBuilderLoader loader) {
+        // noop
+    }
 }

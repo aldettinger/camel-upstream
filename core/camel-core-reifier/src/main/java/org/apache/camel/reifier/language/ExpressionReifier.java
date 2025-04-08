@@ -19,6 +19,8 @@ package org.apache.camel.reifier.language;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiFunction;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.camel.AfterPropertiesConfigured;
 import org.apache.camel.CamelContext;
@@ -36,6 +38,7 @@ import org.apache.camel.model.language.GroovyExpression;
 import org.apache.camel.model.language.HeaderExpression;
 import org.apache.camel.model.language.Hl7TerserExpression;
 import org.apache.camel.model.language.JoorExpression;
+import org.apache.camel.model.language.JqExpression;
 import org.apache.camel.model.language.JsonPathExpression;
 import org.apache.camel.model.language.LanguageExpression;
 import org.apache.camel.model.language.MethodCallExpression;
@@ -50,6 +53,7 @@ import org.apache.camel.model.language.XPathExpression;
 import org.apache.camel.model.language.XQueryExpression;
 import org.apache.camel.reifier.AbstractReifier;
 import org.apache.camel.spi.Language;
+import org.apache.camel.spi.PropertiesComponent;
 import org.apache.camel.spi.PropertyConfigurer;
 import org.apache.camel.spi.PropertyConfigurerAware;
 import org.apache.camel.spi.ReifierStrategy;
@@ -59,6 +63,8 @@ import org.apache.camel.support.ScriptHelper;
 import org.apache.camel.util.ObjectHelper;
 
 public class ExpressionReifier<T extends ExpressionDefinition> extends AbstractReifier {
+
+    private static final Pattern SINGLE_TO_DOUBLE = Pattern.compile("'(\\{\\{.*?}})'"); // non-greedy mode
 
     // for custom reifiers
     private static final Map<Class<?>, BiFunction<CamelContext, ExpressionDefinition, ExpressionReifier<? extends ExpressionDefinition>>> EXPRESSIONS
@@ -109,7 +115,7 @@ public class ExpressionReifier<T extends ExpressionDefinition> extends AbstractR
     private static ExpressionReifier<? extends ExpressionDefinition> coreReifier(
             CamelContext camelContext, ExpressionDefinition definition) {
         if (definition instanceof ConstantExpression) {
-            return new ExpressionReifier<>(camelContext, definition);
+            return new ConstantExpressionReifier(camelContext, definition);
         } else if (definition instanceof CSimpleExpression) {
             return new CSimpleExpressionReifier(camelContext, definition);
         } else if (definition instanceof DatasonnetExpression) {
@@ -124,6 +130,8 @@ public class ExpressionReifier<T extends ExpressionDefinition> extends AbstractR
             return new ExpressionReifier<>(camelContext, definition);
         } else if (definition instanceof JoorExpression) {
             return new JoorExpressionReifier(camelContext, definition);
+        } else if (definition instanceof JqExpression) {
+            return new JqExpressionReifier(camelContext, definition);
         } else if (definition instanceof JsonPathExpression) {
             return new JsonPathExpressionReifier(camelContext, definition);
         } else if (definition instanceof LanguageExpression) {
@@ -165,6 +173,8 @@ public class ExpressionReifier<T extends ExpressionDefinition> extends AbstractR
     public Expression createExpression() {
         Expression expression = definition.getExpressionValue();
         if (expression == null) {
+            // prepare before creating
+            prepareExpression();
             if (definition.getExpressionType() != null) {
                 expression = reifier(camelContext, definition.getExpressionType()).createExpression();
             } else {
@@ -191,9 +201,7 @@ public class ExpressionReifier<T extends ExpressionDefinition> extends AbstractR
             }
         }
         // inject CamelContext if its aware
-        if (expression instanceof CamelContextAware) {
-            ((CamelContextAware) expression).setCamelContext(camelContext);
-        }
+        CamelContextAware.trySetCamelContext(expression, camelContext);
         expression.init(camelContext);
         return expression;
     }
@@ -201,6 +209,8 @@ public class ExpressionReifier<T extends ExpressionDefinition> extends AbstractR
     public Predicate createPredicate() {
         Predicate predicate = definition.getPredicate();
         if (predicate == null) {
+            // prepare before creating
+            prepareExpression();
             if (definition.getExpressionType() != null) {
                 predicate = reifier(camelContext, definition.getExpressionType()).createPredicate();
             } else if (definition.getExpressionValue() != null) {
@@ -227,9 +237,7 @@ public class ExpressionReifier<T extends ExpressionDefinition> extends AbstractR
             }
         }
         // inject CamelContext if its aware
-        if (predicate instanceof CamelContextAware) {
-            ((CamelContextAware) predicate).setCamelContext(camelContext);
-        }
+        CamelContextAware.trySetCamelContext(predicate, camelContext);
         // if the predicate is created via a delegate then it would need to know if its a predicate or expression
         // when being initialized
         predicate.initPredicate(camelContext);
@@ -262,6 +270,40 @@ public class ExpressionReifier<T extends ExpressionDefinition> extends AbstractR
         // in the various camel components outside camel-core
         if (expression instanceof AfterPropertiesConfigured) {
             ((AfterPropertiesConfigured) expression).afterPropertiesConfigured(camelContext);
+        }
+    }
+
+    /**
+     * Prepares the expression/predicate before being created by the reifier
+     */
+    protected void prepareExpression() {
+        // when using languages with property placeholders then we have a single vs double quote problem
+        // where it may be common to use single quote inside a Java string, eg
+        // "${header.name} == '{{who}}'"
+        // and then the who property placeholder may contain a single quote such as John O'Niel which
+        // is extrapolated as "${header.name} == 'John O'Niel'" which causes a parsing problem
+        // so what Camel does is to replace all '{{key}}' placeholders with double quoted instead
+        // that resolves the parsing problem
+
+        String text = definition.getExpression();
+        if (text != null && text.contains(PropertiesComponent.PREFIX_TOKEN)) {
+            boolean changed = false;
+            Matcher matcher = SINGLE_TO_DOUBLE.matcher(text);
+            while (matcher.find()) {
+                String group = matcher.group(1);
+                // is there a single quote in the resolved placeholder
+                String resolved = camelContext.resolvePropertyPlaceholders(group);
+                if (resolved != null && resolved.indexOf('\'') != -1) {
+                    // replace single quoted with double quoted
+                    text = matcher.replaceFirst("\"$1\"");
+                    // we changed so reset matcher so it can find more
+                    matcher.reset(text);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                definition.setExpression(text);
+            }
         }
     }
 

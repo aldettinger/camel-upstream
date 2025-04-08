@@ -1,12 +1,14 @@
-[[ipfs-component]]
-= IPFS Component
-:docTitle: IPFS
-:artifactId: camel-ipfs
+= IPFS Component (deprecated)
+:doctitle: IPFS
+:shortname: ipfs
+:artifactid: camel-ipfs
 :description: Access the Interplanetary File System (IPFS).
 :since: 2.23
-:supportLevel: Stable
+:supportlevel: Stable-deprecated
+:deprecated: *deprecated*
 :component-header: Only producer is supported
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/components/ipfs.adoc[opts=optional]
+//Manually maintained attributes
+:camel-spring-boot-name: ipfs
 
 *Since Camel {since}*
 
@@ -29,65 +31,22 @@ for this component:
 
 == URI format
 
-[source,java]
 ---------------------------------
 ipfs://cmd?options
 ---------------------------------
 
-== Options
+// component-configure options: START
+
+// component-configure options: END
 
 // component options: START
-The IPFS component supports 4 options, which are listed below.
-
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *ipfsHost* (producer) | The ipfs host | 127.0.0.1 | String
-| *ipfsPort* (producer) | The ipfs port | 5001 | int
-| *lazyStartProducer* (producer) | Whether the producer should be started lazy (on the first message). By starting lazy you can use this to allow CamelContext and routes to startup in situations where a producer may otherwise fail during starting and cause the route to fail being started. By deferring this startup to be lazy then the startup failure can be handled during routing messages via Camel's routing error handlers. Beware that when the first message is processed then creating and starting the producer may take a little time and prolong the total processing time of the processing. | false | boolean
-| *autowiredEnabled* (advanced) | Whether autowiring is enabled. This is used for automatic autowiring options (the option must be marked as autowired) by looking up in the registry to find if there is a single instance of matching type, which then gets configured on the component. This can be used for automatic configuring JDBC data sources, JMS connection factories, AWS Clients, etc. | true | boolean
-|===
+include::partial$component-configure-options.adoc[]
+include::partial$component-endpoint-options.adoc[]
 // component options: END
 
 // endpoint options: START
-The IPFS endpoint is configured using URI syntax:
 
-----
-ipfs:ipfsCmd
-----
-
-with the following path and query parameters:
-
-=== Path Parameters (1 parameters):
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *ipfsCmd* | *Required* The ipfs command. There are 4 enums and the value can be one of: add, cat, get, version |  | String
-|===
-
-
-=== Query Parameters (2 parameters):
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *lazyStartProducer* (producer) | Whether the producer should be started lazy (on the first message). By starting lazy you can use this to allow CamelContext and routes to startup in situations where a producer may otherwise fail during starting and cause the route to fail being started. By deferring this startup to be lazy then the startup failure can be handled during routing messages via Camel's routing error handlers. Beware that when the first message is processed then creating and starting the producer may take a little time and prolong the total processing time of the processing. | false | boolean
-| *outdir* (producer) | The ipfs output directory |  | String
-|===
 // endpoint options: END
-
-== Karaf support
-
-Actually this component is not supported in Karaf
-
-== Message Headers
-
-[TODO]
 
 == Samples
 
@@ -100,4 +59,5 @@ from("direct:start").to("ipfs:get?outdir=target")
 from("direct:start").to("ipfs:cat");
 ---------------------------------------------------------------------------------------------
 
-include::camel-spring-boot::page$ipfs-starter.adoc[]
+
+include::spring-boot:partial$starter.adoc[]

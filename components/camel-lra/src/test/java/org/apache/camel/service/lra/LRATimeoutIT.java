@@ -22,7 +22,10 @@ import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.model.SagaCompletionMode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
+@EnabledIfEnvironmentVariable(named = "LRA_COORDINATOR_URL", matches = ".*",
+                              disabledReason = "Coordinator URL not provided")
 public class LRATimeoutIT extends AbstractLRATestSupport {
 
     @Test
@@ -63,11 +66,11 @@ public class LRATimeoutIT extends AbstractLRATestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
 
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
 
                 from("direct:saga")
                         .saga()

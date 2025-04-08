@@ -51,7 +51,7 @@ public class ServiceCallDefinition extends NoOutputDefinition<ServiceCallDefinit
     @Metadata(defaultValue = ServiceCallDefinitionConstants.DEFAULT_COMPONENT)
     private String component;
     @XmlAttribute
-    @Metadata(required = true, javaType = "org.apache.camel.ExchangePattern", enums = "InOnly,InOut,InOptionalOut")
+    @Metadata(javaType = "org.apache.camel.ExchangePattern", enums = "InOnly,InOut,InOptionalOut")
     private String pattern;
     @XmlAttribute
     private String configurationRef;
@@ -81,7 +81,6 @@ public class ServiceCallDefinition extends NoOutputDefinition<ServiceCallDefinit
             @XmlElement(name = "combinedServiceDiscovery", type = CombinedServiceCallServiceDiscoveryConfiguration.class),
             @XmlElement(name = "consulServiceDiscovery", type = ConsulServiceCallServiceDiscoveryConfiguration.class),
             @XmlElement(name = "dnsServiceDiscovery", type = DnsServiceCallServiceDiscoveryConfiguration.class),
-            @XmlElement(name = "etcdServiceDiscovery", type = EtcdServiceCallServiceDiscoveryConfiguration.class),
             @XmlElement(name = "kubernetesServiceDiscovery", type = KubernetesServiceCallServiceDiscoveryConfiguration.class),
             @XmlElement(name = "staticServiceDiscovery", type = StaticServiceCallServiceDiscoveryConfiguration.class),
             @XmlElement(name = "zookeeperServiceDiscovery", type = ZooKeeperServiceCallServiceDiscoveryConfiguration.class) })
@@ -96,7 +95,6 @@ public class ServiceCallDefinition extends NoOutputDefinition<ServiceCallDefinit
     private ServiceCallServiceFilterConfiguration serviceFilterConfiguration;
 
     @XmlElements({
-            @XmlElement(name = "ribbonLoadBalancer", type = RibbonServiceCallServiceLoadBalancerConfiguration.class),
             @XmlElement(name = "defaultLoadBalancer", type = DefaultServiceCallServiceLoadBalancerConfiguration.class) })
     private ServiceCallServiceLoadBalancerConfiguration loadBalancerConfiguration;
 
@@ -573,32 +571,6 @@ public class ServiceCallDefinition extends NoOutputDefinition<ServiceCallDefinit
         return this;
     }
 
-    public EtcdServiceCallServiceDiscoveryConfiguration etcdServiceDiscovery() {
-        EtcdServiceCallServiceDiscoveryConfiguration conf = new EtcdServiceCallServiceDiscoveryConfiguration(this);
-        setServiceDiscoveryConfiguration(conf);
-
-        return conf;
-    }
-
-    public ServiceCallDefinition etcdServiceDiscovery(String uris) {
-        EtcdServiceCallServiceDiscoveryConfiguration conf = new EtcdServiceCallServiceDiscoveryConfiguration(this);
-        conf.setUris(uris);
-
-        setServiceDiscoveryConfiguration(conf);
-
-        return this;
-    }
-
-    public ServiceCallDefinition etcdServiceDiscovery(String uris, String servicePath) {
-        EtcdServiceCallServiceDiscoveryConfiguration conf = new EtcdServiceCallServiceDiscoveryConfiguration(this);
-        conf.setUris(uris);
-        conf.setServicePath(servicePath);
-
-        setServiceDiscoveryConfiguration(conf);
-
-        return this;
-    }
-
     public KubernetesServiceCallServiceDiscoveryConfiguration kubernetesServiceDiscovery() {
         KubernetesServiceCallServiceDiscoveryConfiguration conf = new KubernetesServiceCallServiceDiscoveryConfiguration(this);
         setServiceDiscoveryConfiguration(conf);
@@ -726,21 +698,4 @@ public class ServiceCallDefinition extends NoOutputDefinition<ServiceCallDefinit
 
         return this;
     }
-
-    public ServiceCallDefinition ribbonLoadBalancer() {
-        RibbonServiceCallServiceLoadBalancerConfiguration conf = new RibbonServiceCallServiceLoadBalancerConfiguration(this);
-        setLoadBalancerConfiguration(conf);
-
-        return this;
-    }
-
-    public ServiceCallDefinition ribbonLoadBalancer(String clientName) {
-        RibbonServiceCallServiceLoadBalancerConfiguration conf = new RibbonServiceCallServiceLoadBalancerConfiguration(this);
-        conf.setClientName(clientName);
-
-        setLoadBalancerConfiguration(conf);
-
-        return this;
-    }
-
 }

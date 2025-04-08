@@ -20,7 +20,6 @@
  */
 package $packageName;
 
-import com.thoughtworks.xstream.annotations.XStreamImplicit;
 import org.apache.camel.component.salesforce.api.dto.AbstractQueryRecordsBase;
 
 import java.util.List;
@@ -31,16 +30,5 @@ import javax.annotation.Generated;
  */
 #set( $descName = $desc.Name )
 @Generated("org.apache.camel.maven.CamelSalesforceMojo")
-public class QueryRecords$descName extends AbstractQueryRecordsBase {
-
-    @XStreamImplicit
-    private List<$descName> records;
-
-    public List<$descName> getRecords() {
-        return records;
-    }
-
-    public void setRecords(List<$descName> records) {
-        this.records = records;
-    }
+public class QueryRecords$descName extends AbstractQueryRecordsBase<$descName> {
 }

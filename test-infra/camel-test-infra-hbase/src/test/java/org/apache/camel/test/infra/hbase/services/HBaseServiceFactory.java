@@ -16,24 +16,50 @@
  */
 package org.apache.camel.test.infra.hbase.services;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.camel.test.infra.common.services.SimpleTestServiceBuilder;
+import org.apache.camel.test.infra.common.services.SingletonService;
+import org.apache.hadoop.conf.Configuration;
+import org.junit.jupiter.api.extension.ExtensionContext;
 
 public final class HBaseServiceFactory {
-    private static final Logger LOG = LoggerFactory.getLogger(HBaseServiceFactory.class);
+    static class SingletonHBaseService extends SingletonService<HBaseService> implements HBaseService {
+        public SingletonHBaseService(HBaseService service, String name) {
+            super(service, name);
+        }
+
+        @Override
+        public Configuration getConfiguration() {
+            return getService().getConfiguration();
+        }
+
+        @Override
+        public void beforeAll(ExtensionContext extensionContext) {
+            addToStore(extensionContext);
+        }
+
+        @Override
+        public void afterAll(ExtensionContext extensionContext) {
+            // NO-OP
+        }
+    }
 
     private HBaseServiceFactory() {
 
     }
 
+    public static SimpleTestServiceBuilder<HBaseService> builder() {
+        return new SimpleTestServiceBuilder<>("hbase");
+    }
+
     public static HBaseService createService() {
-        String instanceType = System.getProperty("hbase.instance.type");
+        return builder()
+                .addLocalMapping(HBaseLocalContainerService::new)
+                .build();
+    }
 
-        if (instanceType == null || instanceType.equals("local-hbase-container")) {
-            return new HBaseLocalContainerService();
-        }
-
-        LOG.error("HBase instance must be one of 'local-hbase-container' or 'remote");
-        throw new UnsupportedOperationException("Invalid HBase instance type");
+    public static HBaseService createSingletonService() {
+        return builder()
+                .addLocalMapping(() -> new SingletonHBaseService(new HBaseLocalContainerService(), "hbase"))
+                .build();
     }
 }

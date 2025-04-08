@@ -236,6 +236,27 @@ public class CustomEndpointUriFactoryTest extends ContextTestSupport {
     }
 
     @Test
+    public void testCQLWithPlus() throws Exception {
+        EndpointUriFactory assembler = new MyCQLAssembler();
+        assembler.setCamelContext(context);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("host", "localhost");
+        params.put("keyspace", "test");
+        params.put("cql", "add(4 + 5)");
+
+        Assertions.assertEquals(
+                "cql:localhost/test?cql=add%284+%2B+5%29",
+                assembler.buildUri("cql", new LinkedHashMap<>(params)));
+        Assertions.assertEquals(
+                "cql:localhost/test?cql=add%284+%2B+5%29",
+                assembler.buildUri("cql", new LinkedHashMap<>(params), true));
+        Assertions.assertEquals(
+                "cql:localhost/test?cql=add(4 + 5)",
+                assembler.buildUri("cql", new LinkedHashMap<>(params), false));
+    }
+
+    @Test
     public void testJmsSecrets() throws Exception {
         EndpointUriFactory assembler = new MyJmsxAssembler();
         assembler.setCamelContext(context);
@@ -285,6 +306,11 @@ public class CustomEndpointUriFactoryTest extends ContextTestSupport {
         }
 
         @Override
+        public Set<String> multiValuePrefixes() {
+            return Collections.emptySet();
+        }
+
+        @Override
         public boolean isLenientProperties() {
             return false;
         }
@@ -327,6 +353,11 @@ public class CustomEndpointUriFactoryTest extends ContextTestSupport {
         }
 
         @Override
+        public Set<String> multiValuePrefixes() {
+            return Collections.emptySet();
+        }
+
+        @Override
         public boolean isLenientProperties() {
             return false;
         }
@@ -361,6 +392,11 @@ public class CustomEndpointUriFactoryTest extends ContextTestSupport {
 
         @Override
         public Set<String> secretPropertyNames() {
+            return Collections.emptySet();
+        }
+
+        @Override
+        public Set<String> multiValuePrefixes() {
             return Collections.emptySet();
         }
 
@@ -400,6 +436,11 @@ public class CustomEndpointUriFactoryTest extends ContextTestSupport {
         }
 
         @Override
+        public Set<String> multiValuePrefixes() {
+            return Collections.emptySet();
+        }
+
+        @Override
         public boolean isLenientProperties() {
             return false;
         }
@@ -433,6 +474,11 @@ public class CustomEndpointUriFactoryTest extends ContextTestSupport {
 
         @Override
         public Set<String> secretPropertyNames() {
+            return Collections.emptySet();
+        }
+
+        @Override
+        public Set<String> multiValuePrefixes() {
             return Collections.emptySet();
         }
 

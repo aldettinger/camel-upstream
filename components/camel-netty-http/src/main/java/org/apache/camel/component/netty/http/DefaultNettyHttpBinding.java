@@ -50,7 +50,6 @@ import org.apache.camel.ExtendedExchange;
 import org.apache.camel.Message;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.TypeConverter;
-import org.apache.camel.component.netty.NettyConstants;
 import org.apache.camel.component.netty.NettyConverter;
 import org.apache.camel.spi.HeaderFilterStrategy;
 import org.apache.camel.support.ExchangeHelper;
@@ -105,6 +104,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
             // for proxy use case pass the request body buffer directly to the response to avoid additional processing
             // we need to retain it so that the request can be released and we can keep the content
             answer.setBody(request.content().retain());
+            answer.getExchange().adapt(ExtendedExchange.class).setStreamCacheDisabled(true);
             exchange.adapt(ExtendedExchange.class).addOnCompletion(new SynchronizationAdapter() {
                 @Override
                 public void onDone(Exchange exchange) {
@@ -144,7 +144,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
 
         // NOTE: these headers is applied using the same logic as camel-http/camel-jetty to be consistent
 
-        headers.put(Exchange.HTTP_METHOD, request.method().name());
+        headers.put(NettyHttpConstants.HTTP_METHOD, request.method().name());
         // strip query parameters from the uri
         String s = request.uri();
         if (s.contains("?")) {
@@ -163,13 +163,13 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
             }
         }
 
-        headers.put(Exchange.HTTP_URL, s);
+        headers.put(NettyHttpConstants.HTTP_URL, s);
         // uri is without the host and port
         URI uri = new URI(request.uri());
         // uri is path and query parameters
-        headers.put(Exchange.HTTP_URI, uri.getPath());
-        headers.put(Exchange.HTTP_QUERY, uri.getQuery());
-        headers.put(Exchange.HTTP_RAW_QUERY, uri.getRawQuery());
+        headers.put(NettyHttpConstants.HTTP_URI, uri.getPath());
+        headers.put(NettyHttpConstants.HTTP_QUERY, uri.getQuery());
+        headers.put(NettyHttpConstants.HTTP_RAW_QUERY, uri.getRawQuery());
         headers.put(Exchange.HTTP_SCHEME, uri.getScheme());
         headers.put(Exchange.HTTP_HOST, uri.getHost());
         final int port = uri.getPort();
@@ -186,7 +186,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
             }
         }
         // keep the path uri using the case the request provided (do not convert to lower case)
-        headers.put(Exchange.HTTP_PATH, path);
+        headers.put(NettyHttpConstants.HTTP_PATH, path);
 
         if (LOG.isTraceEnabled()) {
             LOG.trace("HTTP-Method {}", request.method().name());
@@ -196,7 +196,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
         for (String name : request.headers().names()) {
             // mapping the content-type
             if (name.equalsIgnoreCase("content-type")) {
-                name = Exchange.CONTENT_TYPE;
+                name = NettyHttpConstants.CONTENT_TYPE;
             }
 
             if (name.equalsIgnoreCase("authorization")) {
@@ -224,8 +224,8 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
         // add uri parameters as headers to the Camel message;
         // when acting as a HTTP proxy we don't want to place query
         // parameters in Camel message headers as the query parameters
-        // will be passed via Exchange.HTTP_QUERY, otherwise we could have
-        // both the Exchange.HTTP_QUERY and the values from the message
+        // will be passed via NettyHttpConstants.HTTP_QUERY, otherwise we could have
+        // both the NettyHttpConstants.HTTP_QUERY and the values from the message
         // headers, so we end up with two values for the same query
         // parameter
         if (!configuration.isHttpProxy() && request.uri().contains("?")) {
@@ -251,8 +251,9 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
         // if body is application/x-www-form-urlencoded then extract the body as query string and append as headers
         // if it is a bridgeEndpoint we need to skip this part of work
         // if we're proxying the body is a buffer that we do not want to consume directly
-        if (request.method().name().equals("POST") && request.headers().get(Exchange.CONTENT_TYPE) != null
-                && request.headers().get(Exchange.CONTENT_TYPE).startsWith(NettyHttpConstants.CONTENT_TYPE_WWW_FORM_URLENCODED)
+        if (request.method().name().equals("POST") && request.headers().get(NettyHttpConstants.CONTENT_TYPE) != null
+                && request.headers().get(NettyHttpConstants.CONTENT_TYPE)
+                        .startsWith(NettyHttpConstants.CONTENT_TYPE_WWW_FORM_URLENCODED)
                 && !configuration.isBridgeEndpoint() && !configuration.isHttpProxy() && request instanceof FullHttpRequest) {
 
             String charset = "UTF-8";
@@ -285,6 +286,20 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
     }
 
     /**
+     * Copy camel header from exchange to headers map.
+     *
+     * @param headers  the map headers
+     * @param exchange the exchange
+     */
+    protected void copyCamelHeaders(Map<String, Object> headers, Exchange exchange) {
+        exchange.getIn().getHeaders().keySet()
+                .stream()
+                .filter(key -> key.startsWith("Camel"))
+                .forEach(key -> headers.put(key, exchange.getIn().getHeaders().get(key)));
+
+    }
+
+    /**
      * Decodes the header if needed to, or returns the header value as is.
      *
      * @param  configuration                the configuration
@@ -299,7 +314,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
             NettyHttpConfiguration configuration, String headerName, Object value, String charset)
             throws UnsupportedEncodingException {
         // do not decode Content-Type
-        if (Exchange.CONTENT_TYPE.equals(headerName)) {
+        if (NettyHttpConstants.CONTENT_TYPE.equals(headerName)) {
             return value.toString();
         } else if (configuration.isUrlDecodeHeaders()) {
             return URLDecoder.decode(value.toString(), charset);
@@ -309,8 +324,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
     }
 
     @Override
-    public Message toCamelMessage(FullHttpResponse response, Exchange exchange, NettyHttpConfiguration configuration)
-            throws Exception {
+    public Message toCamelMessage(FullHttpResponse response, Exchange exchange, NettyHttpConfiguration configuration) {
         LOG.trace("toCamelMessage: {}", response);
 
         NettyHttpMessage answer = new NettyHttpMessage(exchange.getContext(), null, response);
@@ -322,6 +336,8 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
         if (configuration.isDisableStreamCache() || configuration.isHttpProxy()) {
             // keep the body as is, and use type converters
             answer.setBody(response.content());
+            // turn off stream cache as we use the raw body as-is
+            answer.getExchange().adapt(ExtendedExchange.class).setStreamCacheDisabled(true);
         } else {
             // stores as byte array as the netty ByteBuf will be freed when the producer is done, and then we can no longer access the message body
             response.retain();
@@ -336,8 +352,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
     }
 
     @Override
-    public Message toCamelMessage(InboundStreamHttpResponse response, Exchange exchange, NettyHttpConfiguration configuration)
-            throws Exception {
+    public Message toCamelMessage(InboundStreamHttpResponse response, Exchange exchange, NettyHttpConfiguration configuration) {
         LOG.trace("toCamelMessage: {}", response);
 
         NettyHttpMessage answer = new NettyHttpMessage(exchange.getContext(), null, null);
@@ -352,17 +367,18 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
 
     @Override
     public void populateCamelHeaders(
-            HttpResponse response, Map<String, Object> headers, Exchange exchange, NettyHttpConfiguration configuration)
-            throws Exception {
+            HttpResponse response, Map<String, Object> headers, Exchange exchange, NettyHttpConfiguration configuration) {
         LOG.trace("populateCamelHeaders: {}", response);
 
-        headers.put(Exchange.HTTP_RESPONSE_CODE, response.status().code());
+        copyCamelHeaders(headers, exchange);
+
+        headers.put(NettyHttpConstants.HTTP_RESPONSE_CODE, response.status().code());
         headers.put(Exchange.HTTP_RESPONSE_TEXT, response.status().reasonPhrase());
 
         for (String name : response.headers().names()) {
             // mapping the content-type
             if (name.equalsIgnoreCase("content-type")) {
-                name = Exchange.CONTENT_TYPE;
+                name = NettyHttpConstants.CONTENT_TYPE;
             }
             // add the headers one by one, and use the header filter strategy
             List<String> values = response.headers().getAll(name);
@@ -417,7 +433,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
                 // the body should be the serialized java object of the exception
                 body = NettyConverter.toByteBuffer(bos.toByteArray());
                 // force content type to be serialized java object
-                message.setHeader(Exchange.CONTENT_TYPE, NettyHttpConstants.CONTENT_TYPE_JAVA_SERIALIZED_OBJECT);
+                message.setHeader(NettyHttpConstants.CONTENT_TYPE, NettyHttpConstants.CONTENT_TYPE_JAVA_SERIALIZED_OBJECT);
             } else {
                 // we failed due an exception so print it as plain text
                 StringWriter sw = new StringWriter();
@@ -427,17 +443,16 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
                 // the body should then be the stacktrace
                 body = NettyConverter.toByteBuffer(sw.toString().getBytes());
                 // force content type to be text/plain as that is what the stacktrace is
-                message.setHeader(Exchange.CONTENT_TYPE, "text/plain");
+                message.setHeader(NettyHttpConstants.CONTENT_TYPE, "text/plain");
             }
 
             // and mark the exception as failure handled, as we handled it by returning it as the response
             ExchangeHelper.setFailureHandled(message.getExchange());
         } else if (cause != null && configuration.isMuteException()) {
-
-            // the body should hide the stacktrace (muteException enabled)
-            body = NettyConverter.toByteBuffer("Exception".getBytes());
+            // empty body
+            body = NettyConverter.toByteBuffer("".getBytes());
             // force content type to be text/plain
-            message.setHeader(Exchange.CONTENT_TYPE, "text/plain");
+            message.setHeader(NettyHttpConstants.CONTENT_TYPE, "text/plain");
 
             // and mark the exception as failure handled, as we handled it by actively muting it
             ExchangeHelper.setFailureHandled(message.getExchange());
@@ -445,7 +460,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
 
         HttpResponse response = null;
 
-        if (response == null && body instanceof InputStream && configuration.isDisableStreamCache()) {
+        if (body instanceof InputStream && configuration.isDisableStreamCache()) {
             response = new OutboundStreamHttpResponse(
                     (InputStream) body, new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(code)));
             response.headers().set(TRANSFER_ENCODING, CHUNKED);
@@ -520,10 +535,10 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
 
         // configure connection to accordingly to keep alive configuration
         // favor using the header from the message
-        String connection = message.getHeader(HttpHeaderNames.CONNECTION.toString(), String.class);
+        String connection = message.getHeader(NettyHttpConstants.CONNECTION, String.class);
         // Read the connection header from the exchange property
         if (connection == null) {
-            connection = message.getExchange().getProperty(HttpHeaderNames.CONNECTION.toString(), String.class);
+            connection = message.getExchange().getProperty(NettyHttpConstants.CONNECTION, String.class);
         }
         if (connection == null) {
             // fallback and use the keep alive from the configuration
@@ -533,10 +548,10 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
                 connection = HttpHeaderValues.CLOSE.toString();
             }
         }
-        response.headers().set(HttpHeaderNames.CONNECTION.toString(), connection);
+        response.headers().set(NettyHttpConstants.CONNECTION, connection);
         // Just make sure we close the channel when the connection value is close
         if (connection.equalsIgnoreCase(HttpHeaderValues.CLOSE.toString())) {
-            message.setHeader(NettyConstants.NETTY_CLOSE_CHANNEL_WHEN_COMPLETE, true);
+            message.setHeader(NettyHttpConstants.NETTY_CLOSE_CHANNEL_WHEN_COMPLETE, true);
         }
         LOG.trace("Connection: {}", connection);
 
@@ -551,11 +566,11 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
         int defaultCode = failed ? 500 : 200;
 
         Message message = camelExchange.getMessage();
-        Integer currentCode = message.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+        Integer currentCode = message.getHeader(NettyHttpConstants.HTTP_RESPONSE_CODE, Integer.class);
         int codeToUse = currentCode == null ? defaultCode : currentCode;
 
         if (codeToUse != 500) {
-            if ((body == null) || (body instanceof String && ((String) body).trim().isEmpty())) {
+            if (body == null || body instanceof String && ((String) body).trim().isEmpty()) {
                 // no content 
                 codeToUse = currentCode == null ? 204 : currentCode;
             }
@@ -587,7 +602,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
             }
         }
 
-        final String headerProtocolVersion = message.getHeader(Exchange.HTTP_PROTOCOL_VERSION, String.class);
+        final String headerProtocolVersion = message.getHeader(NettyHttpConstants.HTTP_PROTOCOL_VERSION, String.class);
         final HttpVersion protocol;
         if (headerProtocolVersion == null) {
             protocol = HttpVersion.HTTP_1_1;
@@ -595,7 +610,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
             protocol = HttpVersion.valueOf(headerProtocolVersion);
         }
 
-        final String headerMethod = message.getHeader(Exchange.HTTP_METHOD, String.class);
+        final String headerMethod = message.getHeader(NettyHttpConstants.HTTP_METHOD, String.class);
 
         final HttpMethod httpMethod;
         if (headerMethod == null) {
@@ -671,7 +686,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
         // duplicated headers to the receiver, so use this skipRequestHeaders as the list of headers to skip
         Map<String, Object> skipRequestHeaders = null;
         if (configuration.isBridgeEndpoint()) {
-            String queryString = message.getHeader(Exchange.HTTP_QUERY, String.class);
+            String queryString = message.getHeader(NettyHttpConstants.HTTP_QUERY, String.class);
             if (queryString != null) {
                 skipRequestHeaders = URISupport.parseQuery(queryString, false, true);
             }
@@ -722,7 +737,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
 
         // configure connection to accordingly to keep alive configuration
         // favor using the header from the message
-        String connection = message.getHeader(HttpHeaderNames.CONNECTION.toString(), String.class);
+        String connection = message.getHeader(NettyHttpConstants.CONNECTION, String.class);
         if (connection == null) {
             // fallback and use the keep alive from the configuration
             if (configuration.isKeepAlive()) {
@@ -732,7 +747,7 @@ public class DefaultNettyHttpBinding implements NettyHttpBinding, Cloneable {
             }
         }
 
-        request.headers().set(HttpHeaderNames.CONNECTION.toString(), connection);
+        request.headers().set(NettyHttpConstants.CONNECTION, connection);
         LOG.trace("Connection: {}", connection);
 
         return request;

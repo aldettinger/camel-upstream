@@ -1,0 +1,14 @@
+= Xml Io Dsl Component
+//TODO there is no .json file for this doc page, so it is not updated automatically by UpdateReadmeMojo.
+//Header attributes written by hand.
+:doctitle: XML Io Dsl
+:artifactid: camel-xml-io-dsl
+:description: Camel DSL with XML
+:since: 3.9
+:supportlevel: Stable
+//Manually maintained attributes
+:group: DSL
+
+*Since Camel {since}*
+
+See xref:manual:ROOT:dsl.adoc[DSL]

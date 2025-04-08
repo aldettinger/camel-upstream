@@ -19,27 +19,31 @@ public class HBaseEndpointUriFactory extends org.apache.camel.support.component.
 
     private static final Set<String> PROPERTY_NAMES;
     private static final Set<String> SECRET_PROPERTY_NAMES;
+    private static final Set<String> MULTI_VALUE_PREFIXES;
     static {
         Set<String> props = new HashSet<>(17);
-        props.add("rowMapping");
+        props.add("bridgeErrorHandler");
+        props.add("cellMappingStrategyFactory");
+        props.add("exceptionHandler");
         props.add("exchangePattern");
         props.add("filters");
-        props.add("removeHandler");
-        props.add("mappingStrategyName");
-        props.add("remove");
-        props.add("tableName");
-        props.add("cellMappingStrategyFactory");
         props.add("lazyStartProducer");
-        props.add("bridgeErrorHandler");
-        props.add("rowModel");
-        props.add("maxResults");
-        props.add("userGroupInformation");
-        props.add("maxMessagesPerPoll");
         props.add("mappingStrategyClassName");
+        props.add("mappingStrategyName");
+        props.add("maxMessagesPerPoll");
+        props.add("maxResults");
         props.add("operation");
-        props.add("exceptionHandler");
+        props.add("remove");
+        props.add("removeHandler");
+        props.add("rowMapping");
+        props.add("rowModel");
+        props.add("tableName");
+        props.add("userGroupInformation");
         PROPERTY_NAMES = Collections.unmodifiableSet(props);
         SECRET_PROPERTY_NAMES = Collections.emptySet();
+        Set<String> prefixes = new HashSet<>(1);
+        prefixes.add("row.");
+        MULTI_VALUE_PREFIXES = Collections.unmodifiableSet(prefixes);
     }
 
     @Override
@@ -67,6 +71,11 @@ public class HBaseEndpointUriFactory extends org.apache.camel.support.component.
     @Override
     public Set<String> secretPropertyNames() {
         return SECRET_PROPERTY_NAMES;
+    }
+
+    @Override
+    public Set<String> multiValuePrefixes() {
+        return MULTI_VALUE_PREFIXES;
     }
 
     @Override

@@ -28,11 +28,12 @@ import io.swagger.models.parameters.Parameter;
 import org.apache.camel.impl.engine.DefaultClassResolver;
 import org.apache.camel.model.rest.RestDefinition;
 import org.apache.camel.model.rest.RestParamType;
+import org.apache.camel.test.junit5.CamelTestSupport;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class RestSwaggerArrayEnumTest {
+public class RestSwaggerArrayEnumTest extends CamelTestSupport {
 
     @Test
     public void shouldGenerateEnumValuesForArraysAndNonArrays() throws Exception {
@@ -57,7 +58,7 @@ public class RestSwaggerArrayEnumTest {
                 .param().name("headerArrayParam").type(RestParamType.header).dataType("array").arrayType("float")
                 .allowableValues("1.1", "2.2", "3.3").endParam();
 
-        final Swagger swagger = reader.read(Collections.singletonList(restDefinition), null, new BeanConfig(),
+        final Swagger swagger = reader.read(context, Collections.singletonList(restDefinition), new BeanConfig(),
                 "camel-1", new DefaultClassResolver());
 
         assertThat(swagger).isNotNull();
@@ -80,10 +81,10 @@ public class RestSwaggerArrayEnumTest {
         ParameterAssert.assertThat(parameters.get(3)).hasName("pathArrayParam").isGivenIn("path").isOfType("array")
                 .isOfArrayType("string").hasArrayEnumSpecifiedWith("a", "b", "c");
 
-        ParameterAssert.assertThat(parameters.get(4)).hasName("queryParam").isGivenIn("query").isOfType("array")
+        ParameterAssert.assertThat(parameters.get(4)).hasName("queryArrayParam").isGivenIn("query").isOfType("array")
                 .isOfArrayType("int").hasArrayEnumSpecifiedWith(1, 2, 3);
 
-        ParameterAssert.assertThat(parameters.get(5)).hasName("headerParam").isGivenIn("header").isOfType("array")
+        ParameterAssert.assertThat(parameters.get(5)).hasName("headerArrayParam").isGivenIn("header").isOfType("array")
                 .isOfArrayType("float").hasArrayEnumSpecifiedWith(1.1f, 2.2f, 3.3f);
     }
 

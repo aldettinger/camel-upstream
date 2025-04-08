@@ -27,6 +27,7 @@ import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import org.apache.camel.tooling.model.ComponentModel.ComponentOptionModel;
+import org.apache.camel.tooling.model.ComponentModel.EndpointHeaderModel;
 import org.apache.camel.tooling.model.ComponentModel.EndpointOptionModel;
 import org.apache.camel.tooling.model.DataFormatModel.DataFormatOptionModel;
 import org.apache.camel.tooling.model.EipModel.EipOptionModel;
@@ -68,7 +69,7 @@ public final class JsonMapper {
         } else if (obj.containsKey("model")) {
             return generateEipModel(obj);
         } else {
-            throw new IllegalArgumentException("Unsupported JSON");
+            return null;
         }
     }
 
@@ -88,6 +89,16 @@ public final class JsonMapper {
                 ComponentOptionModel option = new ComponentOptionModel();
                 parseOption(mp, option, entry.getKey());
                 model.addComponentOption(option);
+            }
+        }
+        JsonObject headers = (JsonObject) obj.get("headers");
+        if (headers != null) {
+            for (Map.Entry<String, Object> entry : headers.entrySet()) {
+                JsonObject mp = (JsonObject) entry.getValue();
+                EndpointHeaderModel header = new EndpointHeaderModel();
+                parseOption(mp, header, entry.getKey());
+                header.setConstantName(mp.getString("constantName"));
+                model.addEndpointHeader(header);
             }
         }
         JsonObject mprp = (JsonObject) obj.get("properties");
@@ -213,6 +224,10 @@ public final class JsonMapper {
         JsonObject wrapper = new JsonObject();
         wrapper.put("component", obj);
         wrapper.put("componentProperties", asJsonObject(model.getComponentOptions()));
+        final List<EndpointHeaderModel> headers = model.getEndpointHeaders();
+        if (!headers.isEmpty()) {
+            wrapper.put("headers", asJsonObject(headers));
+        }
         wrapper.put("properties", asJsonObject(model.getEndpointOptions()));
         if (!model.getApiOptions().isEmpty()) {
             wrapper.put("apis", apiModelAsJsonObject(model.getApiOptions(), false));
@@ -271,6 +286,7 @@ public final class JsonMapper {
         JsonObject mobj = (JsonObject) obj.get("model");
         EipModel model = new EipModel();
         parseModel(mobj, model);
+        model.setAbstractModel(mobj.getBooleanOrDefault("abstract", false));
         model.setInput(mobj.getBooleanOrDefault("input", false));
         model.setOutput(mobj.getBooleanOrDefault("output", false));
         JsonObject mprp = (JsonObject) obj.get("properties");
@@ -291,6 +307,7 @@ public final class JsonMapper {
     public static JsonObject asJsonObject(EipModel model) {
         JsonObject obj = new JsonObject();
         baseToJson(model, obj);
+        obj.put("abstract", model.isAbstractModel());
         obj.put("input", model.isInput());
         obj.put("output", model.isOutput());
         obj.entrySet().removeIf(e -> e.getValue() == null);
@@ -385,6 +402,9 @@ public final class JsonMapper {
         if (model.isNativeSupported()) {
             obj.put("nativeSupported", model.isNativeSupported());
         }
+        if (!model.getMetadata().isEmpty()) {
+            obj.put("metadata", model.getMetadata());
+        }
     }
 
     private static void artifactToJson(ArtifactModel<?> model, JsonObject obj) {
@@ -405,6 +425,7 @@ public final class JsonMapper {
         model.setJavaType(mobj.getString("javaType"));
         model.setSupportLevel(SupportLevel.safeValueOf(mobj.getString("supportLevel")));
         model.setNativeSupported(mobj.getBooleanOrDefault("nativeSupported", false));
+        model.setMetadata(mobj.getMapOrDefault("metadata", new JsonObject()));
     }
 
     private static void parseOption(JsonObject mp, BaseOptionModel option, String name) {
@@ -511,6 +532,8 @@ public final class JsonMapper {
         prop.put("setterMethod", option.getSetterMethod());
         if (option instanceof ComponentModel.ApiOptionModel) {
             prop.put("optional", ((ComponentModel.ApiOptionModel) option).isOptional());
+        } else if (option instanceof ComponentModel.EndpointHeaderModel) {
+            prop.put("constantName", ((ComponentModel.EndpointHeaderModel) option).getConstantName());
         }
         prop.entrySet().removeIf(e -> e.getValue() == null);
         prop.remove("prefix", "");

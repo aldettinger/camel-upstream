@@ -1,12 +1,13 @@
-[[metrics-component]]
 = Metrics Component
-:docTitle: Metrics
-:artifactId: camel-metrics
+:doctitle: Metrics
+:shortname: metrics
+:artifactid: camel-metrics
 :description: Collect various metrics directly from Camel routes using the DropWizard metrics library.
 :since: 2.14
-:supportLevel: Stable
+:supportlevel: Stable
 :component-header: Only producer is supported
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/components/metrics.adoc[opts=optional]
+//Manually maintained attributes
+:camel-spring-boot-name: metrics
 
 *Since Camel {since}*
 
@@ -37,66 +38,25 @@ for this component:
 
 == URI format
 
-[source]
 ----
 metrics:[ meter | counter | histogram | timer | gauge ]:metricname[?options]
 ----
 
-== Options
+// component-configure options: START
+
+// component-configure options: END
 
 // component options: START
-The Metrics component supports 3 options, which are listed below.
-
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *lazyStartProducer* (producer) | Whether the producer should be started lazy (on the first message). By starting lazy you can use this to allow CamelContext and routes to startup in situations where a producer may otherwise fail during starting and cause the route to fail being started. By deferring this startup to be lazy then the startup failure can be handled during routing messages via Camel's routing error handlers. Beware that when the first message is processed then creating and starting the producer may take a little time and prolong the total processing time of the processing. | false | boolean
-| *autowiredEnabled* (advanced) | Whether autowiring is enabled. This is used for automatic autowiring options (the option must be marked as autowired) by looking up in the registry to find if there is a single instance of matching type, which then gets configured on the component. This can be used for automatic configuring JDBC data sources, JMS connection factories, AWS Clients, etc. | true | boolean
-| *metricRegistry* (advanced) | To use a custom configured MetricRegistry. |  | MetricRegistry
-|===
+include::partial$component-configure-options.adoc[]
+include::partial$component-endpoint-options.adoc[]
 // component options: END
 
-
 // endpoint options: START
-The Metrics endpoint is configured using URI syntax:
 
-----
-metrics:metricsType:metricsName
-----
-
-with the following path and query parameters:
-
-=== Path Parameters (2 parameters):
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *metricsType* | *Required* Type of metrics. There are 5 enums and the value can be one of: gauge, counter, histogram, meter, timer |  | MetricsType
-| *metricsName* | *Required* Name of metrics |  | String
-|===
-
-
-=== Query Parameters (7 parameters):
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *action* (producer) | Action when using timer type. There are 2 enums and the value can be one of: start, stop |  | MetricsTimerAction
-| *decrement* (producer) | Decrement value when using counter type |  | Long
-| *increment* (producer) | Increment value when using counter type |  | Long
-| *lazyStartProducer* (producer) | Whether the producer should be started lazy (on the first message). By starting lazy you can use this to allow CamelContext and routes to startup in situations where a producer may otherwise fail during starting and cause the route to fail being started. By deferring this startup to be lazy then the startup failure can be handled during routing messages via Camel's routing error handlers. Beware that when the first message is processed then creating and starting the producer may take a little time and prolong the total processing time of the processing. | false | boolean
-| *mark* (producer) | Mark when using meter type |  | Long
-| *subject* (producer) | Subject value when using gauge type |  | Object
-| *value* (producer) | Value value when using histogram type |  | Long
-|===
 // endpoint options: END
-
-
-
+// component headers: START
+include::partial$component-endpoint-headers.adoc[]
+// component headers: END
 
 [[MetricsComponent-registry]]
 == Metric Registry
@@ -134,6 +94,7 @@ public static class MyConfig extends SingleRouteCamelConfiguration {
 ----
 
 Or using CDI:
+
 [source,java]
 ----
 class MyBean extends RouteBuilder {
@@ -189,7 +150,6 @@ level `warn`.
 [[MetricsComponent-counter]]
 == Metrics type counter
 
-[source]
 ----
 metrics:counter:metricname[?options]
 ----
@@ -265,7 +225,6 @@ from("direct:in")
 [[MetricsComponent-histogram]]
 == Metric type histogram
 
-[source]
 ----
 metrics:histogram:metricname[?options]
 ----
@@ -278,7 +237,7 @@ metrics:histogram:metricname[?options]
 |value |- |Value to use in histogram
 |===================================
 
-If `value` is not set nothing is added to histogram and warning is
+If `value` is not set, nothing is added to histogram and warning is
 logged.
 
 [source,java]
@@ -322,7 +281,6 @@ from("direct:in")
 [[MetricsComponent-meter]]
 == Metric type meter
 
-[source]
 ----
 metrics:meter:metricname[?options]
 ----
@@ -376,7 +334,6 @@ from("direct:in")
 [[MetricsComponent-timer]]
 == Metrics type timer
 
-[source]
 ----
 metrics:timer:metricname[?options]
 ----
@@ -430,7 +387,6 @@ from("direct:in")
 [[MetricsComponent-gauge]]
 == Metric type gauge
 
-[source]
 ----
 metrics:gauge:metricname[?options]
 ----
@@ -557,8 +513,6 @@ if (registryService != null) {
 
 == MetricsMessageHistoryFactory
 
-*Since Camel 2.17*
-
 This factory allows to use metrics to
 capture Message History performance
 statistics while routing messages. It works by using a metrics Timer for
@@ -633,10 +587,9 @@ with `name=MetricsMessageHistoryService`.
 
 == InstrumentedThreadPoolFactory
 
-*Since Camel 2.18*
-
 This factory allows you to gather performance information about Camel Thread Pools by injecting a InstrumentedThreadPoolFactory
 which collects information from inside of Camel.
 See more details at Advanced configuration of CamelContext using Spring
 
-include::camel-spring-boot::page$metrics-starter.adoc[]
+
+include::spring-boot:partial$starter.adoc[]

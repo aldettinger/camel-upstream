@@ -44,7 +44,7 @@ import static org.apache.camel.component.mustache.MustacheConstants.MUSTACHE_TEM
  * Transform messages using a Mustache template.
  */
 @UriEndpoint(firstVersion = "2.12.0", scheme = "mustache", title = "Mustache", syntax = "mustache:resourceUri",
-             producerOnly = true, category = { Category.TRANSFORMATION })
+             producerOnly = true, category = { Category.TRANSFORMATION }, headersClass = MustacheConstants.class)
 public class MustacheEndpoint extends ResourceEndpoint {
 
     private MustacheFactory mustacheFactory;
@@ -116,7 +116,7 @@ public class MustacheEndpoint extends ResourceEndpoint {
         writer.flush();
 
         // Fill out message
-        Message out = exchange.getOut();
+        Message out = exchange.getMessage();
         out.setBody(writer.toString());
         out.setHeaders(exchange.getIn().getHeaders());
     }

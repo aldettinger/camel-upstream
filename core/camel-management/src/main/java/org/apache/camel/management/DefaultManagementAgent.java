@@ -34,6 +34,7 @@ import javax.management.ObjectName;
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelContextAware;
 import org.apache.camel.ExtendedCamelContext;
+import org.apache.camel.ManagementMBeansLevel;
 import org.apache.camel.ManagementStatisticsLevel;
 import org.apache.camel.api.management.JmxSystemPropertyKeys;
 import org.apache.camel.spi.ManagementAgent;
@@ -74,6 +75,7 @@ public class DefaultManagementAgent extends ServiceSupport implements Management
     private Boolean useHostIPAddress = false;
     private String managementNamePattern = "#name#";
     private ManagementStatisticsLevel statisticsLevel = ManagementStatisticsLevel.Default;
+    private ManagementMBeansLevel mBeansLevel = ManagementMBeansLevel.Default;
 
     public DefaultManagementAgent() {
     }
@@ -287,6 +289,16 @@ public class DefaultManagementAgent extends ServiceSupport implements Management
     }
 
     @Override
+    public ManagementMBeansLevel getMBeansLevel() {
+        return mBeansLevel;
+    }
+
+    @Override
+    public void setMBeansLevel(ManagementMBeansLevel mBeansLevel) {
+        this.mBeansLevel = mBeansLevel;
+    }
+
+    @Override
     public CamelContext getCamelContext() {
         return camelContext;
     }
@@ -333,7 +345,7 @@ public class DefaultManagementAgent extends ServiceSupport implements Management
             return false;
         }
         ObjectName on = mbeansRegistered.get(name);
-        return (on != null && server.isRegistered(on))
+        return on != null && server.isRegistered(on)
                 || server.isRegistered(name);
     }
 

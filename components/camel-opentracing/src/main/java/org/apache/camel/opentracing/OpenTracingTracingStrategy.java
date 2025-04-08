@@ -35,6 +35,7 @@ import org.apache.camel.tracing.SpanDecorator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Deprecated
 public class OpenTracingTracingStrategy implements InterceptStrategy {
 
     private static final Logger LOG = LoggerFactory.getLogger(OpenTracingTracingStrategy.class);
@@ -76,7 +77,7 @@ public class OpenTracingTracingStrategy implements InterceptStrategy {
                 ActiveSpanManager.activate(exchange, new OpenTracingSpanAdapter(processorSpan));
             }
 
-            try (Scope scope = tracer.getTracer().scopeManager().activate(processorSpan, false)) {
+            try (Scope scope = tracer.getTracer().scopeManager().activate(processorSpan)) {
                 target.process(exchange);
             } catch (Exception ex) {
                 processorSpan.log(errorLogs(ex));

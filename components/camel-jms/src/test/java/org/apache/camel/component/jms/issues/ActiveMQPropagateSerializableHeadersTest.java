@@ -81,7 +81,7 @@ public class ActiveMQPropagateSerializableHeadersTest extends CamelTestSupport {
             assertEquals(calValue, headerValue, "myCal");
         }
         {
-            Map<String, Object> headerValue = exchange.getIn().getHeader("myMap", Map.class);
+            Map<?, ?> headerValue = exchange.getIn().getHeader("myMap", Map.class);
             assertEquals(mapValue, headerValue, "myMap");
         }
     }
@@ -102,9 +102,9 @@ public class ActiveMQPropagateSerializableHeadersTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
-            public void configure() throws Exception {
+            public void configure() {
                 from("activemq:test.a").process(exchange -> {
                     // set the JMS headers
                     Message in = exchange.getIn();

@@ -71,18 +71,29 @@ public class GenerateXmlMojo extends AbstractGenerateMojo {
             generator.withBlueprint();
         }
 
+        if (ObjectHelper.isNotEmpty(basePath)) {
+            generator.withBasePath(basePath);
+        }
+
         if (ObjectHelper.isNotEmpty(filterOperation)) {
             generator.withOperationFilter(filterOperation);
         }
 
         if (ObjectHelper.isNotEmpty(destinationGenerator)) {
             final DestinationGenerator destinationGeneratorObject = createDestinationGenerator();
-
             generator.withDestinationGenerator(destinationGeneratorObject);
+        } else if (ObjectHelper.isNotEmpty(destinationToSyntax)) {
+            generator.withDestinationToSyntax(destinationToSyntax);
         }
 
         if (restConfiguration) {
             generator.withRestComponent(findAppropriateComponent());
+            if (clientRequestValidation) {
+                generator.withClientRequestValidation();
+            }
+            if (ObjectHelper.isNotEmpty(apiContextPath)) {
+                generator.withApiContextPath(apiContextPath);
+            }
         }
 
         try {

@@ -16,55 +16,77 @@
  */
 package org.apache.camel.component.activemq;
 
-import org.apache.activemq.broker.BrokerService;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 import org.apache.camel.Body;
 import org.apache.camel.CamelContext;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.component.activemq.support.ActiveMQSupport;
 import org.apache.camel.impl.DefaultCamelContext;
+import org.apache.camel.support.LifecycleStrategySupport;
+import org.apache.camel.test.infra.activemq.services.ActiveMQEmbeddedService;
+import org.apache.camel.test.infra.activemq.services.ActiveMQEmbeddedServiceBuilder;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class AMQ2611Test {
-
-    private static final String BROKER_URL = "tcp://localhost:61616";
+public class AMQ2611Test implements ActiveMQSupport {
     private static final String QUEUE_NAME = "test.queue";
     private static final Logger LOG = LoggerFactory.getLogger(AMQ2611Test.class);
-    private BrokerService brokerService;
-    private CamelContext camelContext;
 
-    private void createBroker() throws Exception {
-        brokerService = new BrokerService();
-        brokerService.addConnector(BROKER_URL);
-        brokerService.start();
-    }
+    @RegisterExtension
+    public ActiveMQEmbeddedService service = ActiveMQEmbeddedServiceBuilder
+            .defaultBroker()
+            .withTcpTransport()
+            .build();
+
+    private CamelContext camelContext;
+    private CountDownLatch startedLatch = new CountDownLatch(1);
+    private CountDownLatch stoppedLatch = new CountDownLatch(1);
 
     public static class Consumer {
         public void consume(@Body String message) {
-            LOG.info("consume message = " + message);
+            LOG.info("consume message = {}", message);
         }
     }
 
     private void createCamelContext() throws Exception {
         LOG.info("creating context and sending message");
         camelContext = new DefaultCamelContext();
-        camelContext.addComponent("activemq", ActiveMQComponent.activeMQComponent(BROKER_URL));
+        camelContext.addComponent("activemq", ActiveMQComponent.activeMQComponent(service.serviceAddress()));
         final String queueEndpointName = "activemq:queue" + QUEUE_NAME;
         camelContext.addRoutes(new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from(queueEndpointName).bean(Consumer.class, "consume");
             }
         });
+
+        camelContext.addLifecycleStrategy(new LifecycleStrategySupport() {
+            @Override
+            public void onContextStarted(CamelContext context) {
+                super.onContextStarted(context);
+                startedLatch.countDown();
+            }
+
+            @Override
+            public void onContextStopped(CamelContext context) {
+                super.onContextStopped(context);
+                stoppedLatch.countDown();
+            }
+        });
+
         camelContext.start();
         final ProducerTemplate producerTemplate = camelContext.createProducerTemplate();
         producerTemplate.sendBody(queueEndpointName, "message");
     }
 
-    private void destroyCamelContext() throws Exception {
+    private void destroyCamelContext() {
         LOG.info("destroying context");
         camelContext.stop();
         camelContext = null;
@@ -73,14 +95,13 @@ public class AMQ2611Test {
     @Test
     public void testConnections() {
         try {
-            createBroker();
             int i = 0;
             while (i++ < 5) {
                 createCamelContext();
-                Thread.sleep(1000);
+                startedLatch.await(1, TimeUnit.SECONDS);
                 destroyCamelContext();
-                Thread.sleep(1000);
-                assertEquals(0, brokerService.getConnectorByName(BROKER_URL).getConnections().size());
+                stoppedLatch.await(1, TimeUnit.SECONDS);
+                assertEquals(0, service.getConnectionCount());
             }
         } catch (Exception e) {
             LOG.warn("run", e);

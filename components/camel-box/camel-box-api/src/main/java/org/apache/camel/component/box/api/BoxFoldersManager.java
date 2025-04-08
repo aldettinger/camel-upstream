@@ -27,6 +27,7 @@ import com.box.sdk.BoxAPIException;
 import com.box.sdk.BoxFolder;
 import com.box.sdk.BoxItem;
 import com.box.sdk.BoxSharedLink;
+import org.apache.camel.RuntimeCamelException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +62,7 @@ public class BoxFoldersManager {
             LOG.debug("Getting root folder");
             return BoxFolder.getRootFolder(boxConnection);
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }
@@ -75,7 +76,9 @@ public class BoxFoldersManager {
      */
     public BoxFolder getFolder(String... path) {
         try {
-            LOG.debug("Getting folder at path={}", Arrays.toString(path));
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Getting folder at path={}", Arrays.toString(path));
+            }
 
             BoxFolder folder = BoxFolder.getRootFolder(boxConnection);
             if (path == null || path.length == 0) {
@@ -95,7 +98,7 @@ public class BoxFoldersManager {
             }
             return folder;
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }
@@ -113,8 +116,10 @@ public class BoxFoldersManager {
      */
     public Collection<BoxItem.Info> getFolderItems(String folderId, Long offset, Long limit, String... fields) {
         try {
-            LOG.debug("Getting folder items in folder(id={}) at offset={} and limit={} with fields={}",
-                    folderId, offset, limit, Arrays.toString(fields));
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Getting folder items in folder(id={}) at offset={} and limit={} with fields={}",
+                        folderId, offset, limit, Arrays.toString(fields));
+            }
             if (folderId == null) {
                 throw new IllegalArgumentException("Parameter 'folderId' can not be null");
             }
@@ -139,7 +144,7 @@ public class BoxFoldersManager {
                 return folderItems;
             }
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }
@@ -163,7 +168,7 @@ public class BoxFoldersManager {
             BoxFolder parentFolder = new BoxFolder(boxConnection, parentFolderId);
             return parentFolder.createFolder(folderName).getResource();
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }
@@ -178,7 +183,11 @@ public class BoxFoldersManager {
      */
     public BoxFolder createFolder(String parentFolderId, String... path) {
         try {
-            LOG.debug("Creating folder with path '{}' in parent_folder(id={})", Arrays.toString(path), parentFolderId);
+
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Creating folder with path '{}' in parent_folder(id={})", Arrays.toString(path), parentFolderId);
+            }
+
             if (parentFolderId == null) {
                 throw new IllegalArgumentException("Parameter 'parentFolderId' can not be null");
             }
@@ -197,7 +206,7 @@ public class BoxFoldersManager {
             }
             return folder;
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }
@@ -229,7 +238,7 @@ public class BoxFoldersManager {
                 return folderToCopy.copy(destinationFolder, newName).getResource();
             }
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }
@@ -261,7 +270,7 @@ public class BoxFoldersManager {
                 return (BoxFolder) folderToMove.move(destinationFolder, newName).getResource();
             }
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }
@@ -286,7 +295,7 @@ public class BoxFoldersManager {
             folderToRename.rename(newFolderName);
             return folderToRename;
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }
@@ -305,7 +314,7 @@ public class BoxFoldersManager {
             BoxFolder folder = new BoxFolder(boxConnection, folderId);
             folder.delete(true);
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }
@@ -332,7 +341,7 @@ public class BoxFoldersManager {
                 return folder.getInfo(fields);
             }
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }
@@ -357,7 +366,7 @@ public class BoxFoldersManager {
             folder.updateInfo(info);
             return folder;
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }
@@ -393,7 +402,7 @@ public class BoxFoldersManager {
             BoxFolder folder = new BoxFolder(boxConnection, folderId);
             return folder.createSharedLink(access, unshareDate, permissions);
         } catch (BoxAPIException e) {
-            throw new RuntimeException(
+            throw new RuntimeCamelException(
                     String.format("Box API returned the error code %d%n%n%s", e.getResponseCode(), e.getResponse()), e);
         }
     }

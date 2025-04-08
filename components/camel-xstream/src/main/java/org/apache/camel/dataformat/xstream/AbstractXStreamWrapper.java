@@ -38,6 +38,7 @@ import com.thoughtworks.xstream.security.WildcardTypePermission;
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelContextAware;
 import org.apache.camel.Exchange;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.spi.ClassResolver;
 import org.apache.camel.spi.DataFormat;
 import org.apache.camel.spi.DataFormatContentTypeHeader;
@@ -177,7 +178,7 @@ public abstract class AbstractXStreamWrapper extends ServiceSupport
                             if (method != null) {
                                 ObjectHelper.invokeMethod(method, converter, xstream);
                             }
-                        } catch (Throwable e) {
+                        } catch (Exception e) {
                             // swallow, as it just means the user never add an XStream setter, which is optional
                         }
                     }
@@ -195,7 +196,7 @@ public abstract class AbstractXStreamWrapper extends ServiceSupport
                 addPermissions(xstream, permissions);
             }
         } catch (Exception e) {
-            throw new RuntimeException("Unable to build XStream instance", e);
+            throw new RuntimeCamelException("Unable to build XStream instance", e);
         }
 
         return xstream;

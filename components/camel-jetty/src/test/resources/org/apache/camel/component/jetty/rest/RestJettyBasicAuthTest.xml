@@ -53,7 +53,6 @@
                        bindingMode="json"
                        port="9444"
                        apiContextPath="api-docs"
-                       apiContextListing="true"
                        enableCORS="true">
 
       <endpointProperty key="handlers" value="securityHandler"/>
@@ -64,16 +63,18 @@
       <apiProperty key="cors" value="true"/>
     </restConfiguration>
 
-
     <rest>
-      <get uri="/ping">
-        <route>
-          <setBody>
-            <constant>pong</constant>
-          </setBody>
-        </route>
+      <get path="/ping">
+        <to uri="direct:ping"/>
       </get>
     </rest>
+
+    <route>
+      <from uri="direct:ping"/>
+      <setBody>
+        <constant>pong</constant>
+      </setBody>
+    </route>
 
   </camelContext>
 </beans>

@@ -51,40 +51,30 @@ import org.eclipse.californium.scandium.dtls.rpkstore.TrustedRpkStore;
  * Send and receive messages to/from COAP capable devices.
  */
 @UriEndpoint(firstVersion = "2.16.0", scheme = "coap,coaps,coap+tcp,coaps+tcp", title = "CoAP", syntax = "coap:uri",
-             category = { Category.IOT })
+             category = { Category.IOT }, headersClass = CoAPConstants.class)
 public class CoAPEndpoint extends DefaultEndpoint {
     @UriPath
     private URI uri;
-    @UriParam(label = "consumer")
+    @UriParam(label = "consumer", enums = "DELETE,GET,POST,PUT")
     private String coapMethodRestrict;
-
-    @UriParam
+    @UriParam(label = "security", secret = true)
     private PrivateKey privateKey;
-
-    @UriParam
+    @UriParam(label = "security")
     private PublicKey publicKey;
-
-    @UriParam
+    @UriParam(label = "security")
     private TrustedRpkStore trustedRpkStore;
-
-    @UriParam
+    @UriParam(label = "security")
     private PskStore pskStore;
-
-    @UriParam
+    @UriParam(label = "security")
     private String cipherSuites;
-
-    private String[] configuredCipherSuites;
-
-    @UriParam
+    private transient String[] configuredCipherSuites;
+    @UriParam(label = "security")
     private String clientAuthentication;
-
-    @UriParam
+    @UriParam(label = "security", enums = "NONE,WANT,REQUIRE")
     private String alias;
-
-    @UriParam
+    @UriParam(label = "security")
     private SSLContextParameters sslContextParameters;
-
-    @UriParam(defaultValue = "true")
+    @UriParam(label = "security", defaultValue = "true")
     private boolean recommendedCipherSuitesOnly = true;
 
     private CoAPComponent component;
@@ -118,7 +108,9 @@ public class CoAPEndpoint extends DefaultEndpoint {
 
     @Override
     public Consumer createConsumer(Processor processor) throws Exception {
-        return new CoAPConsumer(this, processor);
+        CoAPConsumer consumer = new CoAPConsumer(this, processor);
+        configureConsumer(consumer);
+        return consumer;
     }
 
     public void setUri(URI u) {

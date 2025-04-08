@@ -30,7 +30,6 @@ import org.apache.camel.model.dataformat.Any23DataFormat;
 import org.apache.camel.model.dataformat.AvroDataFormat;
 import org.apache.camel.model.dataformat.BarcodeDataFormat;
 import org.apache.camel.model.dataformat.Base64DataFormat;
-import org.apache.camel.model.dataformat.BeanioDataFormat;
 import org.apache.camel.model.dataformat.BindyDataFormat;
 import org.apache.camel.model.dataformat.CBORDataFormat;
 import org.apache.camel.model.dataformat.ContentTypeHeaderAware;
@@ -42,7 +41,7 @@ import org.apache.camel.model.dataformat.FhirJsonDataFormat;
 import org.apache.camel.model.dataformat.FhirXmlDataFormat;
 import org.apache.camel.model.dataformat.FlatpackDataFormat;
 import org.apache.camel.model.dataformat.GrokDataFormat;
-import org.apache.camel.model.dataformat.GzipDataFormat;
+import org.apache.camel.model.dataformat.GzipDeflaterDataFormat;
 import org.apache.camel.model.dataformat.HL7DataFormat;
 import org.apache.camel.model.dataformat.IcalDataFormat;
 import org.apache.camel.model.dataformat.JacksonXMLDataFormat;
@@ -54,17 +53,16 @@ import org.apache.camel.model.dataformat.MimeMultipartDataFormat;
 import org.apache.camel.model.dataformat.PGPDataFormat;
 import org.apache.camel.model.dataformat.ProtobufDataFormat;
 import org.apache.camel.model.dataformat.RssDataFormat;
-import org.apache.camel.model.dataformat.SoapJaxbDataFormat;
+import org.apache.camel.model.dataformat.SoapDataFormat;
 import org.apache.camel.model.dataformat.SyslogDataFormat;
 import org.apache.camel.model.dataformat.TarFileDataFormat;
 import org.apache.camel.model.dataformat.ThriftDataFormat;
 import org.apache.camel.model.dataformat.TidyMarkupDataFormat;
 import org.apache.camel.model.dataformat.UniVocityCsvDataFormat;
-import org.apache.camel.model.dataformat.UniVocityFixedWidthDataFormat;
+import org.apache.camel.model.dataformat.UniVocityFixedDataFormat;
 import org.apache.camel.model.dataformat.UniVocityTsvDataFormat;
 import org.apache.camel.model.dataformat.XMLSecurityDataFormat;
 import org.apache.camel.model.dataformat.XStreamDataFormat;
-import org.apache.camel.model.dataformat.XmlRpcDataFormat;
 import org.apache.camel.model.dataformat.YAMLDataFormat;
 import org.apache.camel.model.dataformat.ZipDeflaterDataFormat;
 import org.apache.camel.model.dataformat.ZipFileDataFormat;
@@ -187,8 +185,6 @@ public abstract class DataFormatReifier<T extends DataFormatDefinition> extends 
             return new BarcodeDataFormatReifier(camelContext, definition);
         } else if (definition instanceof Base64DataFormat) {
             return new Base64DataFormatReifier(camelContext, definition);
-        } else if (definition instanceof BeanioDataFormat) {
-            return new BeanioDataFormatReifier(camelContext, definition);
         } else if (definition instanceof BindyDataFormat) {
             return new BindyDataFormatReifier(camelContext, definition);
         } else if (definition instanceof CBORDataFormat) {
@@ -209,7 +205,7 @@ public abstract class DataFormatReifier<T extends DataFormatDefinition> extends 
             return new FlatpackDataFormatReifier(camelContext, definition);
         } else if (definition instanceof GrokDataFormat) {
             return new GrokDataFormatReifier(camelContext, definition);
-        } else if (definition instanceof GzipDataFormat) {
+        } else if (definition instanceof GzipDeflaterDataFormat) {
             return new GzipDataFormatReifier(camelContext, definition);
         } else if (definition instanceof HL7DataFormat) {
             return new HL7DataFormatReifier(camelContext, definition);
@@ -233,8 +229,8 @@ public abstract class DataFormatReifier<T extends DataFormatDefinition> extends 
             return new ProtobufDataFormatReifier(camelContext, definition);
         } else if (definition instanceof RssDataFormat) {
             return new RssDataFormatReifier(camelContext, definition);
-        } else if (definition instanceof SoapJaxbDataFormat) {
-            return new SoapJaxbDataFormatReifier(camelContext, definition);
+        } else if (definition instanceof SoapDataFormat) {
+            return new SoapDataFormatReifier(camelContext, definition);
         } else if (definition instanceof SyslogDataFormat) {
             return new SyslogDataFormatReifier(camelContext, definition);
         } else if (definition instanceof TarFileDataFormat) {
@@ -245,12 +241,10 @@ public abstract class DataFormatReifier<T extends DataFormatDefinition> extends 
             return new TidyMarkupDataFormatReifier(camelContext, definition);
         } else if (definition instanceof UniVocityCsvDataFormat) {
             return new UniVocityCsvDataFormatReifier(camelContext, definition);
-        } else if (definition instanceof UniVocityFixedWidthDataFormat) {
+        } else if (definition instanceof UniVocityFixedDataFormat) {
             return new UniVocityFixedWidthDataFormatReifier(camelContext, definition);
         } else if (definition instanceof UniVocityTsvDataFormat) {
             return new UniVocityTsvDataFormatReifier(camelContext, definition);
-        } else if (definition instanceof XmlRpcDataFormat) {
-            return new XmlRpcDataFormatReifier(camelContext, definition);
         } else if (definition instanceof XMLSecurityDataFormat) {
             return new XMLSecurityDataFormatReifier(camelContext, definition);
         } else if (definition instanceof XStreamDataFormat) {

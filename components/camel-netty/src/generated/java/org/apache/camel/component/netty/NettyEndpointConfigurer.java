@@ -47,19 +47,21 @@ public class NettyEndpointConfigurer extends PropertyConfigurerSupport implement
         case "correlationManager": target.getConfiguration().setCorrelationManager(property(camelContext, org.apache.camel.component.netty.NettyCamelStateCorrelationManager.class, value)); return true;
         case "decodermaxlinelength":
         case "decoderMaxLineLength": target.getConfiguration().setDecoderMaxLineLength(property(camelContext, int.class, value)); return true;
-        case "decoders": target.getConfiguration().setDecoders(property(camelContext, java.util.List.class, value)); return true;
+        case "decoders": target.getConfiguration().setDecoders(property(camelContext, java.lang.String.class, value)); return true;
         case "delimiter": target.getConfiguration().setDelimiter(property(camelContext, org.apache.camel.component.netty.TextLineDelimiter.class, value)); return true;
         case "disconnect": target.getConfiguration().setDisconnect(property(camelContext, boolean.class, value)); return true;
         case "disconnectonnoreply":
         case "disconnectOnNoReply": target.getConfiguration().setDisconnectOnNoReply(property(camelContext, boolean.class, value)); return true;
         case "enabledprotocols":
         case "enabledProtocols": target.getConfiguration().setEnabledProtocols(property(camelContext, java.lang.String.class, value)); return true;
-        case "encoders": target.getConfiguration().setEncoders(property(camelContext, java.util.List.class, value)); return true;
+        case "encoders": target.getConfiguration().setEncoders(property(camelContext, java.lang.String.class, value)); return true;
         case "encoding": target.getConfiguration().setEncoding(property(camelContext, java.lang.String.class, value)); return true;
         case "exceptionhandler":
         case "exceptionHandler": target.setExceptionHandler(property(camelContext, org.apache.camel.spi.ExceptionHandler.class, value)); return true;
         case "exchangepattern":
         case "exchangePattern": target.setExchangePattern(property(camelContext, org.apache.camel.ExchangePattern.class, value)); return true;
+        case "hostnameverification":
+        case "hostnameVerification": target.getConfiguration().setHostnameVerification(property(camelContext, boolean.class, value)); return true;
         case "keepalive":
         case "keepAlive": target.getConfiguration().setKeepAlive(property(camelContext, boolean.class, value)); return true;
         case "keystorefile":
@@ -86,10 +88,10 @@ public class NettyEndpointConfigurer extends PropertyConfigurerSupport implement
         case "passphrase": target.getConfiguration().setPassphrase(property(camelContext, java.lang.String.class, value)); return true;
         case "producerpoolenabled":
         case "producerPoolEnabled": target.getConfiguration().setProducerPoolEnabled(property(camelContext, boolean.class, value)); return true;
-        case "producerpoolmaxactive":
-        case "producerPoolMaxActive": target.getConfiguration().setProducerPoolMaxActive(property(camelContext, int.class, value)); return true;
         case "producerpoolmaxidle":
         case "producerPoolMaxIdle": target.getConfiguration().setProducerPoolMaxIdle(property(camelContext, int.class, value)); return true;
+        case "producerpoolmaxtotal":
+        case "producerPoolMaxTotal": target.getConfiguration().setProducerPoolMaxTotal(property(camelContext, int.class, value)); return true;
         case "producerpoolminevictableidle":
         case "producerPoolMinEvictableIdle": target.getConfiguration().setProducerPoolMinEvictableIdle(property(camelContext, long.class, value)); return true;
         case "producerpoolminidle":
@@ -180,19 +182,21 @@ public class NettyEndpointConfigurer extends PropertyConfigurerSupport implement
         case "correlationManager": return org.apache.camel.component.netty.NettyCamelStateCorrelationManager.class;
         case "decodermaxlinelength":
         case "decoderMaxLineLength": return int.class;
-        case "decoders": return java.util.List.class;
+        case "decoders": return java.lang.String.class;
         case "delimiter": return org.apache.camel.component.netty.TextLineDelimiter.class;
         case "disconnect": return boolean.class;
         case "disconnectonnoreply":
         case "disconnectOnNoReply": return boolean.class;
         case "enabledprotocols":
         case "enabledProtocols": return java.lang.String.class;
-        case "encoders": return java.util.List.class;
+        case "encoders": return java.lang.String.class;
         case "encoding": return java.lang.String.class;
         case "exceptionhandler":
         case "exceptionHandler": return org.apache.camel.spi.ExceptionHandler.class;
         case "exchangepattern":
         case "exchangePattern": return org.apache.camel.ExchangePattern.class;
+        case "hostnameverification":
+        case "hostnameVerification": return boolean.class;
         case "keepalive":
         case "keepAlive": return boolean.class;
         case "keystorefile":
@@ -219,10 +223,10 @@ public class NettyEndpointConfigurer extends PropertyConfigurerSupport implement
         case "passphrase": return java.lang.String.class;
         case "producerpoolenabled":
         case "producerPoolEnabled": return boolean.class;
-        case "producerpoolmaxactive":
-        case "producerPoolMaxActive": return int.class;
         case "producerpoolmaxidle":
         case "producerPoolMaxIdle": return int.class;
+        case "producerpoolmaxtotal":
+        case "producerPoolMaxTotal": return int.class;
         case "producerpoolminevictableidle":
         case "producerPoolMinEvictableIdle": return long.class;
         case "producerpoolminidle":
@@ -327,6 +331,8 @@ public class NettyEndpointConfigurer extends PropertyConfigurerSupport implement
         case "exceptionHandler": return target.getExceptionHandler();
         case "exchangepattern":
         case "exchangePattern": return target.getExchangePattern();
+        case "hostnameverification":
+        case "hostnameVerification": return target.getConfiguration().isHostnameVerification();
         case "keepalive":
         case "keepAlive": return target.getConfiguration().isKeepAlive();
         case "keystorefile":
@@ -353,10 +359,10 @@ public class NettyEndpointConfigurer extends PropertyConfigurerSupport implement
         case "passphrase": return target.getConfiguration().getPassphrase();
         case "producerpoolenabled":
         case "producerPoolEnabled": return target.getConfiguration().isProducerPoolEnabled();
-        case "producerpoolmaxactive":
-        case "producerPoolMaxActive": return target.getConfiguration().getProducerPoolMaxActive();
         case "producerpoolmaxidle":
         case "producerPoolMaxIdle": return target.getConfiguration().getProducerPoolMaxIdle();
+        case "producerpoolmaxtotal":
+        case "producerPoolMaxTotal": return target.getConfiguration().getProducerPoolMaxTotal();
         case "producerpoolminevictableidle":
         case "producerPoolMinEvictableIdle": return target.getConfiguration().getProducerPoolMinEvictableIdle();
         case "producerpoolminidle":
@@ -421,8 +427,6 @@ public class NettyEndpointConfigurer extends PropertyConfigurerSupport implement
     @Override
     public Object getCollectionValueType(Object target, String name, boolean ignoreCase) {
         switch (ignoreCase ? name.toLowerCase() : name) {
-        case "decoders": return io.netty.channel.ChannelHandler.class;
-        case "encoders": return io.netty.channel.ChannelHandler.class;
         case "options": return java.lang.Object.class;
         default: return null;
         }

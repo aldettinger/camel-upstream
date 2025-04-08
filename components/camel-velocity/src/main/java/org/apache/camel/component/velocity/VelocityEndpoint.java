@@ -46,7 +46,7 @@ import org.slf4j.LoggerFactory;
  * Transform messages using a Velocity template.
  */
 @UriEndpoint(firstVersion = "1.2.0", scheme = "velocity", title = "Velocity", syntax = "velocity:resourceUri",
-             producerOnly = true, category = { Category.TRANSFORMATION })
+             producerOnly = true, category = { Category.TRANSFORMATION }, headersClass = VelocityConstants.class)
 public class VelocityEndpoint extends ResourceEndpoint {
 
     private VelocityEngine velocityEngine;
@@ -244,7 +244,7 @@ public class VelocityEndpoint extends ResourceEndpoint {
         engine.evaluate(velocityContext, buffer, logTag, reader);
 
         // now lets output the results to the exchange
-        Message out = exchange.getOut();
+        Message out = exchange.getMessage();
         out.setBody(buffer.toString());
         out.setHeaders(exchange.getIn().getHeaders());
     }

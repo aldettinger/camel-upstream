@@ -17,6 +17,7 @@
 package org.apache.camel.component.mock;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -29,6 +30,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.camel.AsyncCallback;
 import org.apache.camel.CamelContext;
@@ -115,22 +117,21 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
     private volatile Map<String, Object> expectedHeaderValues;
     private volatile Map<String, Object> actualHeaderValues;
     private volatile Map<String, Object> expectedPropertyValues;
-    private volatile Map<String, Object> actualPropertyValues;
 
-    private volatile int counter;
+    private final AtomicInteger counter = new AtomicInteger();
 
     @UriPath(description = "Name of mock endpoint")
     @Metadata(required = true)
     private String name;
     @UriParam(label = "producer", defaultValue = "-1")
     private int expectedCount;
-    @UriParam(label = "producer", defaultValue = "0", javaType = "java.time.Duration")
+    @UriParam(label = "producer", javaType = "java.time.Duration")
     private long sleepForEmptyTest;
-    @UriParam(label = "producer", defaultValue = "0", javaType = "java.time.Duration")
+    @UriParam(label = "producer", javaType = "java.time.Duration")
     private long resultWaitTime;
-    @UriParam(label = "producer", defaultValue = "0", javaType = "java.time.Duration")
+    @UriParam(label = "producer", javaType = "java.time.Duration")
     private long resultMinimumWaitTime;
-    @UriParam(label = "producer", defaultValue = "0", javaType = "java.time.Duration")
+    @UriParam(label = "producer", javaType = "java.time.Duration")
     private long assertPeriod;
     @UriParam(label = "producer", defaultValue = "-1")
     private int retainFirst;
@@ -139,17 +140,19 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
     @UriParam(label = "producer")
     private int reportGroup;
     @UriParam(label = "producer")
+    private boolean log;
+    @UriParam(label = "producer")
     private boolean failFast = true;
     @UriParam(label = "producer,advanced", defaultValue = "true")
     private boolean copyOnExchange = true;
 
     public MockEndpoint() {
-        init();
+        reset();
     }
 
     public MockEndpoint(String endpointUri, Component component) {
         super(endpointUri, component);
-        init();
+        reset();
     }
 
     /**
@@ -280,7 +283,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         }
     }
 
-    public static void expectsMessageCount(int count, MockEndpoint... endpoints) throws InterruptedException {
+    public static void expectsMessageCount(int count, MockEndpoint... endpoints) {
         for (MockEndpoint endpoint : endpoints) {
             endpoint.setExpectedMessageCount(count);
         }
@@ -308,7 +311,27 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
     }
 
     public void reset() {
-        doInit();
+        safeLatchReset();
+        expectedCount = -1;
+        counter.set(0);
+        defaultProcessor = null;
+        processors = new HashMap<>();
+        receivedExchanges = new CopyOnWriteArrayList<>();
+        failures = new CopyOnWriteArrayList<>();
+        tests = new CopyOnWriteArrayList<>();
+        failFastAssertionError = null;
+        sleepForEmptyTest = 0;
+        resultWaitTime = 0;
+        resultMinimumWaitTime = 0L;
+        assertPeriod = 0L;
+        expectedMinimumCount = -1;
+        expectedBodyValues = null;
+        actualBodyValues = new ArrayList<>();
+        expectedHeaderValues = null;
+        actualHeaderValues = null;
+        expectedPropertyValues = null;
+        retainFirst = -1;
+        retainLast = -1;
     }
 
     // Testing API
@@ -561,10 +584,10 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
             if (factory != null) {
                 expectedHeaderValues = factory.newMap();
             } else {
-                // should not really happen but some tests dont start camel context
+                // should not really happen but some tests don't start camel context
                 expectedHeaderValues = new HashMap<>();
             }
-            // we just wants to expects to be called once
+            // we just wants to expect to be called once
             expects(new AssertionTask() {
                 @Override
                 public void assertOnIndex(int i) {
@@ -595,6 +618,29 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
             });
         }
         expectedHeaderValues.put(name, value);
+    }
+
+    /**
+     * Sets an expectation that the messages received by this endpoint have no header
+     */
+    public void expectedNoHeaderReceived() {
+        if (expectedMinimumCount == -1 && expectedCount <= 0) {
+            expectedMinimumMessageCount(1);
+        }
+        // we just wants to expect to be called once
+        expects(new AssertionTask() {
+            @Override
+            public void assertOnIndex(int i) {
+                Exchange exchange = getReceivedExchange(i);
+                assertFalse("Exchange " + i + " has headers", exchange.getIn().hasHeaders());
+            }
+
+            public void run() {
+                for (int i = 0; i < getReceivedExchanges().size(); i++) {
+                    assertOnIndex(i);
+                }
+            }
+        });
     }
 
     /**
@@ -668,15 +714,14 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
                     Object expectedValue = entry.getValue();
 
                     // we accept that an expectedValue of null also means that the property may be absent
+                    Object actualValue = null;
                     if (expectedValue != null) {
-                        assertTrue("Exchange " + i + " has no properties", !exchange.getProperties().isEmpty());
-                        boolean hasKey = exchange.getProperties().containsKey(key);
+                        actualValue = exchange.getProperty(key);
+                        boolean hasKey = actualValue != null;
                         assertTrue("No property with name " + key + " found for message: " + i, hasKey);
                     }
 
-                    Object actualValue = exchange.getProperty(key);
                     actualValue = extractActualValue(exchange, actualValue, expectedValue);
-
                     assertEquals("Property with name " + key + " for message: " + i, expectedValue, actualValue);
                 }
             }
@@ -781,15 +826,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
             return null;
         }
 
-        if (actualValue instanceof Expression) {
-            Class<?> clazz = Object.class;
-            if (expectedValue != null) {
-                clazz = expectedValue.getClass();
-            }
-            actualValue = ((Expression) actualValue).evaluate(exchange, clazz);
-        } else if (actualValue instanceof Predicate) {
-            actualValue = ((Predicate) actualValue).matches(exchange);
-        } else if (expectedValue != null) {
+        if (expectedValue != null) {
             String from = actualValue.getClass().getName();
             String to = expectedValue.getClass().getName();
             actualValue = getCamelContext().getTypeConverter().convertTo(expectedValue.getClass(), exchange, actualValue);
@@ -913,8 +950,29 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
      *
      * @param name name of file, will cater for / and \ on different OS platforms
      */
+    public void expectedFileExists(final Path name) {
+        expectedFileExists(name.toString(), null);
+    }
+
+    /**
+     * Adds an expectation that a file exists with the given name
+     *
+     * @param name name of file, will cater for / and \ on different OS platforms
+     */
     public void expectedFileExists(final String name) {
         expectedFileExists(name, null);
+    }
+
+    /**
+     * Adds an expectation that a file exists with the given name
+     * <p/>
+     * Will wait at most 5 seconds while checking for the existence of the file.
+     *
+     * @param name    name of file, will cater for / and \ on different OS platforms
+     * @param content content of file to compare, can be <tt>null</tt> to not compare content
+     */
+    public void expectedFileExists(final Path name, final String content) {
+        expectedFileExists(name.toString(), content);
     }
 
     /**
@@ -1310,7 +1368,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
     }
 
     public int getReceivedCounter() {
-        return counter;
+        return counter.get();
     }
 
     public List<Exchange> getReceivedExchanges() {
@@ -1487,6 +1545,20 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         this.reportGroup = reportGroup;
     }
 
+    public boolean isLog() {
+        return log;
+    }
+
+    /**
+     * To turn on logging when the mock receives an incoming message.
+     * <p/>
+     * This will log only one time at INFO level for the incoming message. For more detailed logging then set the logger
+     * to DEBUG level for the org.apache.camel.component.mock.MockEndpoint class.
+     */
+    public void setLog(boolean log) {
+        this.log = log;
+    }
+
     public boolean isCopyOnExchange() {
         return copyOnExchange;
     }
@@ -1516,34 +1588,19 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
 
     // Implementation methods
     // -------------------------------------------------------------------------
+
     @Override
-    protected void doInit() {
-        expectedCount = -1;
-        counter = 0;
-        defaultProcessor = null;
-        processors = new HashMap<>();
-        receivedExchanges = new CopyOnWriteArrayList<>();
-        failures = new CopyOnWriteArrayList<>();
-        tests = new CopyOnWriteArrayList<>();
-        latch = null;
-        failFastAssertionError = null;
-        sleepForEmptyTest = 0;
-        resultWaitTime = 0;
-        resultMinimumWaitTime = 0L;
-        assertPeriod = 0L;
-        expectedMinimumCount = -1;
-        expectedBodyValues = null;
-        actualBodyValues = new ArrayList<>();
-        expectedHeaderValues = null;
-        actualHeaderValues = null;
-        expectedPropertyValues = null;
-        actualPropertyValues = null;
-        retainFirst = -1;
-        retainLast = -1;
+    public MockComponent getComponent() {
+        return (MockComponent) super.getComponent();
     }
 
     protected synchronized void onExchange(Exchange exchange) {
         try {
+            if (log) {
+                String line = getComponent().getExchangeFormatter().format(exchange);
+                LOG.info("mock:{} received #{} -> {}", getName(), counter.get() + 1, line);
+            }
+
             if (reporter != null) {
                 reporter.process(exchange);
             }
@@ -1614,19 +1671,6 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
             }
         }
 
-        if (expectedPropertyValues != null) {
-            if (actualPropertyValues == null) {
-                HeadersMapFactory factory = getCamelContext().adapt(ExtendedCamelContext.class).getHeadersMapFactory();
-                if (factory != null) {
-                    actualPropertyValues = factory.newMap();
-                } else {
-                    // should not really happen but some tests dont start camel context
-                    actualPropertyValues = new HashMap<>();
-                }
-            }
-            actualPropertyValues.putAll(copy.getProperties());
-        }
-
         if (expectedBodyValues != null) {
             int index = actualBodyValues.size();
             if (expectedBodyValues.size() > index) {
@@ -1658,10 +1702,10 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         // add a copy of the received exchange
         addReceivedExchange(copy);
         // and then increment counter after adding received exchange
-        ++counter;
+        final int receivedCounter = counter.incrementAndGet();
 
-        Processor processor = processors.get(getReceivedCounter()) != null
-                ? processors.get(getReceivedCounter()) : defaultProcessor;
+        Processor processor = processors.get(receivedCounter) != null
+                ? processors.get(receivedCounter) : defaultProcessor;
 
         if (processor != null) {
             try {
@@ -1688,8 +1732,8 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
             receivedExchanges.add(copy);
         } else {
             // okay there is some sort of limitations, so figure out what to retain
-            if (retainFirst > 0 && counter < retainFirst) {
-                // store a copy as its within the retain first limitation
+            if (retainFirst > 0 && counter.get() < retainFirst) {
+                // store a copy as it is within the retain first limitation
                 receivedExchanges.add(copy);
             } else if (retainLast > 0) {
                 // remove the oldest from the last retained boundary,
@@ -1705,6 +1749,23 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
                 receivedExchanges.add(copy);
             }
         }
+    }
+
+    /**
+     * Reset the latch to {@code null} if it was not {@code null} but before, wait until the latch is released to ensure
+     * that all expected messages are fully processed (until the latch countDown) to prevent conflicts with subsequent
+     * tests.
+     */
+    private void safeLatchReset() {
+        if (latch == null) {
+            return;
+        }
+        try {
+            waitForCompleteLatch(resultWaitTime);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        this.latch = null;
     }
 
     protected void waitForCompleteLatch() throws InterruptedException {
@@ -1740,8 +1801,28 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         }
     }
 
+    /**
+     * Asserts that the given {@code predicate} is {@code true}, if not an {@code AssertionError} is raised with the
+     * give message.
+     *
+     * @param message   the message to use in case of a failure.
+     * @param predicate the predicate allowing to determinate if it is a failure or not.
+     */
     protected void assertTrue(String message, boolean predicate) {
         if (!predicate) {
+            fail(message);
+        }
+    }
+
+    /**
+     * Asserts that the given {@code predicate} is {@code false}, if not an {@code AssertionError} is raised with the
+     * give message.
+     *
+     * @param message   the message to use in case of a failure.
+     * @param predicate the predicate allowing to determinate if it is a failure or not.
+     */
+    protected void assertFalse(String message, boolean predicate) {
+        if (predicate) {
             fail(message);
         }
     }

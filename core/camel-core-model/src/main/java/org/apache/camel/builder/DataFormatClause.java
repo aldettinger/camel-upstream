@@ -29,8 +29,8 @@ import org.apache.camel.model.dataformat.ASN1DataFormat;
 import org.apache.camel.model.dataformat.Any23DataFormat;
 import org.apache.camel.model.dataformat.Any23Type;
 import org.apache.camel.model.dataformat.AvroDataFormat;
+import org.apache.camel.model.dataformat.AvroLibrary;
 import org.apache.camel.model.dataformat.Base64DataFormat;
-import org.apache.camel.model.dataformat.BeanioDataFormat;
 import org.apache.camel.model.dataformat.BindyDataFormat;
 import org.apache.camel.model.dataformat.BindyType;
 import org.apache.camel.model.dataformat.CBORDataFormat;
@@ -39,7 +39,7 @@ import org.apache.camel.model.dataformat.CustomDataFormat;
 import org.apache.camel.model.dataformat.FhirJsonDataFormat;
 import org.apache.camel.model.dataformat.FhirXmlDataFormat;
 import org.apache.camel.model.dataformat.GrokDataFormat;
-import org.apache.camel.model.dataformat.GzipDataFormat;
+import org.apache.camel.model.dataformat.GzipDeflaterDataFormat;
 import org.apache.camel.model.dataformat.HL7DataFormat;
 import org.apache.camel.model.dataformat.IcalDataFormat;
 import org.apache.camel.model.dataformat.JacksonXMLDataFormat;
@@ -51,8 +51,9 @@ import org.apache.camel.model.dataformat.LZFDataFormat;
 import org.apache.camel.model.dataformat.MimeMultipartDataFormat;
 import org.apache.camel.model.dataformat.PGPDataFormat;
 import org.apache.camel.model.dataformat.ProtobufDataFormat;
+import org.apache.camel.model.dataformat.ProtobufLibrary;
 import org.apache.camel.model.dataformat.RssDataFormat;
-import org.apache.camel.model.dataformat.SoapJaxbDataFormat;
+import org.apache.camel.model.dataformat.SoapDataFormat;
 import org.apache.camel.model.dataformat.SyslogDataFormat;
 import org.apache.camel.model.dataformat.TarFileDataFormat;
 import org.apache.camel.model.dataformat.ThriftDataFormat;
@@ -71,6 +72,7 @@ import org.apache.camel.support.jsse.KeyStoreParameters;
 public class DataFormatClause<T extends ProcessorDefinition<?>> {
     private final T processorType;
     private final Operation operation;
+    private boolean allowNullBody;
 
     /**
      * {@link org.apache.camel.spi.DataFormat} operations.
@@ -122,6 +124,43 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     }
 
     /**
+     * Uses Avro data format with library
+     */
+    public T avro(AvroLibrary library) {
+        return dataFormat(new AvroDataFormat(library));
+    }
+
+    /**
+     * Uses the Avro data format with given unmarshalType
+     */
+    public T avro(Class<?> unmarshalType) {
+        AvroDataFormat avroDataFormat = new AvroDataFormat();
+        avroDataFormat.setUnmarshalType(unmarshalType);
+        return dataFormat(avroDataFormat);
+    }
+
+    /**
+     * Uses the Avro data format with given library and unmarshalType
+     */
+    public T avro(AvroLibrary library, Class<?> unmarshalType) {
+        AvroDataFormat avroDataFormat = new AvroDataFormat();
+        avroDataFormat.setLibrary(library);
+        avroDataFormat.setUnmarshalType(unmarshalType);
+        return dataFormat(avroDataFormat);
+    }
+
+    /**
+     * Uses the Avro data format with given library, unmarshalType and schemaResolver
+     */
+    public T avro(AvroLibrary library, Class<?> unmarshalType, String schemaResolver) {
+        AvroDataFormat avroDataFormat = new AvroDataFormat();
+        avroDataFormat.setLibrary(library);
+        avroDataFormat.setUnmarshalType(unmarshalType);
+        avroDataFormat.setSchemaResolver(schemaResolver);
+        return dataFormat(avroDataFormat);
+    }
+
+    /**
      * Uses the base64 data format
      */
     public T base64() {
@@ -137,55 +176,6 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
         dataFormat.setLineLength(Integer.toString(lineLength));
         dataFormat.setLineSeparator(lineSeparator);
         dataFormat.setUrlSafe(Boolean.toString(urlSafe));
-        return dataFormat(dataFormat);
-    }
-
-    /**
-     * Uses the beanio data format
-     */
-    public T beanio(String mapping, String streamName) {
-        BeanioDataFormat dataFormat = new BeanioDataFormat();
-        dataFormat.setMapping(mapping);
-        dataFormat.setStreamName(streamName);
-        return dataFormat(dataFormat);
-    }
-
-    /**
-     * Uses the beanio data format
-     */
-    public T beanio(String mapping, String streamName, String encoding) {
-        BeanioDataFormat dataFormat = new BeanioDataFormat();
-        dataFormat.setMapping(mapping);
-        dataFormat.setStreamName(streamName);
-        dataFormat.setEncoding(encoding);
-        return dataFormat(dataFormat);
-    }
-
-    /**
-     * Uses the beanio data format
-     */
-    public T beanio(
-            String mapping, String streamName, String encoding, boolean ignoreUnidentifiedRecords,
-            boolean ignoreUnexpectedRecords, boolean ignoreInvalidRecords) {
-        BeanioDataFormat dataFormat = new BeanioDataFormat();
-        dataFormat.setMapping(mapping);
-        dataFormat.setStreamName(streamName);
-        dataFormat.setEncoding(encoding);
-        dataFormat.setIgnoreUnidentifiedRecords(Boolean.toString(ignoreUnidentifiedRecords));
-        dataFormat.setIgnoreUnexpectedRecords(Boolean.toString(ignoreUnexpectedRecords));
-        dataFormat.setIgnoreInvalidRecords(Boolean.toString(ignoreInvalidRecords));
-        return dataFormat(dataFormat);
-    }
-
-    /**
-     * Uses the beanio data format
-     */
-    public T beanio(String mapping, String streamName, String encoding, String beanReaderErrorHandlerType) {
-        BeanioDataFormat dataFormat = new BeanioDataFormat();
-        dataFormat.setMapping(mapping);
-        dataFormat.setStreamName(streamName);
-        dataFormat.setEncoding(encoding);
-        dataFormat.setBeanReaderErrorHandlerType(beanReaderErrorHandlerType);
         return dataFormat(dataFormat);
     }
 
@@ -269,7 +259,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
      * Uses the GZIP deflater data format
      */
     public T gzipDeflater() {
-        GzipDataFormat gzdf = new GzipDataFormat();
+        GzipDeflaterDataFormat gzdf = new GzipDeflaterDataFormat();
         return dataFormat(gzdf);
     }
 
@@ -435,7 +425,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the Jackson XML data format
      */
-    public T jacksonxml() {
+    public T jacksonXml() {
         return dataFormat(new JacksonXMLDataFormat());
     }
 
@@ -444,7 +434,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
      *
      * @param unmarshalType unmarshal type for xml jackson type
      */
-    public T jacksonxml(Class<?> unmarshalType) {
+    public T jacksonXml(Class<?> unmarshalType) {
         JacksonXMLDataFormat jacksonXMLDataFormat = new JacksonXMLDataFormat();
         jacksonXMLDataFormat.setUnmarshalType(unmarshalType);
         return dataFormat(jacksonXMLDataFormat);
@@ -456,7 +446,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
      * @param unmarshalType unmarshal type for xml jackson type
      * @param jsonView      the view type for xml jackson type
      */
-    public T jacksonxml(Class<?> unmarshalType, Class<?> jsonView) {
+    public T jacksonXml(Class<?> unmarshalType, Class<?> jsonView) {
         JacksonXMLDataFormat jacksonXMLDataFormat = new JacksonXMLDataFormat();
         jacksonXMLDataFormat.setUnmarshalType(unmarshalType);
         jacksonXMLDataFormat.setJsonView(jsonView);
@@ -468,7 +458,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
      *
      * @param prettyPrint turn pretty printing on or off
      */
-    public T jacksonxml(boolean prettyPrint) {
+    public T jacksonXml(boolean prettyPrint) {
         JacksonXMLDataFormat jacksonXMLDataFormat = new JacksonXMLDataFormat();
         jacksonXMLDataFormat.setPrettyPrint(Boolean.toString(prettyPrint));
         return dataFormat(jacksonXMLDataFormat);
@@ -480,7 +470,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
      * @param unmarshalType unmarshal type for xml jackson type
      * @param prettyPrint   turn pretty printing on or off
      */
-    public T jacksonxml(Class<?> unmarshalType, boolean prettyPrint) {
+    public T jacksonXml(Class<?> unmarshalType, boolean prettyPrint) {
         JacksonXMLDataFormat jacksonXMLDataFormat = new JacksonXMLDataFormat();
         jacksonXMLDataFormat.setUnmarshalType(unmarshalType);
         jacksonXMLDataFormat.setPrettyPrint(Boolean.toString(prettyPrint));
@@ -494,7 +484,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
      * @param jsonView      the view type for xml jackson type
      * @param prettyPrint   turn pretty printing on or off
      */
-    public T jacksonxml(Class<?> unmarshalType, Class<?> jsonView, boolean prettyPrint) {
+    public T jacksonXml(Class<?> unmarshalType, Class<?> jsonView, boolean prettyPrint) {
         JacksonXMLDataFormat jacksonXMLDataFormat = new JacksonXMLDataFormat();
         jacksonXMLDataFormat.setUnmarshalType(unmarshalType);
         jacksonXMLDataFormat.setJsonView(jsonView);
@@ -509,7 +499,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
      * @param jsonView      the view type for xml jackson type
      * @param include       include such as <tt>ALWAYS</tt>, <tt>NON_NULL</tt>, etc.
      */
-    public T jacksonxml(Class<?> unmarshalType, Class<?> jsonView, String include) {
+    public T jacksonXml(Class<?> unmarshalType, Class<?> jsonView, String include) {
         JacksonXMLDataFormat jacksonXMLDataFormat = new JacksonXMLDataFormat();
         jacksonXMLDataFormat.setUnmarshalType(unmarshalType);
         jacksonXMLDataFormat.setJsonView(jsonView);
@@ -525,7 +515,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
      * @param include       include such as <tt>ALWAYS</tt>, <tt>NON_NULL</tt>, etc.
      * @param prettyPrint   turn pretty printing on or off
      */
-    public T jacksonxml(Class<?> unmarshalType, Class<?> jsonView, String include, boolean prettyPrint) {
+    public T jacksonXml(Class<?> unmarshalType, Class<?> jsonView, String include, boolean prettyPrint) {
         JacksonXMLDataFormat jacksonXMLDataFormat = new JacksonXMLDataFormat();
         jacksonXMLDataFormat.setUnmarshalType(unmarshalType);
         jacksonXMLDataFormat.setJsonView(jsonView);
@@ -729,6 +719,34 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     }
 
     /**
+     * Uses the Protobuf data format with given library
+     */
+    public T protobuf(ProtobufLibrary library) {
+        return dataFormat(new ProtobufDataFormat(library));
+    }
+
+    /**
+     * Uses the Protobuf data format with given library and unmarshalType
+     */
+    public T protobuf(ProtobufLibrary library, Class<?> unmarshalType) {
+        ProtobufDataFormat protobufDataFormat = new ProtobufDataFormat();
+        protobufDataFormat.setLibrary(library);
+        protobufDataFormat.setUnmarshalType(unmarshalType);
+        return dataFormat(protobufDataFormat);
+    }
+
+    /**
+     * Uses the Protobuf data format with given library, unmarshalType and schemaResolver
+     */
+    public T protobuf(ProtobufLibrary library, Class<?> unmarshalType, String schemaResolver) {
+        ProtobufDataFormat protobufDataFormat = new ProtobufDataFormat();
+        protobufDataFormat.setLibrary(library);
+        protobufDataFormat.setUnmarshalType(unmarshalType);
+        protobufDataFormat.setSchemaResolver(schemaResolver);
+        return dataFormat(protobufDataFormat);
+    }
+
+    /**
      * Uses the RSS data format
      */
     public T rss() {
@@ -736,65 +754,65 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     }
 
     /**
-     * Uses the Soap 1.1 JAXB data format
+     * Uses the Soap v1.1 data format
      */
-    public T soapjaxb() {
-        return dataFormat(new SoapJaxbDataFormat());
+    public T soap() {
+        return dataFormat(new SoapDataFormat());
     }
 
     /**
-     * Uses the Soap 1.1 JAXB data format
+     * Uses the Soap v1.1 data format
      */
-    public T soapjaxb(String contextPath) {
-        return dataFormat(new SoapJaxbDataFormat(contextPath));
+    public T soap(String contextPath) {
+        return dataFormat(new SoapDataFormat(contextPath));
     }
 
     /**
-     * Uses the Soap 1.1 JAXB data format
+     * Uses the Soap v1.1 data format
      */
-    public T soapjaxb(String contextPath, String elementNameStrategyRef) {
-        return dataFormat(new SoapJaxbDataFormat(contextPath, elementNameStrategyRef));
+    public T soap(String contextPath, String elementNameStrategyRef) {
+        return dataFormat(new SoapDataFormat(contextPath, elementNameStrategyRef));
     }
 
     /**
-     * Uses the Soap 1.1 JAXB data format
+     * Uses the Soap v1.1 data format
      */
-    public T soapjaxb(String contextPath, Object elementNameStrategy) {
-        return dataFormat(new SoapJaxbDataFormat(contextPath, elementNameStrategy));
+    public T soap(String contextPath, Object elementNameStrategy) {
+        return dataFormat(new SoapDataFormat(contextPath, elementNameStrategy));
     }
 
     /**
-     * Uses the Soap 1.2 JAXB data format
+     * Uses the Soap v1.2 data format
      */
-    public T soapjaxb12() {
-        SoapJaxbDataFormat soap = new SoapJaxbDataFormat();
+    public T soap12() {
+        SoapDataFormat soap = new SoapDataFormat();
         soap.setVersion("1.2");
         return dataFormat(soap);
     }
 
     /**
-     * Uses the Soap 1.2 JAXB data format
+     * Uses the Soap v1.2 data format
      */
-    public T soapjaxb12(String contextPath) {
-        SoapJaxbDataFormat soap = new SoapJaxbDataFormat(contextPath);
+    public T soap12(String contextPath) {
+        SoapDataFormat soap = new SoapDataFormat(contextPath);
         soap.setVersion("1.2");
         return dataFormat(soap);
     }
 
     /**
-     * Uses the Soap 1.2 JAXB data format
+     * Uses the Soap v1.2 data format
      */
-    public T soapjaxb12(String contextPath, String elementNameStrategyRef) {
-        SoapJaxbDataFormat soap = new SoapJaxbDataFormat(contextPath, elementNameStrategyRef);
+    public T soap12(String contextPath, String elementNameStrategyRef) {
+        SoapDataFormat soap = new SoapDataFormat(contextPath, elementNameStrategyRef);
         soap.setVersion("1.2");
         return dataFormat(soap);
     }
 
     /**
-     * Uses the Soap JAXB data format
+     * Uses the Soap v1.2 data format
      */
-    public T soapjaxb12(String contextPath, Object elementNameStrategy) {
-        SoapJaxbDataFormat soap = new SoapJaxbDataFormat(contextPath, elementNameStrategy);
+    public T soap12(String contextPath, Object elementNameStrategy) {
+        SoapDataFormat soap = new SoapDataFormat(contextPath, elementNameStrategy);
         soap.setVersion("1.2");
         return dataFormat(soap);
     }
@@ -927,7 +945,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(byte[] passPhraseByte) {
+    public T xmlSecurity(byte[] passPhraseByte) {
         XMLSecurityDataFormat xsdf = new XMLSecurityDataFormat();
         xsdf.setPassPhraseByte(passPhraseByte);
         return dataFormat(xsdf);
@@ -936,7 +954,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(String secureTag, boolean secureTagContents, String passPhrase) {
+    public T xmlSecurity(String secureTag, boolean secureTagContents, String passPhrase) {
         XMLSecurityDataFormat xsdf = new XMLSecurityDataFormat();
         xsdf.setSecureTag(secureTag);
         xsdf.setSecureTagContents(Boolean.toString(secureTagContents));
@@ -947,7 +965,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(String secureTag, Map<String, String> namespaces, boolean secureTagContents, String passPhrase) {
+    public T xmlSecurity(String secureTag, Map<String, String> namespaces, boolean secureTagContents, String passPhrase) {
         XMLSecurityDataFormat xsdf = new XMLSecurityDataFormat();
         xsdf.setSecureTag(secureTag);
         xsdf.setNamespaces(namespaces);
@@ -959,7 +977,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(String secureTag, boolean secureTagContents, String passPhrase, String xmlCipherAlgorithm) {
+    public T xmlSecurity(String secureTag, boolean secureTagContents, String passPhrase, String xmlCipherAlgorithm) {
         XMLSecurityDataFormat xsdf = new XMLSecurityDataFormat();
         xsdf.setSecureTag(secureTag);
         xsdf.setSecureTagContents(Boolean.toString(secureTagContents));
@@ -971,7 +989,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(
+    public T xmlSecurity(
             String secureTag, Map<String, String> namespaces, boolean secureTagContents, String passPhrase,
             String xmlCipherAlgorithm) {
         XMLSecurityDataFormat xsdf = new XMLSecurityDataFormat();
@@ -986,7 +1004,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(String secureTag, boolean secureTagContents, byte[] passPhraseByte) {
+    public T xmlSecurity(String secureTag, boolean secureTagContents, byte[] passPhraseByte) {
         XMLSecurityDataFormat xsdf = new XMLSecurityDataFormat();
         xsdf.setSecureTag(secureTag);
         xsdf.setSecureTagContents(Boolean.toString(secureTagContents));
@@ -997,7 +1015,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(String secureTag, Map<String, String> namespaces, boolean secureTagContents, byte[] passPhraseByte) {
+    public T xmlSecurity(String secureTag, Map<String, String> namespaces, boolean secureTagContents, byte[] passPhraseByte) {
         XMLSecurityDataFormat xsdf = new XMLSecurityDataFormat();
         xsdf.setSecureTag(secureTag);
         xsdf.setNamespaces(namespaces);
@@ -1009,7 +1027,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(String secureTag, boolean secureTagContents, byte[] passPhraseByte, String xmlCipherAlgorithm) {
+    public T xmlSecurity(String secureTag, boolean secureTagContents, byte[] passPhraseByte, String xmlCipherAlgorithm) {
         XMLSecurityDataFormat xsdf = new XMLSecurityDataFormat();
         xsdf.setSecureTag(secureTag);
         xsdf.setSecureTagContents(Boolean.toString(secureTagContents));
@@ -1021,7 +1039,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(
+    public T xmlSecurity(
             String secureTag, Map<String, String> namespaces, boolean secureTagContents, byte[] passPhraseByte,
             String xmlCipherAlgorithm) {
         XMLSecurityDataFormat xsdf = new XMLSecurityDataFormat();
@@ -1036,7 +1054,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(
+    public T xmlSecurity(
             String secureTag, boolean secureTagContents, String recipientKeyAlias, String xmlCipherAlgorithm,
             String keyCipherAlgorithm,
             String keyOrTrustStoreParametersId) {
@@ -1053,7 +1071,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(
+    public T xmlSecurity(
             String secureTag, boolean secureTagContents, String recipientKeyAlias, String xmlCipherAlgorithm,
             String keyCipherAlgorithm,
             String keyOrTrustStoreParametersId, String keyPassword) {
@@ -1071,7 +1089,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(
+    public T xmlSecurity(
             String secureTag, boolean secureTagContents, String recipientKeyAlias, String xmlCipherAlgorithm,
             String keyCipherAlgorithm,
             KeyStoreParameters keyOrTrustStoreParameters) {
@@ -1088,7 +1106,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(
+    public T xmlSecurity(
             String secureTag, boolean secureTagContents, String recipientKeyAlias, String xmlCipherAlgorithm,
             String keyCipherAlgorithm,
             KeyStoreParameters keyOrTrustStoreParameters, String keyPassword) {
@@ -1106,7 +1124,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(
+    public T xmlSecurity(
             String secureTag, Map<String, String> namespaces, boolean secureTagContents, String recipientKeyAlias,
             String xmlCipherAlgorithm, String keyCipherAlgorithm,
             String keyOrTrustStoreParametersId) {
@@ -1123,7 +1141,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(
+    public T xmlSecurity(
             String secureTag, Map<String, String> namespaces, boolean secureTagContents, String recipientKeyAlias,
             String xmlCipherAlgorithm, String keyCipherAlgorithm,
             String keyOrTrustStoreParametersId, String keyPassword) {
@@ -1141,7 +1159,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(
+    public T xmlSecurity(
             String secureTag, Map<String, String> namespaces, boolean secureTagContents, String recipientKeyAlias,
             String xmlCipherAlgorithm, String keyCipherAlgorithm,
             KeyStoreParameters keyOrTrustStoreParameters) {
@@ -1159,7 +1177,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(
+    public T xmlSecurity(
             String secureTag, Map<String, String> namespaces, boolean secureTagContents, String recipientKeyAlias,
             String xmlCipherAlgorithm, String keyCipherAlgorithm,
             KeyStoreParameters keyOrTrustStoreParameters, String keyPassword) {
@@ -1178,7 +1196,7 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     /**
      * Uses the XML Security data format
      */
-    public T secureXML(
+    public T xmlSecurity(
             String secureTag, Map<String, String> namespaces, boolean secureTagContents, String recipientKeyAlias,
             String xmlCipherAlgorithm, String keyCipherAlgorithm,
             KeyStoreParameters keyOrTrustStoreParameters, String keyPassword, String digestAlgorithm) {
@@ -1236,10 +1254,23 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
         return dataFormat(asn1Df);
     }
 
-    public T asn1(String clazzName) {
-        return dataFormat(new ASN1DataFormat(clazzName));
+    /**
+     * Uses the ASN.1 file data format
+     */
+    public T asn1(String unmarshalType) {
+        return dataFormat(new ASN1DataFormat(unmarshalType));
     }
 
+    /**
+     * Uses the ASN.1 file data format
+     */
+    public T asn1(Class<?> unmarshalType) {
+        return dataFormat(new ASN1DataFormat(unmarshalType));
+    }
+
+    /**
+     * Uses the ASN.1 file data format
+     */
     public T asn1(Boolean usingIterator) {
         return dataFormat(new ASN1DataFormat(usingIterator));
     }
@@ -1298,11 +1329,32 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
         return dataFormat(fhirXmlDataFormat);
     }
 
+    /**
+     * Allows {@code null} as value of a body to unmarshall.
+     *
+     * @return the builder
+     */
+    public DataFormatClause<T> allowNullBody() {
+        return allowNullBody(true);
+    }
+
+    /**
+     * Indicates whether {@code null} is allowed as value of a body to unmarshall.
+     *
+     * @param  allowNullBody {@code true} if {@code null} is allowed as value of a body to unmarshall, {@code false}
+     *                       otherwise
+     * @return               the builder
+     */
+    public DataFormatClause<T> allowNullBody(boolean allowNullBody) {
+        this.allowNullBody = allowNullBody;
+        return this;
+    }
+
     @SuppressWarnings("unchecked")
     private T dataFormat(DataFormatDefinition dataFormatType) {
         switch (operation) {
             case Unmarshal:
-                return (T) processorType.unmarshal(dataFormatType);
+                return (T) processorType.unmarshal(dataFormatType, allowNullBody);
             case Marshal:
                 return (T) processorType.marshal(dataFormatType);
             default:

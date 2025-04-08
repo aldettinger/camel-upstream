@@ -48,10 +48,29 @@ public interface ReactiveExecutor {
     void scheduleSync(Runnable runnable);
 
     /**
+     * Schedules the task to be run later from the queue (current thread)
+     *
+     * This is used for routing {@link org.apache.camel.Exchange} using transactions.
+     *
+     * @param runnable the task
+     */
+    void scheduleQueue(Runnable runnable);
+
+    /**
      * Executes the next task (if supported by the reactive executor implementation)
      *
      * @return true if a task was executed or false if no more pending tasks
      */
     boolean executeFromQueue();
+
+    /**
+     * To enable statistics
+     */
+    void setStatisticsEnabled(boolean statisticsEnabled);
+
+    /**
+     * Whether statistics is enabled
+     */
+    boolean isStatisticsEnabled();
 
 }

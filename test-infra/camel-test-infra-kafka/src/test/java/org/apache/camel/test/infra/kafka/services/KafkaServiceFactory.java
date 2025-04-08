@@ -17,33 +17,57 @@
 
 package org.apache.camel.test.infra.kafka.services;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.camel.test.infra.common.services.SimpleTestServiceBuilder;
+import org.apache.camel.test.infra.common.services.SingletonService;
+import org.junit.jupiter.api.extension.ExtensionContext;
 
 public final class KafkaServiceFactory {
-    private static final Logger LOG = LoggerFactory.getLogger(KafkaServiceFactory.class);
+    static class SingletonKafkaService extends SingletonService<KafkaService> implements KafkaService {
+        public SingletonKafkaService(KafkaService service, String name) {
+            super(service, name);
+        }
+
+        @Override
+        public String getBootstrapServers() {
+            return getService().getBootstrapServers();
+        }
+
+        @Override
+        public void beforeAll(ExtensionContext extensionContext) {
+            addToStore(extensionContext);
+        }
+
+        @Override
+        public void afterAll(ExtensionContext extensionContext) {
+            // NO-OP
+        }
+    }
 
     private KafkaServiceFactory() {
 
     }
 
+    public static SimpleTestServiceBuilder<KafkaService> builder() {
+        return new SimpleTestServiceBuilder<>("kafka");
+    }
+
     public static KafkaService createService() {
-        String kafkaInstanceType = System.getProperty("kafka.instance.type");
+        return builder()
+                .addLocalMapping(ContainerLocalKafkaService::new)
+                .addMapping("local-strimzi-container", StrimziService::new)
+                .addRemoteMapping(RemoteKafkaService::new)
+                .addMapping("local-kafka3-container", ContainerLocalKafkaService::kafka3Container)
+                .build();
+    }
 
-        if (kafkaInstanceType == null || kafkaInstanceType.isEmpty() || kafkaInstanceType.equals("local-kafka-container")) {
-            return new ContainerLocalKafkaService();
-        }
-
-        if (kafkaInstanceType.equals("local-strimzi-container")) {
-            return new StrimziService();
-        }
-
-        if (kafkaInstanceType.equals("remote")) {
-            return new RemoteKafkaService();
-        }
-
-        LOG.error("Kafka instance must be one of 'local-strimzi-container', 'local-kafka-container', 'embedded' or 'remote");
-        throw new UnsupportedOperationException("Invalid Kafka instance type: " + kafkaInstanceType);
+    public static KafkaService createSingletonService() {
+        return builder()
+                .addLocalMapping(() -> new SingletonKafkaService(new ContainerLocalKafkaService(), "kafka"))
+                .addRemoteMapping(RemoteKafkaService::new)
+                .addMapping("local-kafka3-container",
+                        () -> new SingletonKafkaService(ContainerLocalKafkaService.kafka3Container(), "kafka3"))
+                .addMapping("local-strimzi-container", () -> new SingletonKafkaService(new StrimziService(), "strimzi"))
+                .build();
     }
 
 }

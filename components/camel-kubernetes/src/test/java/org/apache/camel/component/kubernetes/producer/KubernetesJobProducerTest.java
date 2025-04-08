@@ -21,9 +21,9 @@ import java.util.List;
 import java.util.Map;
 
 import io.fabric8.kubernetes.api.model.Secret;
-import io.fabric8.kubernetes.api.model.batch.Job;
-import io.fabric8.kubernetes.api.model.batch.JobBuilder;
-import io.fabric8.kubernetes.api.model.batch.JobListBuilder;
+import io.fabric8.kubernetes.api.model.batch.v1.Job;
+import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
+import io.fabric8.kubernetes.api.model.batch.v1.JobListBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.camel.BindToRegistry;
 import org.apache.camel.Exchange;
@@ -43,12 +43,12 @@ public class KubernetesJobProducerTest extends KubernetesTestSupport {
     public KubernetesServer server = new KubernetesServer();
 
     @BindToRegistry("kubernetesClient")
-    public KubernetesClient getClient() throws Exception {
+    public KubernetesClient getClient() {
         return server.getClient();
     }
 
     @Test
-    public void listTest() throws Exception {
+    public void listTest() {
         server.expect().withPath("/apis/batch/v1/namespaces/test/jobs")
                 .andReturn(200, new JobListBuilder().addNewItem().and().addNewItem().and().addNewItem().and().build())
                 .once();
@@ -74,7 +74,7 @@ public class KubernetesJobProducerTest extends KubernetesTestSupport {
     }
 
     @Test
-    public void getJobTest() throws Exception {
+    public void getJobTest() {
         Job sc1 = new JobBuilder().withNewMetadata().withName("sc1").withNamespace("test").and().build();
 
         server.expect().withPath("/apis/batch/v1/namespaces/test/jobs/sc1").andReturn(200, sc1).once();
@@ -89,16 +89,17 @@ public class KubernetesJobProducerTest extends KubernetesTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
-                from("direct:list").to("kubernetes-job:///?kubernetesClient=#kubernetesClient&operation=listJob");
-                from("direct:listByLabels")
-                        .to("kubernetes-job:///?kubernetesClient=#kubernetesClient&operation=listJobByLabels");
-                from("direct:get").to("kubernetes-job:///?kubernetesClient=#kubernetesClient&operation=getJob");
-                from("direct:create").to("kubernetes-job:///?kubernetesClient=#kubernetesClient&operation=createJob");
-                from("direct:delete").to("kubernetes-job:///?kubernetesClient=#kubernetesClient&operation=deleteJob");
+            public void configure() {
+                // the kubernetes-client is autowired on the component
+
+                from("direct:list").to("kubernetes-job:foo?operation=listJob");
+                from("direct:listByLabels").to("kubernetes-job:foo?operation=listJobByLabels");
+                from("direct:get").to("kubernetes-job:foo?operation=getJob");
+                from("direct:create").to("kubernetes-job:foo?operation=createJob");
+                from("direct:delete").to("kubernetes-job:foo?operation=deleteJob");
             }
         };
     }

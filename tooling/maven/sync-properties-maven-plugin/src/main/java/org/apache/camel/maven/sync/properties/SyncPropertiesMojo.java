@@ -18,12 +18,15 @@ package org.apache.camel.maven.sync.properties;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 import java.util.TreeMap;
 
+import org.apache.camel.tooling.util.FileUtil;
+import org.apache.camel.tooling.util.PackageHelper;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.OrderedProperties;
 import org.apache.maven.model.Model;
@@ -38,71 +41,92 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 
 /**
- * Copy the properties in a POM in a different POM for syncing purpose.
+ * Copy the properties from a source POM to a different destination POM for syncing purposes.
  */
 @Mojo(name = "sync-properties", defaultPhase = LifecyclePhase.VALIDATE, threadSafe = true)
 public class SyncPropertiesMojo extends AbstractMojo {
 
     /**
-     * The source pom template file.
+     * The base directory
      */
-    @Parameter(defaultValue = "${basedir}/../../../parent/pom.xml")
-    protected File sourcePom;
+    @Parameter(defaultValue = "${project.basedir}")
+    protected File baseDir;
 
     /**
-     * The pom file.
+     * The Maven project.
      */
-    @Parameter(defaultValue = "${basedir}/../../../camel-dependencies/pom.xml")
-    protected File targetPom;
-
-    /**
-     * The license header file.
-     */
-    @Parameter(defaultValue = "${basedir}/../../etc/apache-header.xml")
-    protected File licenseHeader;
+    @Parameter(defaultValue = "${project}", readonly = true, required = true)
+    protected MavenProject project;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
+        File dir = PackageHelper.findCamelDirectory(baseDir, "parent");
+        File sourcePom = new File(dir, "pom.xml");
+        dir = PackageHelper.findCamelDirectory(baseDir, "camel-dependencies");
+        File targetPom = new File(dir, "pom.xml");
+        dir = PackageHelper.findCamelDirectory(baseDir, "etc");
+        File licenseHeader = new File(dir, "apache-header.xml");
+
         try {
             Properties parentProp;
+            String generatedVersion;
+
+            if (getLog().isDebugEnabled()) {
+                getLog().debug("Reading source file " + sourcePom.toPath());
+            }
+
             try (FileReader reader = new FileReader(sourcePom)) {
                 MavenXpp3Reader mavenReader = new MavenXpp3Reader();
                 Model model = mavenReader.read(reader);
 
-                MavenProject project = new MavenProject(model);
-                parentProp = project.getProperties();
+                MavenProject sourceProject = new MavenProject(model);
+                parentProp = sourceProject.getProperties();
+                generatedVersion = sourceProject.getVersion();
             }
-            try (FileReader reader = new FileReader(targetPom)) {
-                MavenXpp3Reader mavenReader = new MavenXpp3Reader();
-                Model model = mavenReader.read(reader);
 
-                // lets sort the properties
+            InputStream is = null;
+            try {
+                is = SyncPropertiesMojo.class.getResourceAsStream("/camel-dependencies-template.xml");
+                MavenXpp3Reader mavenReader = new MavenXpp3Reader();
+                Model model = mavenReader.read(is);
+
+                // sort the properties
                 OrderedProperties op = new OrderedProperties();
                 op.putAll(new TreeMap<>(parentProp));
 
-                MavenProject project = new MavenProject(model);
-                project.getModel().setProperties(op);
+                MavenProject targetProject = new MavenProject(model);
+                targetProject.getModel().setProperties(op);
+
+                if (getLog().isDebugEnabled()) {
+                    getLog().debug("Set version of target pom to " + generatedVersion);
+                }
+                targetProject.setVersion(generatedVersion);
 
                 MavenXpp3Writer mavenWriter = new MavenXpp3Writer();
                 mavenWriter.write(new FileWriter(targetPom), model);
+            } finally {
+                IOHelper.close(is);
             }
 
             // add license header in top
+            getLog().debug("Add license header...");
             String text = IOHelper.loadText(new FileInputStream(targetPom));
             String text2 = IOHelper.loadText(new FileInputStream(licenseHeader));
-            StringBuffer sb = new StringBuffer(text);
+            StringBuilder sb = new StringBuilder(text);
             int pos = sb.indexOf("<project");
             sb.insert(pos, text2);
 
             // avoid annoying http -> https change when rebuilding
+            getLog().debug("Replacing xsd location ...");
             String out = sb.toString();
             out = out.replace("https://maven.apache.org/xsd/maven-4.0.0.xsd", "http://maven.apache.org/xsd/maven-4.0.0.xsd");
 
             // write lines
-            FileOutputStream outputStream = new FileOutputStream(targetPom);
-            byte[] strToBytes = out.getBytes();
-            outputStream.write(strToBytes);
-            outputStream.close();
+            boolean updated = FileUtil.updateFile(targetPom.toPath(), out, StandardCharsets.UTF_8);
+            if (updated) {
+                getLog().info("Updated: " + targetPom);
+            }
+            getLog().debug("Finished.");
         } catch (Exception ex) {
             throw new MojoExecutionException("Cannot copy the properties between POMs", ex);
         }

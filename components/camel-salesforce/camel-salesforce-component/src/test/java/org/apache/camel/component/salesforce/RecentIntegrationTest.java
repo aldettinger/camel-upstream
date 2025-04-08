@@ -20,32 +20,21 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import com.thoughtworks.xstream.annotations.XStreamImplicit;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.salesforce.api.dto.AbstractQueryRecordsBase;
 import org.apache.camel.component.salesforce.api.dto.RecentItem;
 import org.apache.camel.component.salesforce.dto.generated.Account;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.apache.camel.test.junit5.TestSupport.assertListSize;
 
-@Standalone
+@Tag("standalone")
 public class RecentIntegrationTest extends AbstractSalesforceTestBase {
 
-    public static class Accounts extends AbstractQueryRecordsBase {
-        @XStreamImplicit
-        private List<Account> records;
-
-        public List<Account> getRecords() {
-            return records;
-        }
-
-        public void setRecords(final List<Account> records) {
-            this.records = records;
-        }
-
+    public static class Accounts extends AbstractQueryRecordsBase<Account> {
     }
 
     private static final Object NOT_USED = null;

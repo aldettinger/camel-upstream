@@ -53,7 +53,7 @@ public class XMLSecurityConcurrencyTest extends CamelTestSupport {
         for (int i = 0; i < files; i++) {
             final int index = i;
             executor.submit(new Callable<Object>() {
-                public Object call() throws Exception {
+                public Object call() {
                     String body = "<?xml version=\"1.0\" encoding=\"UTF-8\" ?><body>you can not read me " + index + "</body>";
                     template.sendBody("direct:start", body);
                     return null;
@@ -77,9 +77,9 @@ public class XMLSecurityConcurrencyTest extends CamelTestSupport {
 
         return new RouteBuilder() {
             public void configure() {
-                from("direct:start").marshal().secureXML(defaultKey.getEncoded()).to("mock:secure").to("direct:marshalled");
+                from("direct:start").marshal().xmlSecurity(defaultKey.getEncoded()).to("mock:secure").to("direct:marshalled");
 
-                from("direct:marshalled").unmarshal().secureXML(defaultKey.getEncoded()).convertBodyTo(String.class)
+                from("direct:marshalled").unmarshal().xmlSecurity(defaultKey.getEncoded()).convertBodyTo(String.class)
                         .to("mock:result");
             }
         };

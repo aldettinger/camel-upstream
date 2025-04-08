@@ -49,6 +49,7 @@ public class JpaTest {
     private static final Logger LOG = LoggerFactory.getLogger(JpaTest.class);
     protected CamelContext camelContext = new DefaultCamelContext();
     protected ProducerTemplate template;
+    protected JpaComponent component;
     protected JpaEndpoint endpoint;
     protected JpaEndpoint listEndpoint;
     protected EntityManager entityManager;
@@ -96,7 +97,7 @@ public class JpaTest {
     }
 
     @Test
-    public void testProducerInsertsList() throws Exception {
+    public void testProducerInsertsList() {
         // lets produce some objects
         template.send(listEndpoint, new Processor() {
             public void process(Exchange exchange) {
@@ -121,9 +122,11 @@ public class JpaTest {
     }
 
     @BeforeEach
-    public void setUp() throws Exception {
+    public void setUp() {
         camelContext.start();
         template = camelContext.createProducerTemplate();
+
+        setUpComponent();
 
         Endpoint value = camelContext.getEndpoint(getEndpointUri());
         assertNotNull(value, "Could not find endpoint!");
@@ -152,8 +155,12 @@ public class JpaTest {
         return "jpa://" + SendEmail.class.getName();
     }
 
+    protected void setUpComponent() {
+        // no set up in this test
+    }
+
     @AfterEach
-    public void tearDown() throws Exception {
+    public void tearDown() {
         ServiceHelper.stopService(consumer, template);
         camelContext.stop();
     }

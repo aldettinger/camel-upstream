@@ -34,7 +34,6 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Date;
-import java.util.List;
 import java.util.Set;
 
 import org.apache.camel.Exchange;
@@ -81,7 +80,7 @@ public class FileOperations implements GenericFileOperations<File> {
 
     @Override
     public boolean renameFile(String from, String to) throws GenericFileOperationFailedException {
-        boolean renamed = false;
+        boolean renamed;
         File file = new File(from);
         File target = new File(to);
         try {
@@ -202,13 +201,13 @@ public class FileOperations implements GenericFileOperations<File> {
     }
 
     @Override
-    public List<File> listFiles() throws GenericFileOperationFailedException {
+    public File[] listFiles() throws GenericFileOperationFailedException {
         // noop
         return null;
     }
 
     @Override
-    public List<File> listFiles(String path) throws GenericFileOperationFailedException {
+    public File[] listFiles(String path) throws GenericFileOperationFailedException {
         // noop
         return null;
     }
@@ -297,7 +296,16 @@ public class FileOperations implements GenericFileOperations<File> {
                 // using file directly (optimized)
                 Object body = exchange.getIn().getBody();
                 if (body instanceof WrappedFile) {
-                    body = ((WrappedFile<?>) body).getFile();
+                    WrappedFile wrapped = (WrappedFile) body;
+                    body = wrapped.getFile();
+                    if (!(body instanceof File)) {
+                        // the wrapped file may be from remote (FTP) which then can store
+                        // a local java.io.File handle if storing to local work-dir so check for that
+                        Object maybeFile = wrapped.getBody();
+                        if (maybeFile instanceof File) {
+                            body = maybeFile;
+                        }
+                    }
                 }
                 if (body instanceof File) {
                     source = (File) body;
@@ -313,7 +321,7 @@ public class FileOperations implements GenericFileOperations<File> {
                 // a full file to file copy, as the local work copy is to be
                 // deleted afterwards anyway
                 // local work path
-                File local = exchange.getIn().getHeader(Exchange.FILE_LOCAL_WORK_PATH, File.class);
+                File local = exchange.getIn().getHeader(FileConstants.FILE_LOCAL_WORK_PATH, File.class);
                 if (local != null && local.exists()) {
                     boolean renamed = writeFileByLocalWorkPath(local, file);
                     if (renamed) {
@@ -332,7 +340,7 @@ public class FileOperations implements GenericFileOperations<File> {
                             }
                         }
                         // clear header as we have renamed the file
-                        exchange.getIn().setHeader(Exchange.FILE_LOCAL_WORK_PATH, null);
+                        exchange.getIn().setHeader(FileConstants.FILE_LOCAL_WORK_PATH, null);
                         // return as the operation is complete, we just renamed
                         // the local work file
                         // to the target.
@@ -373,6 +381,10 @@ public class FileOperations implements GenericFileOperations<File> {
                 // buffer the reader
                 in = IOHelper.buffered(in);
                 writeFileByReaderWithCharset(in, file, charset);
+            } else if (exchange.getIn().getBody() instanceof String) {
+                // If the body is a string, write it directly
+                String stringBody = (String) exchange.getIn().getBody();
+                writeFileByString(stringBody, file);
             } else {
                 // fallback and use stream based
                 InputStream in = exchange.getIn().getMandatoryBody(InputStream.class);
@@ -403,12 +415,12 @@ public class FileOperations implements GenericFileOperations<File> {
     private void keepLastModified(Exchange exchange, File file) {
         if (endpoint.isKeepLastModified()) {
             Long last;
-            Date date = exchange.getIn().getHeader(Exchange.FILE_LAST_MODIFIED, Date.class);
+            Date date = exchange.getIn().getHeader(FileConstants.FILE_LAST_MODIFIED, Date.class);
             if (date != null) {
                 last = date.getTime();
             } else {
                 // fallback and try a long
-                last = exchange.getIn().getHeader(Exchange.FILE_LAST_MODIFIED, Long.class);
+                last = exchange.getIn().getHeader(FileConstants.FILE_LAST_MODIFIED, Long.class);
             }
             if (last != null) {
                 boolean result = file.setLastModified(last);
@@ -443,9 +455,7 @@ public class FileOperations implements GenericFileOperations<File> {
     }
 
     private void writeFileByStream(InputStream in, File target) throws IOException {
-        boolean exists = target.exists();
         try (SeekableByteChannel out = prepareOutputFileChannel(target)) {
-
             LOG.debug("Using InputStream to write file: {}", target);
             int size = endpoint.getBufferSize();
             byte[] buffer = new byte[size];
@@ -453,32 +463,27 @@ public class FileOperations implements GenericFileOperations<File> {
             int bytesRead;
             while ((bytesRead = in.read(buffer)) != -1) {
                 if (bytesRead < size) {
-                    // to be compatible with java 8
                     Buffer buf = byteBuffer;
                     buf.limit(bytesRead);
                 }
                 out.write(byteBuffer);
-                // to be compatible with java 8
                 Buffer buf = byteBuffer;
                 buf.clear();
             }
 
             boolean append = endpoint.getFileExist() == GenericFileExist.Append;
-            if (append && exists && endpoint.getAppendChars() != null) {
+            if (append && endpoint.getAppendChars() != null) {
                 byteBuffer = ByteBuffer.wrap(endpoint.getAppendChars().getBytes());
                 out.write(byteBuffer);
-                // to be compatible with java 8
                 Buffer buf = byteBuffer;
                 buf.clear();
             }
-
         } finally {
             IOHelper.close(in, target.getName(), LOG);
         }
     }
 
     private void writeFileByReaderWithCharset(Reader in, File target, String charset) throws IOException {
-        boolean exists = target.exists();
         boolean append = endpoint.getFileExist() == GenericFileExist.Append;
         try (Writer out = Files.newBufferedWriter(target.toPath(), Charset.forName(charset), StandardOpenOption.WRITE,
                 append ? StandardOpenOption.APPEND : StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE)) {
@@ -486,11 +491,21 @@ public class FileOperations implements GenericFileOperations<File> {
             int size = endpoint.getBufferSize();
             IOHelper.copy(in, out, size);
 
-            if (append && exists && endpoint.getAppendChars() != null) {
+            if (append && endpoint.getAppendChars() != null) {
                 out.write(endpoint.getAppendChars());
             }
         } finally {
             IOHelper.close(in, target.getName(), LOG);
+        }
+    }
+
+    private void writeFileByString(String body, File target) throws IOException {
+        boolean append = endpoint.getFileExist() == GenericFileExist.Append;
+        Files.writeString(target.toPath(), body, StandardOpenOption.WRITE,
+                append ? StandardOpenOption.APPEND : StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
+        if (append && endpoint.getAppendChars() != null) {
+            Files.writeString(target.toPath(), endpoint.getAppendChars(), StandardOpenOption.WRITE,
+                    StandardOpenOption.APPEND);
         }
     }
 

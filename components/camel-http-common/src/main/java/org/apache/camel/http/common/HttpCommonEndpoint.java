@@ -17,7 +17,6 @@
 package org.apache.camel.http.common;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Map;
 
 import org.apache.camel.cloud.DiscoverableService;
@@ -177,7 +176,7 @@ public abstract class HttpCommonEndpoint extends DefaultEndpoint implements Head
     public HttpCommonEndpoint() {
     }
 
-    public HttpCommonEndpoint(String endPointURI, HttpCommonComponent component, URI httpURI) throws URISyntaxException {
+    public HttpCommonEndpoint(String endPointURI, HttpCommonComponent component, URI httpURI) {
         super(endPointURI, component);
         this.component = component;
         this.httpUri = httpURI;
@@ -226,14 +225,6 @@ public abstract class HttpCommonEndpoint extends DefaultEndpoint implements Head
     @Deprecated
     public HttpBinding getBinding() {
         return httpBinding;
-    }
-
-    /**
-     * @deprecated use {@link #setHttpBinding(HttpBinding)}
-     */
-    @Deprecated
-    public void setBinding(HttpBinding httpBinding) {
-        setHttpBinding(httpBinding);
     }
 
     public HttpBinding getHttpBinding() {

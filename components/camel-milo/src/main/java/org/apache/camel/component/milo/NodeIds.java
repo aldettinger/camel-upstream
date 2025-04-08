@@ -33,6 +33,7 @@ import static org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.Unsigned.
  * Helper class to work with node IDs
  */
 public final class NodeIds {
+
     private NodeIds() {
     }
 

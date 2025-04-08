@@ -28,7 +28,6 @@ import org.apache.camel.Exchange;
 import org.apache.camel.ExtendedCamelContext;
 import org.apache.camel.Ordered;
 import org.apache.camel.Processor;
-import org.apache.camel.Service;
 import org.apache.camel.spi.AsyncProcessorAwaitManager;
 import org.apache.camel.spi.CamelInternalProcessorAdvice;
 import org.apache.camel.spi.ReactiveExecutor;
@@ -172,9 +171,7 @@ public class SharedCamelInternalProcessor implements SharedInternalProcessor {
         // create internal callback which will execute the advices in reverse order when done
         AsyncCallback callback = new InternalCallback(states, exchange, originalCallback, resultProcessor);
 
-        // UNIT_OF_WORK_PROCESS_SYNC is @deprecated and we should remove it from Camel 3.0
-        Object synchronous = exchange.removeProperty(Exchange.UNIT_OF_WORK_PROCESS_SYNC);
-        if (exchange.isTransacted() || synchronous != null) {
+        if (exchange.isTransacted()) {
             // must be synchronized for transacted exchanges
             if (LOG.isTraceEnabled()) {
                 if (exchange.isTransacted()) {
@@ -201,8 +198,7 @@ public class SharedCamelInternalProcessor implements SharedInternalProcessor {
         } else {
             final UnitOfWork uow = exchange.getUnitOfWork();
 
-            // do uow before processing and if a value is returned the the uow wants to be processed after
-            // was well in the same thread
+            // do uow before processing and if a value is returned then the uow wants to be processed after in the same thread
             AsyncCallback async = callback;
             boolean beforeAndAfter = uow.isBeforeAfterProcess();
             if (beforeAndAfter) {
@@ -227,7 +223,8 @@ public class SharedCamelInternalProcessor implements SharedInternalProcessor {
             }
 
             if (LOG.isTraceEnabled()) {
-                LOG.trace("Exchange processed and is continued routed asynchronously for exchangeId: {} -> {}",
+                LOG.trace("Exchange processed and is continued routed {} for exchangeId: {} -> {}",
+                        sync ? "synchronously" : "asynchronously",
                         exchange.getExchangeId(), exchange);
             }
             return sync;
@@ -304,18 +301,14 @@ public class SharedCamelInternalProcessor implements SharedInternalProcessor {
             return false;
         }
 
-        // determine if we can still run, or the camel context is forcing a shutdown
-        if (processor instanceof Service) {
-            boolean forceShutdown = shutdownStrategy.forceShutdown((Service) processor);
-            if (forceShutdown) {
-                String msg = "Run not allowed as ShutdownStrategy is forcing shutting down, will reject executing exchange: "
-                             + exchange;
-                LOG.debug(msg);
-                if (exchange.getException() == null) {
-                    exchange.setException(new RejectedExecutionException(msg));
-                }
-                return false;
+        if (shutdownStrategy.isForceShutdown()) {
+            String msg = "Run not allowed as ShutdownStrategy is forcing shutting down, will reject executing exchange: "
+                         + exchange;
+            LOG.debug(msg);
+            if (exchange.getException() == null) {
+                exchange.setException(new RejectedExecutionException(msg));
             }
+            return false;
         }
 
         // yes we can continue

@@ -58,7 +58,7 @@ public class RouteReifier extends ProcessorReifier<RouteDefinition> {
     private static final String[] RESERVED_PROPERTIES = new String[] {
             Route.ID_PROPERTY, Route.CUSTOM_ID_PROPERTY, Route.PARENT_PROPERTY,
             Route.DESCRIPTION_PROPERTY, Route.GROUP_PROPERTY,
-            Route.REST_PROPERTY };
+            Route.REST_PROPERTY, Route.CONFIGURATION_ID_PROPERTY };
 
     public RouteReifier(CamelContext camelContext, ProcessorDefinition<?> definition) {
         super(camelContext, (RouteDefinition) definition);
@@ -99,7 +99,7 @@ public class RouteReifier extends ProcessorReifier<RouteDefinition> {
         String id = definition.idOrCreate(camelContext.adapt(ExtendedCamelContext.class).getNodeIdFactory());
         String desc = definition.getDescriptionText();
         Route route = camelContext.adapt(ExtendedCamelContext.class).getRouteFactory().createRoute(camelContext, definition, id,
-                desc, endpoint);
+                desc, endpoint, definition.getResource());
 
         // configure error handler
         route.setErrorHandlerFactory(definition.getErrorHandlerFactory());
@@ -225,7 +225,7 @@ public class RouteReifier extends ProcessorReifier<RouteDefinition> {
         List<ProcessorDefinition<?>> list = new ArrayList<>(definition.getOutputs());
         for (ProcessorDefinition<?> output : list) {
             try {
-                ProcessorReifier reifier = ProcessorReifier.reifier(route, output);
+                ProcessorReifier<?> reifier = ProcessorReifier.reifier(route, output);
 
                 // ensure node has id assigned
                 String outputId = output.idOrCreate(camelContext.adapt(ExtendedCamelContext.class).getNodeIdFactory());
@@ -241,7 +241,7 @@ public class RouteReifier extends ProcessorReifier<RouteDefinition> {
             }
         }
 
-        // now lets turn all of the event driven consumer processors into a single route
+        // now lets turn all the event driven consumer processors into a single route
         List<Processor> eventDrivenProcessors = route.getEventDrivenProcessors();
         if (eventDrivenProcessors.isEmpty()) {
             return null;
@@ -250,7 +250,7 @@ public class RouteReifier extends ProcessorReifier<RouteDefinition> {
         // Set route properties
         Map<String, Object> routeProperties = computeRouteProperties();
 
-        // always use an pipeline even if there are only 1 processor as the pipeline
+        // always use a pipeline even if there are only 1 processor as the pipeline
         // handles preparing the response from the exchange in regard to IN vs OUT messages etc
         RoutePipeline target = new RoutePipeline(camelContext, eventDrivenProcessors);
         target.setRouteId(id);
@@ -337,16 +337,14 @@ public class RouteReifier extends ProcessorReifier<RouteDefinition> {
 
         // inject the route error handler for processors that are error handler aware
         // this needs to be done here at the end because the route may be transactional and have a transaction error handler
-        // automatic be configured which some EIPs like Multicast/RecipientList needs to be using for special fine grained error handling
+        // automatic be configured which some EIPs like Multicast/RecipientList needs to be using for special fine-grained error handling
         ErrorHandlerFactory builder = route.getErrorHandlerFactory();
         Processor errorHandler = camelContext.adapt(ModelCamelContext.class).getModelReifierFactory().createErrorHandler(route,
                 builder, null);
         prepareErrorHandlerAware(route, errorHandler);
 
-        camelContext.adapt(ExtendedCamelContext.class).addBootstrap(() -> {
-            // okay route has been created from the model, then the model is no longer needed and we can de-reference
-            route.clearRouteModel();
-        });
+        // okay route has been created from the model, then the model is no longer needed, and we can de-reference
+        camelContext.adapt(ExtendedCamelContext.class).addBootstrap(route::clearRouteModel);
 
         return route;
     }
@@ -373,6 +371,10 @@ public class RouteReifier extends ProcessorReifier<RouteDefinition> {
         routeProperties.put(Route.REST_PROPERTY, rest);
         String template = Boolean.toString(definition.isTemplate() != null && definition.isTemplate());
         routeProperties.put(Route.TEMPLATE_PROPERTY, template);
+        if (definition.getAppliedRouteConfigurationIds() != null) {
+            routeProperties.put(Route.CONFIGURATION_ID_PROPERTY,
+                    String.join(",", definition.getAppliedRouteConfigurationIds()));
+        }
 
         List<PropertyDefinition> properties = definition.getRouteProperties();
         if (properties != null) {

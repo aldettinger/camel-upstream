@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.Locale;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
@@ -38,6 +39,7 @@ import org.apache.camel.Ordered;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.TypeConverter;
 import org.apache.camel.util.Scanner;
+import org.apache.camel.util.StringHelper;
 
 /**
  * A number of useful helper methods for working with Objects
@@ -45,11 +47,12 @@ import org.apache.camel.util.Scanner;
 public final class ObjectHelper {
 
     static {
-        DEFAULT_PATTERN = Pattern.compile(",(?!(?:[^\\(,]|[^\\)],[^\\)])+\\))");
+        PARENTHESIS_PATTERN = Pattern.compile(",(?!(?:[^\\(,]|[^\\)],[^\\)])+\\))");
     }
 
-    private static final Pattern DEFAULT_PATTERN;
+    private static final Pattern PARENTHESIS_PATTERN;
     private static final String DEFAULT_DELIMITER = ",";
+    private static final char DEFAULT_DELIMITER_CHAR = ',';
 
     /**
      * Utility classes should not have a public constructor.
@@ -109,7 +112,7 @@ public final class ObjectHelper {
             Double rightNum = (Double) rightValue;
             return leftNum.compareTo(rightNum) == 0;
         } else if ((rightValue instanceof Integer || rightValue instanceof Long) &&
-                (leftValue instanceof String && isNumber((String) leftValue))) {
+                leftValue instanceof String && isNumber((String) leftValue)) {
             if (rightValue instanceof Integer) {
                 Integer leftNum = Integer.valueOf((String) leftValue);
                 Integer rightNum = (Integer) rightValue;
@@ -119,8 +122,8 @@ public final class ObjectHelper {
                 Long rightNum = (Long) rightValue;
                 return leftNum.compareTo(rightNum) == 0;
             }
-        } else if ((rightValue instanceof String) &&
-                (leftValue instanceof Integer || leftValue instanceof Long)) {
+        } else if (rightValue instanceof String &&
+                (leftValue instanceof Integer || leftValue instanceof Long) && isNumber((String) rightValue)) {
             if (leftValue instanceof Integer) {
                 Integer leftNum = (Integer) leftValue;
                 Integer rightNum = Integer.valueOf((String) rightValue);
@@ -209,7 +212,7 @@ public final class ObjectHelper {
             Double rightNum = (Double) rightValue;
             return leftNum.compareTo(rightNum);
         } else if ((rightValue instanceof Integer || rightValue instanceof Long) &&
-                (leftValue instanceof String && isNumber((String) leftValue))) {
+                leftValue instanceof String && isNumber((String) leftValue)) {
             if (rightValue instanceof Integer) {
                 Integer leftNum = Integer.valueOf((String) leftValue);
                 Integer rightNum = (Integer) rightValue;
@@ -219,8 +222,8 @@ public final class ObjectHelper {
                 Long rightNum = (Long) rightValue;
                 return leftNum.compareTo(rightNum);
             }
-        } else if ((rightValue instanceof String) &&
-                (leftValue instanceof Integer || leftValue instanceof Long)) {
+        } else if (rightValue instanceof String &&
+                (leftValue instanceof Integer || leftValue instanceof Long) && isNumber((String) rightValue)) {
             if (leftValue instanceof Integer) {
                 Integer leftNum = (Integer) leftValue;
                 Integer rightNum = Integer.valueOf((String) rightValue);
@@ -263,7 +266,7 @@ public final class ObjectHelper {
         // as all types can be converted to String which does not work well for comparison
         // as eg "10" < 6 would return true, where as 10 < 6 will return false.
         // if they are both String then it doesn't matter
-        if (rightValue instanceof String && (!(leftValue instanceof String))) {
+        if (rightValue instanceof String && !(leftValue instanceof String)) {
             // if right is String and left is not then flip order (remember to * -1 the result then)
             return typeCoerceCompare(converter, rightValue, leftValue) * -1;
         }
@@ -295,6 +298,9 @@ public final class ObjectHelper {
         if (text == null || text.isEmpty()) {
             return false;
         }
+        if (text.equals("-")) {
+            return false;
+        }
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
             if (i == 0 && ch == '-') {
@@ -311,6 +317,9 @@ public final class ObjectHelper {
      */
     public static boolean isFloatingNumber(String text) {
         if (text == null || text.isEmpty()) {
+            return false;
+        }
+        if (text.equals("-")) {
             return false;
         }
         boolean dots = false;
@@ -522,18 +531,25 @@ public final class ObjectHelper {
         if (value == null) {
             return Collections.emptyList();
         } else if (delimiter != null && (pattern || value.contains(delimiter))) {
+            // if its the default delimiter and the value has parenthesis
             if (DEFAULT_DELIMITER.equals(delimiter)) {
-                // we use the default delimiter which is a comma, then cater for bean expressions with OGNL
-                // which may have balanced parentheses pairs as well.
-                // if the value contains parentheses we need to balance those, to avoid iterating
-                // in the middle of parentheses pair, so use this regular expression (a bit hard to read)
-                // the regexp will split by comma, but honor parentheses pair that may include commas
-                // as well, eg if value = "bean=foo?method=killer(a,b),bean=bar?method=great(a,b)"
-                // then the regexp will split that into two:
-                // -> bean=foo?method=killer(a,b)
-                // -> bean=bar?method=great(a,b)
-                // http://stackoverflow.com/questions/1516090/splitting-a-title-into-separate-parts
-                return () -> new Scanner(value, DEFAULT_PATTERN);
+                if (value.indexOf('(') != -1 && value.indexOf(')') != -1) {
+                    // we use the default delimiter which is a comma, then cater for bean expressions with OGNL
+                    // which may have balanced parentheses pairs as well.
+                    // if the value contains parentheses we need to balance those, to avoid iterating
+                    // in the middle of parentheses pair, so use this regular expression (a bit hard to read)
+                    // the regexp will split by comma, but honor parentheses pair that may include commas
+                    // as well, eg if value = "bean=foo?method=killer(a,b),bean=bar?method=great(a,b)"
+                    // then the regexp will split that into two:
+                    // -> bean=foo?method=killer(a,b)
+                    // -> bean=bar?method=great(a,b)
+                    // http://stackoverflow.com/questions/1516090/splitting-a-title-into-separate-parts
+                    return () -> new Scanner(value, PARENTHESIS_PATTERN);
+                } else {
+                    // optimized split string on default delimiter
+                    int count = StringHelper.countChar(value, DEFAULT_DELIMITER_CHAR) + 1;
+                    return () -> StringHelper.splitOnCharacterAsIterator(value, DEFAULT_DELIMITER_CHAR, count);
+                }
             }
             return () -> new Scanner(value, delimiter);
         } else if (allowEmptyValues || org.apache.camel.util.ObjectHelper.isNotEmpty(value)) {
@@ -645,7 +661,6 @@ public final class ObjectHelper {
      * Creates an iterable over the value if the value is a collection, an Object[], a String with values separated by
      * the given delimiter, or a primitive type array; otherwise to simplify the caller's code, we just create a
      * singleton collection iterator over a single value
-     *
      * </p>
      * In case of primitive type arrays the returned {@code Iterable} iterates over the corresponding Java primitive
      * wrapper objects of the given elements inside the {@code value} array. That's we get an autoboxing of the
@@ -672,14 +687,12 @@ public final class ObjectHelper {
             return Collections.emptyList();
         } else if (value instanceof Iterator) {
             final Iterator<Object> iterator = (Iterator<Object>) value;
-            return new Iterable<Object>() {
-                @Override
-                public Iterator<Object> iterator() {
-                    return iterator;
-                }
-            };
+            return (Iterable<Object>) () -> iterator;
         } else if (value instanceof Iterable) {
             return (Iterable<Object>) value;
+        } else if (value instanceof Map) {
+            Map<?, ?> map = (Map<?, ?>) value;
+            return map.entrySet();
         } else if (value.getClass().isArray()) {
             if (org.apache.camel.util.ObjectHelper.isPrimitiveArrayType(value.getClass())) {
                 final Object array = value;
@@ -699,6 +712,7 @@ public final class ObjectHelper {
                         return Array.get(array, idx++);
                     }
 
+                    @Override
                     public void remove() {
                         throw new UnsupportedOperationException();
                     }
@@ -725,6 +739,7 @@ public final class ObjectHelper {
                     return nodeList.item(idx++);
                 }
 
+                @Override
                 public void remove() {
                     throw new UnsupportedOperationException();
                 }
@@ -735,20 +750,29 @@ public final class ObjectHelper {
             // this code is optimized to only use a Scanner if needed, eg there is a delimiter
 
             if (delimiter != null && (pattern || s.contains(delimiter))) {
+                // if its the default delimiter and the value has parenthesis
                 if (DEFAULT_DELIMITER.equals(delimiter)) {
-                    // we use the default delimiter which is a comma, then cater for bean expressions with OGNL
-                    // which may have balanced parentheses pairs as well.
-                    // if the value contains parentheses we need to balance those, to avoid iterating
-                    // in the middle of parentheses pair, so use this regular expression (a bit hard to read)
-                    // the regexp will split by comma, but honor parentheses pair that may include commas
-                    // as well, eg if value = "bean=foo?method=killer(a,b),bean=bar?method=great(a,b)"
-                    // then the regexp will split that into two:
-                    // -> bean=foo?method=killer(a,b)
-                    // -> bean=bar?method=great(a,b)
-                    // http://stackoverflow.com/questions/1516090/splitting-a-title-into-separate-parts
-                    return (Iterable<String>) () -> new Scanner(s, DEFAULT_PATTERN);
+                    if (s.indexOf('(') != -1 && s.indexOf(')') != -1) {
+                        // we use the default delimiter which is a comma, then cater for bean expressions with OGNL
+                        // which may have balanced parentheses pairs as well.
+                        // if the value contains parentheses we need to balance those, to avoid iterating
+                        // in the middle of parentheses pair, so use this regular expression (a bit hard to read)
+                        // the regexp will split by comma, but honor parentheses pair that may include commas
+                        // as well, eg if value = "bean=foo?method=killer(a,b),bean=bar?method=great(a,b)"
+                        // then the regexp will split that into two:
+                        // -> bean=foo?method=killer(a,b)
+                        // -> bean=bar?method=great(a,b)
+                        // http://stackoverflow.com/questions/1516090/splitting-a-title-into-separate-parts
+                        return (Iterable<String>) () -> new Scanner(s, PARENTHESIS_PATTERN);
+                    } else {
+                        // optimized split string on default delimiter
+                        int count = StringHelper.countChar(s, DEFAULT_DELIMITER_CHAR) + 1;
+                        return (Iterable<String>) () -> StringHelper.splitOnCharacterAsIterator(s, DEFAULT_DELIMITER_CHAR,
+                                count);
+                    }
+                } else {
+                    return (Iterable<String>) () -> new Scanner(s, delimiter);
                 }
-                return (Iterable<String>) () -> new Scanner(s, delimiter);
             } else {
                 return (Iterable<Object>) () -> {
                     // use a plain iterator that returns the value as is as there are only a single value
@@ -769,6 +793,7 @@ public final class ObjectHelper {
                             return s;
                         }
 
+                        @Override
                         public void remove() {
                             throw new UnsupportedOperationException();
                         }

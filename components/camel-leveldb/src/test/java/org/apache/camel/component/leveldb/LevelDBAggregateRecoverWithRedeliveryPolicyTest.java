@@ -26,9 +26,12 @@ import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.test.junit5.params.Test;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 import static org.apache.camel.test.junit5.TestSupport.deleteDirectory;
 
+@DisabledOnOs({ OS.AIX, OS.OTHER })
 public class LevelDBAggregateRecoverWithRedeliveryPolicyTest extends LevelDBTestSupport {
 
     private static Map<SerializerType, AtomicInteger> counters = new ConcurrentHashMap();
@@ -77,10 +80,10 @@ public class LevelDBAggregateRecoverWithRedeliveryPolicyTest extends LevelDBTest
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 // CHECKSTYLE:OFF
                 from("direct:start")
                         .aggregate(header("id"), new StringAggregationStrategy())
@@ -90,7 +93,7 @@ public class LevelDBAggregateRecoverWithRedeliveryPolicyTest extends LevelDBTest
                             .to("mock:aggregated")
                             // simulate errors the first three times
                             .process(new Processor() {
-                                public void process(Exchange exchange) throws Exception {
+                                public void process(Exchange exchange) {
                                     int count = getCounter(getSerializerType()).incrementAndGet();
                                     if (count <= 3) {
                                         throw new IllegalArgumentException("Damn");

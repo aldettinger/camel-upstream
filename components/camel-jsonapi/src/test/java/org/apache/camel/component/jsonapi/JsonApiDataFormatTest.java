@@ -51,7 +51,7 @@ public class JsonApiDataFormatTest extends CamelTestSupport {
     }
 
     @Test
-    public void testJsonApiMarshalNoAnnotationOnType() throws Exception {
+    public void testJsonApiMarshalNoAnnotationOnType() {
         Class<?>[] formats = { MyBook.class, MyAuthor.class };
         JsonApiDataFormat jsonApiDataFormat = new JsonApiDataFormat(formats);
 
@@ -62,7 +62,7 @@ public class JsonApiDataFormatTest extends CamelTestSupport {
     }
 
     @Test
-    public void testJsonApiMarshalWrongType() throws Exception {
+    public void testJsonApiMarshalWrongType() {
         Class<?>[] formats = { MyBook.class, MyAuthor.class };
         JsonApiDataFormat jsonApiDataFormat = new JsonApiDataFormat(formats);
 
@@ -89,7 +89,7 @@ public class JsonApiDataFormatTest extends CamelTestSupport {
     }
 
     @Test
-    public void testJsonApiUnmarshalWrongType() throws Exception {
+    public void testJsonApiUnmarshalWrongType() {
         Class<?>[] formats = { MyBook.class, MyAuthor.class };
         JsonApiDataFormat jsonApiDataFormat = new JsonApiDataFormat();
         jsonApiDataFormat.setDataFormatTypes(formats);
@@ -98,8 +98,10 @@ public class JsonApiDataFormatTest extends CamelTestSupport {
         String jsonApiInput = "{\"data\":{\"type\":\"animal\",\"id\":\"camel\",\"attributes\":{\"humps\":\"2\"}}}";
 
         Exchange exchange = new DefaultExchange(context);
+        final ByteArrayInputStream stream = new ByteArrayInputStream(jsonApiInput.getBytes());
+
         assertThrows(UnregisteredTypeException.class,
-                () -> jsonApiDataFormat.unmarshal(exchange, new ByteArrayInputStream(jsonApiInput.getBytes())));
+                () -> jsonApiDataFormat.unmarshal(exchange, stream));
     }
 
     @Test
@@ -140,10 +142,10 @@ public class JsonApiDataFormatTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 Class<?>[] formats = { MyAuthor.class };
                 JsonApiDataFormat jsonApi = new JsonApiDataFormat(MyAuthor.class, formats);
 

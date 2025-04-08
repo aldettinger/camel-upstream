@@ -83,7 +83,7 @@ public abstract class HttpsV3Test extends CamelTestSupport {
     }
 
     @Override
-    public void setUp() throws Exception {
+    public void setUp() {
     }
 
     @BeforeEach
@@ -126,7 +126,7 @@ public abstract class HttpsV3Test extends CamelTestSupport {
     }
 
     @Override
-    protected RoutesBuilder createRouteBuilder() throws Exception {
+    protected RoutesBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
             public void configure() throws Exception {
@@ -144,6 +144,7 @@ public abstract class HttpsV3Test extends CamelTestSupport {
     public static Iterable<String> knownProducers() {
         final List<String> producers = new ArrayList<>(Arrays.asList(RestEndpoint.DEFAULT_REST_PRODUCER_COMPONENTS));
         // skip http due security certificate testing problems
+        producers.remove("vertx-http");
         producers.remove("http");
         return producers;
     }

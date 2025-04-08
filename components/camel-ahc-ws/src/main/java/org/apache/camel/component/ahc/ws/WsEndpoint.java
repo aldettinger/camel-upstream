@@ -18,6 +18,7 @@ package org.apache.camel.component.ahc.ws;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 
 import org.apache.camel.Category;
 import org.apache.camel.Consumer;
@@ -124,7 +125,7 @@ public class WsEndpoint extends AhcEndpoint {
         return client;
     }
 
-    public void connect() throws Exception {
+    public void connect() throws ExecutionException, InterruptedException {
         String uri = getHttpUri().toASCIIString();
 
         LOG.debug("Connecting to {}", uri);
@@ -147,7 +148,7 @@ public class WsEndpoint extends AhcEndpoint {
         super.doStop();
     }
 
-    void connect(WsConsumer wsConsumer) throws Exception {
+    void connect(WsConsumer wsConsumer) throws ExecutionException, InterruptedException {
         consumers.add(wsConsumer);
         reConnect();
     }
@@ -156,7 +157,7 @@ public class WsEndpoint extends AhcEndpoint {
         consumers.remove(wsConsumer);
     }
 
-    void reConnect() throws Exception {
+    void reConnect() throws ExecutionException, InterruptedException {
         if (websocket == null || !websocket.isOpen()) {
             String uri = getHttpUri().toASCIIString();
             LOG.info("Reconnecting websocket: {}", uri);
@@ -172,11 +173,17 @@ public class WsEndpoint extends AhcEndpoint {
         }
 
         @Override
-        public void onClose(WebSocket websocket, int code, String reason) {
+        public void onClose(WebSocket socket, int code, String reason) {
             LOG.debug("websocket closed - reconnecting");
             try {
+                if (websocket != null) {
+                    // set websocket to null and remove the listener
+                    websocket.removeWebSocketListener(listener);
+                    websocket.sendCloseFrame();
+                    websocket = null;
+                }
                 reConnect();
-            } catch (Exception e) {
+            } catch (ExecutionException | InterruptedException e) {
                 LOG.warn("Error re-connecting to websocket", e);
                 ExceptionHandler exceptionHandler = getExceptionHandler();
                 if (exceptionHandler != null) {

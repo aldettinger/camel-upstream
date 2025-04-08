@@ -16,13 +16,16 @@
  */
 package org.apache.camel;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import javax.naming.Context;
 
 import org.apache.camel.builder.NotifyBuilder;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
+import org.apache.camel.component.seda.SedaComponent;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.impl.lw.LightweightCamelContext;
 import org.apache.camel.model.ModelCamelContext;
@@ -95,9 +98,6 @@ public abstract class ContextTestSupport extends TestSupport {
     public void setUp() throws Exception {
         super.setUp();
 
-        // make SEDA testing faster
-        System.setProperty("CamelSedaPollTimeout", "10");
-
         CamelContext c2 = createCamelContext();
         if (c2 instanceof ModelCamelContext) {
             context = (ModelCamelContext) c2;
@@ -108,14 +108,26 @@ public abstract class ContextTestSupport extends TestSupport {
 
         context.build();
 
+        // make SEDA run faster
+        context.getComponent("seda", SedaComponent.class).setDefaultPollTimeout(10);
+
         template = context.createProducerTemplate();
         consumer = context.createConsumerTemplate();
 
         if (isUseRouteBuilder()) {
             RouteBuilder[] builders = createRouteBuilders();
+            // add configuration before routes
             for (RouteBuilder builder : builders) {
-                log.debug("Using created route builder: {}", builder);
-                context.addRoutes(builder);
+                if (builder instanceof RouteConfigurationsBuilder) {
+                    log.debug("Using created route configuration: {}", builder);
+                    context.addRoutesConfigurations((RouteConfigurationsBuilder) builder);
+                }
+            }
+            for (RouteBuilder builder : builders) {
+                if (!(builder instanceof RouteConfigurationsBuilder)) {
+                    log.debug("Using created route builder: {}", builder);
+                    context.addRoutes(builder);
+                }
             }
         } else {
             log.debug("isUseRouteBuilder() is false");
@@ -147,7 +159,6 @@ public abstract class ContextTestSupport extends TestSupport {
             template.stop();
         }
         stopCamelContext();
-        System.clearProperty("CamelSedaPollTimeout");
 
         super.tearDown();
     }
@@ -211,6 +222,11 @@ public abstract class ContextTestSupport extends TestSupport {
 
     protected Context createJndiContext() throws Exception {
         return JndiTest.createInitialContext();
+    }
+
+    protected List<Processor> getProcessors(String pattern) {
+        return context.getRoutes().stream()
+                .flatMap(r -> r.filter(pattern).stream()).collect(Collectors.toList());
     }
 
     /**

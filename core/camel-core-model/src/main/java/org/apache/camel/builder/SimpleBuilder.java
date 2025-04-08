@@ -24,14 +24,15 @@ import org.apache.camel.spi.ExpressionResultTypeAware;
 import org.apache.camel.spi.Language;
 
 /**
- * Creates an Simple language builder.
+ * Creates a Simple language builder.
  * <p/>
  * This builder is available in the Java DSL from the {@link RouteBuilder} which means that using simple language for
  * {@link Expression}s or {@link Predicate}s is very easy with the help of this builder.
  */
+@Deprecated
 public class SimpleBuilder implements Predicate, Expression, ExpressionResultTypeAware {
 
-    private final String text;
+    private String text;
     private Class<?> resultType;
     // cache the expression/predicate
     private Language simple;
@@ -121,5 +122,6 @@ public class SimpleBuilder implements Predicate, Expression, ExpressionResultTyp
     @Override
     public void init(CamelContext context) {
         simple = context.resolveLanguage("simple");
+        text = context.resolvePropertyPlaceholders(text);
     }
 }

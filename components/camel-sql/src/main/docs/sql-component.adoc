@@ -1,12 +1,13 @@
-[[sql-component]]
 = SQL Component
-:docTitle: SQL
-:artifactId: camel-sql
+:doctitle: SQL
+:shortname: sql
+:artifactid: camel-sql
 :description: Perform SQL queries using Spring JDBC.
 :since: 1.4
-:supportLevel: Stable
+:supportlevel: Stable
 :component-header: Both producer and consumer are supported
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/components/sql.adoc[opts=optional]
+//Manually maintained attributes
+:camel-spring-boot-name: sql
 
 *Since Camel {since}*
 
@@ -46,12 +47,11 @@ pattern. See further below.
 [TIP]
 ====
 This component can be used as a
-xref:{eip-vc}:eips:transactional-client.adoc[Transactional Client].
+xref:eips:transactional-client.adoc[Transactional Client].
 ====
 
 The SQL component uses the following endpoint URI notation:
 
-[source,text]
 ----
 sql:select * from table where id=# order by name[?options]
 ----
@@ -59,7 +59,6 @@ sql:select * from table where id=# order by name[?options]
 You can use named parameters by using
 :`#name_of_the_parameter` style as shown:
 
-[source,text]
 ----
 sql:select * from table where id=:#myId order by name[?options]
 ----
@@ -75,7 +74,6 @@ If a named parameter cannot be resolved, then an exception is thrown.
 You can use Simple expressions as parameters as
 shown:
 
-[source,text]
 ----
 sql:select * from table where id=:#${exchangeProperty.myId} order by name[?options]
 ----
@@ -88,7 +86,6 @@ be configured on endpoint basis.
 You can externalize your SQL queries to files
 in the classpath or file system as shown:
 
-[source,text]
 ----
 sql:classpath:sql/myquery.sql[?options]
 ----
@@ -109,107 +106,23 @@ order by
 In the file you can use multilines and format the SQL as you wish. And
 also use comments such as the – dash line.
 
-You can append query options to the URI in the following format,
-`?option=value&option=value&...`
-
-== Options
 
 
+// component-configure options: START
+
+// component-configure options: END
 
 // component options: START
-The SQL component supports 5 options, which are listed below.
-
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *dataSource* (common) | Sets the DataSource to use to communicate with the database. |  | DataSource
-| *bridgeErrorHandler* (consumer) | Allows for bridging the consumer to the Camel routing Error Handler, which mean any exceptions occurred while the consumer is trying to pickup incoming messages, or the likes, will now be processed as a message and handled by the routing Error Handler. By default the consumer will use the org.apache.camel.spi.ExceptionHandler to deal with exceptions, that will be logged at WARN or ERROR level and ignored. | false | boolean
-| *lazyStartProducer* (producer) | Whether the producer should be started lazy (on the first message). By starting lazy you can use this to allow CamelContext and routes to startup in situations where a producer may otherwise fail during starting and cause the route to fail being started. By deferring this startup to be lazy then the startup failure can be handled during routing messages via Camel's routing error handlers. Beware that when the first message is processed then creating and starting the producer may take a little time and prolong the total processing time of the processing. | false | boolean
-| *autowiredEnabled* (advanced) | Whether autowiring is enabled. This is used for automatic autowiring options (the option must be marked as autowired) by looking up in the registry to find if there is a single instance of matching type, which then gets configured on the component. This can be used for automatic configuring JDBC data sources, JMS connection factories, AWS Clients, etc. | true | boolean
-| *usePlaceholder* (advanced) | Sets whether to use placeholder and replace all placeholder characters with sign in the SQL queries. This option is default true | true | boolean
-|===
+include::partial$component-configure-options.adoc[]
+include::partial$component-endpoint-options.adoc[]
 // component options: END
 
-
-
-
 // endpoint options: START
-The SQL endpoint is configured using URI syntax:
 
-----
-sql:query
-----
-
-with the following path and query parameters:
-
-=== Path Parameters (1 parameters):
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *query* | *Required* Sets the SQL query to perform. You can externalize the query by using file: or classpath: as prefix and specify the location of the file. |  | String
-|===
-
-
-=== Query Parameters (46 parameters):
-
-
-[width="100%",cols="2,5,^1,2",options="header"]
-|===
-| Name | Description | Default | Type
-| *allowNamedParameters* (common) | Whether to allow using named parameters in the queries. | true | boolean
-| *dataSource* (common) | Sets the DataSource to use to communicate with the databaset at endpoint level. |  | DataSource
-| *dataSourceRef* (common) | *Deprecated* Sets the reference to a DataSource to lookup from the registry, to use for communicating with the database. |  | String
-| *outputClass* (common) | Specify the full package and class name to use as conversion when outputType=SelectOne. |  | String
-| *outputHeader* (common) | Store the query result in a header instead of the message body. By default, outputHeader == null and the query result is stored in the message body, any existing content in the message body is discarded. If outputHeader is set, the value is used as the name of the header to store the query result and the original message body is preserved. |  | String
-| *outputType* (common) | Make the output of consumer or producer to SelectList as List of Map, or SelectOne as single Java object in the following way: a) If the query has only single column, then that JDBC Column object is returned. (such as SELECT COUNT( ) FROM PROJECT will return a Long object. b) If the query has more than one column, then it will return a Map of that result. c) If the outputClass is set, then it will convert the query result into an Java bean object by calling all the setters that match the column names. It will assume your class has a default constructor to create instance with. d) If the query resulted in more than one rows, it throws an non-unique result exception. StreamList streams the result of the query using an Iterator. This can be used with the Splitter EIP in streaming mode to process the ResultSet in streaming fashion. There are 3 enums and the value can be one of: SelectOne, SelectList, StreamList | SelectList | SqlOutputType
-| *separator* (common) | The separator to use when parameter values is taken from message body (if the body is a String type), to be inserted at # placeholders. Notice if you use named parameters, then a Map type is used instead. The default value is comma | , | char
-| *breakBatchOnConsumeFail* (consumer) | Sets whether to break batch if onConsume failed. | false | boolean
-| *bridgeErrorHandler* (consumer) | Allows for bridging the consumer to the Camel routing Error Handler, which mean any exceptions occurred while the consumer is trying to pickup incoming messages, or the likes, will now be processed as a message and handled by the routing Error Handler. By default the consumer will use the org.apache.camel.spi.ExceptionHandler to deal with exceptions, that will be logged at WARN or ERROR level and ignored. | false | boolean
-| *expectedUpdateCount* (consumer) | Sets an expected update count to validate when using onConsume. | -1 | int
-| *maxMessagesPerPoll* (consumer) | Sets the maximum number of messages to poll |  | int
-| *onConsume* (consumer) | After processing each row then this query can be executed, if the Exchange was processed successfully, for example to mark the row as processed. The query can have parameter. |  | String
-| *onConsumeBatchComplete* (consumer) | After processing the entire batch, this query can be executed to bulk update rows etc. The query cannot have parameters. |  | String
-| *onConsumeFailed* (consumer) | After processing each row then this query can be executed, if the Exchange failed, for example to mark the row as failed. The query can have parameter. |  | String
-| *routeEmptyResultSet* (consumer) | Sets whether empty resultset should be allowed to be sent to the next hop. Defaults to false. So the empty resultset will be filtered out. | false | boolean
-| *sendEmptyMessageWhenIdle* (consumer) | If the polling consumer did not poll any files, you can enable this option to send an empty message (no body) instead. | false | boolean
-| *transacted* (consumer) | Enables or disables transaction. If enabled then if processing an exchange failed then the consumer breaks out processing any further exchanges to cause a rollback eager. | false | boolean
-| *useIterator* (consumer) | Sets how resultset should be delivered to route. Indicates delivery as either a list or individual object. defaults to true. | true | boolean
-| *exceptionHandler* (consumer) | To let the consumer use a custom ExceptionHandler. Notice if the option bridgeErrorHandler is enabled then this option is not in use. By default the consumer will deal with exceptions, that will be logged at WARN or ERROR level and ignored. |  | ExceptionHandler
-| *exchangePattern* (consumer) | Sets the exchange pattern when the consumer creates an exchange. There are 3 enums and the value can be one of: InOnly, InOut, InOptionalOut |  | ExchangePattern
-| *pollStrategy* (consumer) | A pluggable org.apache.camel.PollingConsumerPollingStrategy allowing you to provide your custom implementation to control error handling usually occurred during the poll operation before an Exchange have been created and being routed in Camel. |  | PollingConsumerPollStrategy
-| *processingStrategy* (consumer) | Allows to plugin to use a custom org.apache.camel.component.sql.SqlProcessingStrategy to execute queries when the consumer has processed the rows/batch. |  | SqlProcessingStrategy
-| *batch* (producer) | Enables or disables batch mode | false | boolean
-| *lazyStartProducer* (producer) | Whether the producer should be started lazy (on the first message). By starting lazy you can use this to allow CamelContext and routes to startup in situations where a producer may otherwise fail during starting and cause the route to fail being started. By deferring this startup to be lazy then the startup failure can be handled during routing messages via Camel's routing error handlers. Beware that when the first message is processed then creating and starting the producer may take a little time and prolong the total processing time of the processing. | false | boolean
-| *noop* (producer) | If set, will ignore the results of the SQL query and use the existing IN message as the OUT message for the continuation of processing | false | boolean
-| *useMessageBodyForSql* (producer) | Whether to use the message body as the SQL and then headers for parameters. If this option is enabled then the SQL in the uri is not used. Note that query parameters in the message body are represented by a question mark instead of a # symbol. | false | boolean
-| *alwaysPopulateStatement* (advanced) | If enabled then the populateStatement method from org.apache.camel.component.sql.SqlPrepareStatementStrategy is always invoked, also if there is no expected parameters to be prepared. When this is false then the populateStatement is only invoked if there is 1 or more expected parameters to be set; for example this avoids reading the message body/headers for SQL queries with no parameters. | false | boolean
-| *parametersCount* (advanced) | If set greater than zero, then Camel will use this count value of parameters to replace instead of querying via JDBC metadata API. This is useful if the JDBC vendor could not return correct parameters count, then user may override instead. |  | int
-| *placeholder* (advanced) | Specifies a character that will be replaced to in SQL query. Notice, that it is simple String.replaceAll() operation and no SQL parsing is involved (quoted strings will also change). | # | String
-| *prepareStatementStrategy* (advanced) | Allows to plugin to use a custom org.apache.camel.component.sql.SqlPrepareStatementStrategy to control preparation of the query and prepared statement. |  | SqlPrepareStatementStrategy
-| *templateOptions* (advanced) | Configures the Spring JdbcTemplate with the key/values from the Map |  | Map
-| *usePlaceholder* (advanced) | Sets whether to use placeholder and replace all placeholder characters with sign in the SQL queries. | true | boolean
-| *backoffErrorThreshold* (scheduler) | The number of subsequent error polls (failed due some error) that should happen before the backoffMultipler should kick-in. |  | int
-| *backoffIdleThreshold* (scheduler) | The number of subsequent idle polls that should happen before the backoffMultipler should kick-in. |  | int
-| *backoffMultiplier* (scheduler) | To let the scheduled polling consumer backoff if there has been a number of subsequent idles/errors in a row. The multiplier is then the number of polls that will be skipped before the next actual attempt is happening again. When this option is in use then backoffIdleThreshold and/or backoffErrorThreshold must also be configured. |  | int
-| *delay* (scheduler) | Milliseconds before the next poll. | 500 | long
-| *greedy* (scheduler) | If greedy is enabled, then the ScheduledPollConsumer will run immediately again, if the previous run polled 1 or more messages. | false | boolean
-| *initialDelay* (scheduler) | Milliseconds before the first poll starts. | 1000 | long
-| *repeatCount* (scheduler) | Specifies a maximum limit of number of fires. So if you set it to 1, the scheduler will only fire once. If you set it to 5, it will only fire five times. A value of zero or negative means fire forever. | 0 | long
-| *runLoggingLevel* (scheduler) | The consumer logs a start/complete log line when it polls. This option allows you to configure the logging level for that. There are 6 enums and the value can be one of: TRACE, DEBUG, INFO, WARN, ERROR, OFF | TRACE | LoggingLevel
-| *scheduledExecutorService* (scheduler) | Allows for configuring a custom/shared thread pool to use for the consumer. By default each consumer has its own single threaded thread pool. |  | ScheduledExecutorService
-| *scheduler* (scheduler) | To use a cron scheduler from either camel-spring or camel-quartz component. Use value spring or quartz for built in scheduler | none | Object
-| *schedulerProperties* (scheduler) | To configure additional properties when using a custom scheduler or any of the Quartz, Spring based scheduler. |  | Map
-| *startScheduler* (scheduler) | Whether the scheduler should be auto started. | true | boolean
-| *timeUnit* (scheduler) | Time unit for initialDelay and delay options. There are 7 enums and the value can be one of: NANOSECONDS, MICROSECONDS, MILLISECONDS, SECONDS, MINUTES, HOURS, DAYS | MILLISECONDS | TimeUnit
-| *useFixedDelay* (scheduler) | Controls if fixed delay or fixed rate is used. See ScheduledExecutorService in JDK for details. | true | boolean
-|===
 // endpoint options: END
-
-
+// component headers: START
+include::partial$component-endpoint-headers.adoc[]
+// component headers: END
 
 == Treatment of the message body
 
@@ -234,8 +147,8 @@ You can use the option `useMessageBodyForSql` that
 allows to use the message body as the SQL statement, and then the SQL
 parameters must be provided in a header with the
 key `SqlConstants.SQL_PARAMETERS`. This allows the SQL component to work
-more dynamically as the SQL query is from the message body. Use
-xref:manual::templating.adoc[Camel templating]
+more dynamically as the SQL query is from the message body. Use templating
+(such as xref:components::velocity-component.adoc[Velocity], xref:components::freemarker-component.adoc[Freemarker])
 for conditional processing, e.g. to include or exclude `where` clauses
 depending on the presence of query parameters.
 
@@ -245,11 +158,6 @@ For `select` operations, the result is an instance of
 `List<Map<String, Object>>` type, as returned by the
 http://static.springframework.org/spring/docs/2.5.x/api/org/springframework/jdbc/core/JdbcTemplate.html#queryForList(java.lang.String,%20java.lang.Object%91%93)[JdbcTemplate.queryForList()]
 method. For `update` operations, a `NULL` body is returned as the `update` operation is only set as a header and never as a body.
-
-[NOTE]
-====
-See <<sql-component-header-values, Header values>> for more information on the `update` operation.
-====
 
 By default, the result is placed in the message body.  If the
 outputHeader parameter is set, the result is placed in the header.  This
@@ -284,42 +192,6 @@ from("direct:withSplitModel")
         .end();
 ----
 
-[[sql-component-header-values]]
-== Header values
-
-When performing `update` operations, the SQL Component stores the update
-count in the following message headers:
-
-[cols="1,3"]
-|===
-|Header |Description
-
-|`CamelSqlUpdateCount` |The number of rows updated for `update` operations, returned as an
-`Integer` object. This header is not provided when using
-outputType=StreamList.
-
-|`CamelSqlRowCount` |The number of rows returned for `select` operations, returned as an
-`Integer` object. This header is not provided when using
-outputType=StreamList.
-
-|`CamelSqlQuery` |Query to execute. This query takes precedence over the
-query specified in the endpoint URI. Note that query parameters in the
-header _are_ represented by a `?` instead of a `pass:[#]` symbol
-|===
-
-When performing `insert` operations, the SQL Component stores the rows
-with the generated keys and number of these rows in the following
-message headers:
-
-[cols="1,3"]
-|===
-|Header |Description
-
-|CamelSqlGeneratedKeysRowCount |The number of rows in the header that contains generated keys.
-
-|CamelSqlGeneratedKeyRows |Rows that contains the generated keys (a list of maps of keys).
-|===
-
 == Generated keys
 
 *Since Camel 2.12.4, 2.13.1 and 2.14*
@@ -341,11 +213,11 @@ https://gitbox.apache.org/repos/asf?p=camel.git;a=blob;f=components/camel-sql/sr
 
 == DataSource
 
-You can now set a reference to a `DataSource` in the URI directly:
+You can set a reference to a `DataSource` in the URI directly:
 
 [source,text]
 ----
-sql:select * from table where id=# order by name?dataSource=myDS
+sql:select * from table where id=# order by name?dataSource=#myDS
 ----
 
 == Using named parameters
@@ -395,8 +267,6 @@ from("direct:projects")
 
 === Using expression parameters in consumers
 
-*Since Camel 2.23*
-
 When using the SQL component as consumer, you can now also use expression parameters (simple language)
 to build dynamic query parameters, such as calling a method on a bean to retrieve an id, date or something.
 
@@ -426,8 +296,6 @@ the simple expression you can use in the consumer are most useable for calling
 bean methods as in this example.
 
 == Using IN queries with dynamic values
-
-*Since Camel 2.17*
 
 The SQL producer allows to use SQL queries with
 IN statements where the IN values is dynamic computed. For example from
@@ -493,8 +361,6 @@ from("direct:query")
 
 == Using the JDBC based idempotent repository
 
-*Since Camel 2.7*
-
 In this section we will use the JDBC based
 idempotent repository.
 
@@ -513,24 +379,22 @@ idempotent repository. We use the following schema:
 [source,sql]
 ----
 CREATE TABLE CAMEL_MESSAGEPROCESSED ( processorName VARCHAR(255),
-messageId VARCHAR(100) )
-----
-
-
-We added the createdAt column:
-
-[source,sql]
-----
-CREATE TABLE CAMEL_MESSAGEPROCESSED ( processorName VARCHAR(255),
-messageId VARCHAR(100), createdAt TIMESTAMP )
+messageId VARCHAR(100), createdAt TIMESTAMP, PRIMARY KEY (processorName, messageId) )
 ----
 
 WARNING: The SQL Server *TIMESTAMP* type is a fixed-length binary-string type. It
 does not map to any of the JDBC time types: *DATE*, *TIME*, or
 *TIMESTAMP*.
 
-When working with concurrent consumers it is crucial to create a unique constraint on the columns processorName and messageId.
-Because the syntax for this constraint differs from database to database, we do not show it here.
+The above SQL is consistent with most popular SQL vendors.
+
+When working with concurrent consumers it is crucial to create a unique constraint on the column combination of
+processorName and messageId. This constraint will be prevent multiple consumers adding the same key to the repository
+and allow only one consumer to handle the message.
+
+The SQL above includes the constraint by creating a primary key. If you prefer to use a different
+constraint, or your SQL server uses a different syntax for table creation, you can create the table yourself using
+the above schema as a starting point.
 
 === Customize the JDBC idempotency repository
 
@@ -574,10 +438,39 @@ the second one is the message id (`String`).
 The option `tableName` can be used to use the default SQL queries but with a different table name.
 However if you want to customize the SQL queries then you can configure each of them individually.
 
+=== Orphan Lock aware Jdbc IdempotentRepository 
+
+One of the limitations of `org.apache.camel.processor.idempotent.jdbc.JdbcMessageIdRepository` is that it does not handle orphan locks resulting from JVM crash or non graceful shutdown. This can result in unprocessed files/messages if this is implementation is used with camel-file, camel-ftp etc. if you need to address orphan locks processing then use
+`org.apache.camel.processor.idempotent.jdbc.JdbcOrphanLockAwareIdempotentRepository`.  This repository keeps track of the locks held by an instance of the application. For each lock held, the application will send keep alive signals to the lock repository resulting in updating the createdAt column with the current Timestamp. When an application instance tries to acquire a lock if the, then there are three possibilities exist : 
+
+* lock entry does not exist then the lock is provided using the base implementation of `JdbcMessageIdRepository`. 
+
+* lock already exists and the createdAt < System.currentTimeMillis() - lockMaxAgeMillis. In this case it is assumed that an active instance has the lock and the lock is not provided to the new instance requesting the lock
+
+* lock already exists and the createdAt > = System.currentTimeMillis() - lockMaxAgeMillis. In this case it is assumed that there is no active instance which has the lock and the lock is provided to the requesting instance. The reason behind is that if the original instance which had the lock, if it was still running, it would have updated the Timestamp on createdAt using its keepAlive mechanism
+
+This repository has two additional configuration parameters 
+
+[cols="1,1"]
+|===
+|Parameter | Description
+|lockMaxAgeMillis | This refers to the duration after which the lock is considered orphaned i.e. if the currentTimestamp - createdAt >= lockMaxAgeMillis then lock is orphaned.
+|lockKeepAliveIntervalMillis | The frequency at which keep alive updates are done to createdAt Timestamp column.
+|===
+
+=== Caching Jdbc IdempotentRepository 
+
+Some SQL implementations are not fast on a per query basis.  The 
+`JdbcMessageIdRepository` implementation does its idempotent checks
+individually within SQL transactions.  Checking a mere 100 keys can 
+take minutes.  The `JdbcCachedMessageIdRepository` preloads an in-memory 
+cache on start with the entire list of keys.  This cache is then 
+checked first before passing through to the original implementation.
+
+As with all cache implementations, there are considerations that should
+be made with regard to stale data and your specific usage.
 
 == Using the JDBC based aggregation repository
-
-*Since Camel 2.6*
 
 `JdbcAggregationRepository` is an `AggregationRepository` which on the
 fly persists the aggregated messages. This ensures that you will not
@@ -637,8 +530,6 @@ CREATE TABLE aggregation_completed (
 
 
 == Storing body and headers as text
-
-*Since Camel 2.11*
 
 You can configure the `JdbcAggregationRepository` to store message body
 and select(ed) headers as String in separate columns. For example to
@@ -749,7 +640,7 @@ multiple Camel applications shared the same database for the aggregation
 repository. If there is a race condition there JDBC driver will throw a
 vendor specific exception which the `JdbcAggregationRepository` can
 react upon. To know which caused exceptions from the JDBC driver is
-regarded as an optimistick locking error we need a mapper to do this.
+regarded as an optimistic locking error we need a mapper to do this.
 Therefore there is a
 `org.apache.camel.processor.aggregate.jdbc.JdbcOptimisticLockingExceptionMapper`
 allows you to implement your custom logic if needed. There is a default
@@ -769,7 +660,7 @@ configured.
 
 You can in addition add FQN classnames, and if any of the caused
 exception (or any nested) equals any of the FQN class names, then its an
-optimistick locking error.
+optimistic locking error.
 
 Here is an example, where we define 2 extra FQN class names from the
 JDBC vendor.
@@ -814,6 +705,17 @@ class="org.apache.camel.processor.aggregate.jdbc.JdbcAggregationRepository">
 
 Propagation is specified by constants of `org.springframework.transaction.TransactionDefinition` interface,
 so `propagationBehaviorName` is convenient setter that allows to use names of the constants.
+
+=== Clustering
+JdbcAggregationRepository does not provide recovery in a clustered environment.
+
+You may use ClusteredJdbcAggregationRepository that provides a limited support for recovery in a clustered environment : recovery mechanism is dealt separately by members of the cluster, i.e. a member may only recover exchanges that it completed itself.
+
+To enable this behaviour, property `recoverByInstance` must be set to true, and `instanceId` property must be defined using a unique identifier (a string) for each member of the cluster.
+
+Besides, completed table must have a `instance_id VARCHAR(255)` column.
+
+N.B. : since each member is the only responsible for the recovery of its completed exchanges, if a member is stopped, its completed exchanges will not be recovered until it is restarted, unless you update completed table to affect them to another member (by changing `instance_id` for those completed exchanges).
 
 === PostgreSQL case
 
@@ -872,4 +774,5 @@ To use this feature, add the following dependencies to your spring boot pom.xml 
 You should also include the specific database driver, if needed.
 
 
-include::camel-spring-boot::page$sql-starter.adoc[]
+
+include::spring-boot:partial$starter.adoc[]

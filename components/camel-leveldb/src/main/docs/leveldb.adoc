@@ -1,15 +1,16 @@
-[[leveldb-other]]
 = LevelDB Component
-:docTitle: LevelDB
-:artifactId: camel-leveldb
+:doctitle: LevelDB
+:shortname: leveldb
+:artifactid: camel-leveldb
 :description: Using LevelDB as persistent EIP store
 :since: 2.10
-:supportLevel: Stable
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/others/leveldb.adoc[opts=optional]
+:supportlevel: Stable
+//Manually maintained attributes
+:camel-spring-boot-name: leveldb
 
 *Since Camel {since}*
 
-https://code.google.com/p/leveldb/[Leveldb] is a very lightweight and
+https://github.com/google/leveldb[Leveldb] is a very lightweight and
 embedable key value database. It allows together with Camel to provide
 persistent support for various Camel features such as
 Aggregator.
@@ -183,3 +184,5 @@ the download page for the latest versions).
   <version>x.y.z</version>
 </dependency>
 ----------------------------------------
+
+include::spring-boot:partial$starter.adoc[]

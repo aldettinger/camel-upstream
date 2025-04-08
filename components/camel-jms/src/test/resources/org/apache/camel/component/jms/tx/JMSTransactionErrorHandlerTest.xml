@@ -32,7 +32,9 @@
     </bean>
 
     <bean id="jmsConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
-        <property name="brokerURL" value="vm://localhost?broker.persistent=false&amp;broker.useJmx=false"/>
+        <property name="brokerURL">
+            <bean class="org.apache.camel.component.jms.CamelJmsTestHelper" factory-method="createBrokerUrl"/>
+        </property>
     </bean>
 
     <!-- setup spring jms TX manager -->
@@ -54,7 +56,7 @@
 
     <!-- START SNIPPET: e3 -->
     <!-- use a transaction error handler -->
-    <bean id="myErrorHandler" class="org.apache.camel.spring.spi.TransactionErrorHandlerBuilder">
+    <bean id="myErrorHandler" class="org.apache.camel.spring.spi.LegacyTransactionErrorHandlerBuilder">
         <property name="redeliveryPolicy" ref="myPolicy"/>
     </bean>
     <!-- and let it try to redeliver up till 4 times -->

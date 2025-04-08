@@ -117,8 +117,8 @@ public class SignatureTest extends CamelTestSupport {
         }, new RouteBuilder() {
             public void configure() {
                 // START SNIPPET: buffersize
-                from("direct:buffersize").to("crypto:sign:buffer?privateKey=#myPrivateKey&buffersize=1024",
-                        "crypto:verify:buffer?publicKey=#myPublicKey&buffersize=1024",
+                from("direct:buffersize").to("crypto:sign:buffer?privateKey=#myPrivateKey&bufferSize=1024",
+                        "crypto:verify:buffer?publicKey=#myPublicKey&bufferSize=1024",
                         "mock:result");
                 // END SNIPPET: buffersize
             }
@@ -431,7 +431,7 @@ public class SignatureTest extends CamelTestSupport {
     }
 
     @BindToRegistry("myDSAPublicKey")
-    public PublicKey getDSAPublicKey() throws Exception {
+    public PublicKey getDSAPublicKey() {
         return dsaKeyPair.getPublic();
     }
 
@@ -441,7 +441,7 @@ public class SignatureTest extends CamelTestSupport {
     }
 
     @BindToRegistry("myDSAPrivateKey")
-    public PrivateKey getDSAPrivateKey() throws Exception {
+    public PrivateKey getDSAPrivateKey() {
         return dsaKeyPair.getPrivate();
     }
 

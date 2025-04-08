@@ -23,7 +23,6 @@ import java.util.Set;
 
 import org.apache.camel.AsyncProcessor;
 import org.apache.camel.CamelContext;
-import org.apache.camel.CamelContextAware;
 import org.apache.camel.CamelExchangeException;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
@@ -114,10 +113,10 @@ public class RestBindingAdvice implements CamelInternalProcessorAdvice<Map<Strin
         if (jsonUnmarshal != null) {
             camelContext.addService(jsonUnmarshal, true);
         }
-        if (xmlMarshal instanceof CamelContextAware) {
+        if (xmlMarshal != null) {
             camelContext.addService(xmlMarshal, true);
         }
-        if (xmlUnmarshal instanceof CamelContextAware) {
+        if (xmlUnmarshal != null) {
             camelContext.addService(xmlUnmarshal, true);
         }
 
@@ -147,7 +146,7 @@ public class RestBindingAdvice implements CamelInternalProcessorAdvice<Map<Strin
     @Override
     public void after(Exchange exchange, Map<String, Object> state) throws Exception {
         if (enableCORS) {
-            setCORSHeaders(exchange, state);
+            setCORSHeaders(exchange);
         }
         if (state.get(STATE_KEY_DO_MARSHAL) != null) {
             marshal(exchange, state);
@@ -268,11 +267,11 @@ public class RestBindingAdvice implements CamelInternalProcessorAdvice<Map<Strin
                 // so force reading the body as a String which we can work with
                 if (body == null) {
                     body = MessageHelper.extractBodyAsString(exchange.getIn());
-                    if (body != null) {
+                    if (ObjectHelper.isNotEmpty(body)) {
                         exchange.getIn().setBody(body);
                     }
                 }
-                if (body == null) {
+                if (ObjectHelper.isEmpty(body)) {
                     // this is a bad request, the client did not include a message body
                     exchange.getMessage().setHeader(Exchange.HTTP_RESPONSE_CODE, 400);
                     exchange.getMessage().setBody("The request body is missing.");
@@ -283,7 +282,7 @@ public class RestBindingAdvice implements CamelInternalProcessorAdvice<Map<Strin
             }
             if (requiredQueryParameters != null
                     && !exchange.getIn().getHeaders().keySet().containsAll(requiredQueryParameters)) {
-                // this is a bad request, the client did not include some of the required query parameters
+                // this is a bad request, the client did not include some required query parameters
                 exchange.getMessage().setHeader(Exchange.HTTP_RESPONSE_CODE, 400);
                 exchange.getMessage().setBody("Some of the required query parameters are missing.");
                 // stop routing and return
@@ -291,7 +290,7 @@ public class RestBindingAdvice implements CamelInternalProcessorAdvice<Map<Strin
                 return;
             }
             if (requiredHeaders != null && !exchange.getIn().getHeaders().keySet().containsAll(requiredHeaders)) {
-                // this is a bad request, the client did not include some of the required http headers
+                // this is a bad request, the client did not include some required http headers
                 exchange.getMessage().setHeader(Exchange.HTTP_RESPONSE_CODE, 400);
                 exchange.getMessage().setBody("Some of the required HTTP headers are missing.");
                 // stop routing and return
@@ -305,16 +304,52 @@ public class RestBindingAdvice implements CamelInternalProcessorAdvice<Map<Strin
             // add reverse operation
             state.put(STATE_KEY_DO_MARSHAL, STATE_JSON);
             if (ObjectHelper.isNotEmpty(body)) {
-                jsonUnmarshal.process(exchange);
-                ExchangeHelper.prepareOutToIn(exchange);
+                try {
+                    jsonUnmarshal.process(exchange);
+                    ExchangeHelper.prepareOutToIn(exchange);
+                } catch (Exception e) {
+                    exchange.setException(e);
+                }
+                if (exchange.isFailed()) {
+                    // we want to indicate that this is a bad request instead of 500 due to parsing error
+                    exchange.getMessage().setHeader(Exchange.HTTP_RESPONSE_CODE, 400);
+                }
+            }
+            if (clientRequestValidation && exchange.isFailed()) {
+                // this is a bad request, the client included message body that cannot be parsed to json
+                exchange.getMessage().setHeader(Exchange.HTTP_RESPONSE_CODE, 400);
+                exchange.getMessage().setBody("Invalid JSon payload.");
+                // clear exception
+                exchange.setException(null);
+                // stop routing and return
+                exchange.setRouteStop(true);
+                return;
             }
             return;
         } else if (isXml && xmlUnmarshal != null) {
             // add reverse operation
             state.put(STATE_KEY_DO_MARSHAL, STATE_XML);
             if (ObjectHelper.isNotEmpty(body)) {
-                xmlUnmarshal.process(exchange);
-                ExchangeHelper.prepareOutToIn(exchange);
+                try {
+                    xmlUnmarshal.process(exchange);
+                    ExchangeHelper.prepareOutToIn(exchange);
+                } catch (Exception e) {
+                    exchange.setException(e);
+                }
+                if (exchange.isFailed()) {
+                    // we want to indicate that this is a bad request instead of 500 due to parsing error
+                    exchange.getMessage().setHeader(Exchange.HTTP_RESPONSE_CODE, 400);
+                }
+            }
+            if (clientRequestValidation && exchange.isFailed()) {
+                // this is a bad request, the client included message body that cannot be parsed to XML
+                exchange.getMessage().setHeader(Exchange.HTTP_RESPONSE_CODE, 400);
+                exchange.getMessage().setBody("Invalid XML payload.");
+                // clear exception
+                exchange.setException(null);
+                // stop routing and return
+                exchange.setRouteStop(true);
+                return;
             }
             return;
         }
@@ -480,7 +515,7 @@ public class RestBindingAdvice implements CamelInternalProcessorAdvice<Map<Strin
         }
     }
 
-    private void setCORSHeaders(Exchange exchange, Map<String, Object> state) {
+    private void setCORSHeaders(Exchange exchange) {
         // add the CORS headers after routing, but before the consumer writes the response
         Message msg = exchange.getMessage();
 
@@ -526,19 +561,24 @@ public class RestBindingAdvice implements CamelInternalProcessorAdvice<Map<Strin
 
         // Any MIME type
         // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept#Directives
-        if ("*/*".equals(target)) {
+        if (target.contains("*/*")) {
             return true;
         }
 
-        boolean isXml = valid.toLowerCase(Locale.ENGLISH).contains("xml");
-        boolean isJson = valid.toLowerCase(Locale.ENGLISH).contains("json");
+        valid = valid.toLowerCase(Locale.ENGLISH);
+        target = target.toLowerCase(Locale.ENGLISH);
 
-        String type = target.toLowerCase(Locale.ENGLISH);
+        if (valid.contains(target)) {
+            return true;
+        }
 
-        if (isXml && !type.contains("xml")) {
+        boolean isXml = valid.contains("xml");
+        boolean isJson = valid.contains("json");
+
+        if (isXml && !target.contains("xml")) {
             return false;
         }
-        if (isJson && !type.contains("json")) {
+        if (isJson && !target.contains("json")) {
             return false;
         }
 

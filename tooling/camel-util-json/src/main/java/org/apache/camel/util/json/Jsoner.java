@@ -31,8 +31,6 @@ import java.util.Set;
 /**
  * Jsoner provides JSON utilities for escaping strings to be JSON compatible, thread safe parsing (RFC 4627) JSON
  * strings, and serializing data to strings in JSON format.
- *
- * @since 2.0.0
  */
 public final class Jsoner {
     /** Flags to tweak the behavior of the primary deserialization method. */
@@ -357,24 +355,17 @@ public final class Jsoner {
      * @see                             StringReader
      */
     public static Object deserialize(final String deserializable) throws DeserializationException {
-        Object returnable;
-        StringReader readableDeserializable = null;
-        try {
-            readableDeserializable = new StringReader(deserializable);
-            returnable = Jsoner.deserialize(readableDeserializable);
+        try (StringReader readableDeserializable = new StringReader(deserializable)) {
+
+            return Jsoner.deserialize(readableDeserializable);
         } catch (IOException | NullPointerException caught) {
             /*
              * They both have the same recovery scenario. See StringReader. If
              * deserializable is null, it should be reasonable to expect null
              * back.
              */
-            returnable = null;
-        } finally {
-            if (readableDeserializable != null) {
-                readableDeserializable.close();
-            }
+            return null;
         }
-        return returnable;
     }
 
     /**
@@ -388,21 +379,13 @@ public final class Jsoner {
      * @see                   Jsoner#deserialize(Reader)
      */
     public static JsonArray deserialize(final String deserializable, final JsonArray defaultValue) {
-        StringReader readable = null;
-        JsonArray returnable;
-        try {
-            readable = new StringReader(deserializable);
-            returnable = Jsoner.deserialize(readable, EnumSet.of(DeserializationOptions.ALLOW_JSON_ARRAYS)).<
+        try (StringReader readable = new StringReader(deserializable)) {
+            return Jsoner.deserialize(readable, EnumSet.of(DeserializationOptions.ALLOW_JSON_ARRAYS)).<
                     JsonArray> getCollection(0);
         } catch (NullPointerException | IOException | DeserializationException caught) {
             /* Don't care, just return the default value. */
-            returnable = defaultValue;
-        } finally {
-            if (readable != null) {
-                readable.close();
-            }
+            return defaultValue;
         }
-        return returnable;
     }
 
     /**
@@ -417,21 +400,13 @@ public final class Jsoner {
      * @see                   Jsoner#deserialize(Reader)
      */
     public static JsonObject deserialize(final String deserializable, final JsonObject defaultValue) {
-        StringReader readable = null;
-        JsonObject returnable;
-        try {
-            readable = new StringReader(deserializable);
-            returnable = Jsoner.deserialize(readable, EnumSet.of(DeserializationOptions.ALLOW_JSON_OBJECTS)).<
+        try (StringReader readable = new StringReader(deserializable)) {
+            return Jsoner.deserialize(readable, EnumSet.of(DeserializationOptions.ALLOW_JSON_OBJECTS)).<
                     JsonObject> getMap(0);
         } catch (NullPointerException | IOException | DeserializationException caught) {
             /* Don't care, just return the default value. */
-            returnable = defaultValue;
-        } finally {
-            if (readable != null) {
-                readable.close();
-            }
+            return defaultValue;
         }
-        return returnable;
     }
 
     /**
@@ -509,9 +484,9 @@ public final class Jsoner {
                      * but could be mistaken by people reading it for a JSON
                      * relevant character.
                      */
-                    if (((character >= '\u0000') && (character <= '\u001F'))
-                            || ((character >= '\u007F') && (character <= '\u009F'))
-                            || ((character >= '\u2000') && (character <= '\u20FF'))) {
+                    if (character >= '\u0000' && character <= '\u001F'
+                            || character >= '\u007F' && character <= '\u009F'
+                            || character >= '\u2000' && character <= '\u20FF') {
                         final String characterHexCode = Integer.toHexString(character);
                         builder.append("\\u");
                         for (int k = 0; k < (4 - characterHexCode.length()); k++) {
@@ -592,7 +567,7 @@ public final class Jsoner {
     }
 
     public static String prettyPrint(final String printable, final int spaces, final int depth) {
-        if ((spaces > 10) || (spaces < 2)) {
+        if (spaces > 10 || spaces < 2) {
             throw new IllegalArgumentException("Indentation with spaces must be between 2 and 10.");
         }
         final StringBuilder indentation = new StringBuilder("");
@@ -675,7 +650,6 @@ public final class Jsoner {
                         }
                         break;
                 }
-                // System.out.println(lexed);
             } while (!lexed.getType().equals(Yytoken.Types.END));
         } catch (final DeserializationException caught) {
             /* This is according to the method's contract. */
@@ -684,9 +658,6 @@ public final class Jsoner {
             /* See StringReader. */
             return null;
         }
-        // System.out.println(printable);
-        // System.out.println(returnable);
-        // System.out.println(Jsoner.escape(returnable.toString()));
         return returnable.toString();
     }
 
@@ -982,7 +953,6 @@ public final class Jsoner {
                         + "    4) If you feel it should have serialized you could use a more tolerant serialization for debugging purposes.");
             }
         }
-        // System.out.println(writableDestination.toString());
     }
     // CHECKSTYLE:ON
 

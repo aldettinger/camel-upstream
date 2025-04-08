@@ -52,10 +52,10 @@ public class CachedOutputStream extends OutputStream {
 
     public CachedOutputStream(Exchange exchange, final boolean closedOnCompletion) {
         this.closedOnCompletion = closedOnCompletion;
-        tempFileManager = new TempFileManager(closedOnCompletion);
-        tempFileManager.addExchange(exchange);
+        this.tempFileManager = new TempFileManager(closedOnCompletion);
+        this.tempFileManager.addExchange(exchange);
         this.strategy = exchange.getContext().getStreamCachingStrategy();
-        currentStream = new CachedByteArrayOutputStream(strategy.getBufferSize());
+        this.currentStream = new CachedByteArrayOutputStream(strategy.getBufferSize());
     }
 
     @Override
@@ -151,7 +151,7 @@ public class CachedOutputStream extends OutputStream {
         flush();
         ByteArrayOutputStream bout = (ByteArrayOutputStream) currentStream;
         try {
-            // creates an tmp file and a file output stream
+            // creates a tmp file and a file output stream
             currentStream = tempFileManager.createOutputStream(strategy);
             bout.writeTo(currentStream);
         } finally {

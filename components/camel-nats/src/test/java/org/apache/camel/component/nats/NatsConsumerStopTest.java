@@ -20,15 +20,16 @@ import org.apache.camel.Consumer;
 import org.apache.camel.test.junit5.CamelTestSupport;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+
 /**
  * Test NATS consumer stop happens cleanly. See https://issues.apache.org/jira/browse/CAMEL-15834.
  */
 public class NatsConsumerStopTest extends CamelTestSupport {
-
     @Test
     public void testConsumerStop() throws Exception {
         NatsEndpoint endpoint = context.getEndpoint("nats:test?flushConnection=true", NatsEndpoint.class);
         Consumer consumer = endpoint.createConsumer(null);
-        consumer.stop();
+        assertDoesNotThrow(() -> consumer.stop());
     }
 }

@@ -64,6 +64,10 @@ public abstract class SolrComponentTestSupport extends SolrTestSupport {
         return getSolrFixtures().solrRouteUri();
     }
 
+    String solrRouteAutocommitUri() {
+        return getSolrFixtures().solrRouteAutocommitUri();
+    }
+
     protected void solrInsertTestEntry(String id) {
         Map<String, Object> headers = new HashMap<>();
         headers.put(SolrConstants.OPERATION, SolrConstants.OPERATION_INSERT);
@@ -95,10 +99,10 @@ public abstract class SolrComponentTestSupport extends SolrTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("direct:start").to(solrRouteUri());
                 from("direct:splitThenCommit")
                         .split(body())
@@ -106,6 +110,7 @@ public abstract class SolrComponentTestSupport extends SolrTestSupport {
                         .end()
                         .setHeader(SolrConstants.OPERATION, constant(SolrConstants.OPERATION_COMMIT))
                         .to(solrRouteUri());
+                from("direct:startAutoCommit").to(solrRouteAutocommitUri());
             }
         };
     }

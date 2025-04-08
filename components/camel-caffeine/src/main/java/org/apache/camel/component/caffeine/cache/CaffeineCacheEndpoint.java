@@ -26,6 +26,7 @@ import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.component.caffeine.CaffeineConfiguration;
+import org.apache.camel.component.caffeine.CaffeineConstants;
 import org.apache.camel.component.caffeine.EvictionType;
 import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriEndpoint;
@@ -40,7 +41,7 @@ import org.apache.camel.util.ObjectHelper;
  */
 @UriEndpoint(firstVersion = "2.20.0", scheme = "caffeine-cache", title = "Caffeine Cache",
              syntax = "caffeine-cache:cacheName", category = { Category.CACHE, Category.DATAGRID, Category.CLUSTERING },
-             producerOnly = true)
+             producerOnly = true, headersClass = CaffeineConstants.class)
 public class CaffeineCacheEndpoint extends DefaultEndpoint {
     @UriPath(description = "the cache name")
     @Metadata(required = true)
@@ -64,29 +65,39 @@ public class CaffeineCacheEndpoint extends DefaultEndpoint {
 
     @Override
     protected void doStart() throws Exception {
+
         cache = CamelContextHelper.lookup(getCamelContext(), cacheName, Cache.class);
         if (cache == null) {
-            Caffeine<?, ?> builder = Caffeine.newBuilder();
-            if (configuration.getEvictionType() == EvictionType.SIZE_BASED) {
-                builder.initialCapacity(configuration.getInitialCapacity());
-                builder.maximumSize(configuration.getMaximumSize());
-            } else if (configuration.getEvictionType() == EvictionType.TIME_BASED) {
-                builder.expireAfterAccess(configuration.getExpireAfterAccessTime(), TimeUnit.SECONDS);
-                builder.expireAfterWrite(configuration.getExpireAfterWriteTime(), TimeUnit.SECONDS);
+            if (configuration.isCreateCacheIfNotExist()) {
+                Caffeine<?, ?> builder = Caffeine.newBuilder();
+                defineBuilder(builder, configuration);
+                cache = builder.build();
+            } else {
+                throw new IllegalArgumentException(
+                        "Cache instance '" + cacheName + "' not found and createCacheIfNotExist is set to false");
             }
-            if (configuration.isStatsEnabled()) {
-                if (ObjectHelper.isEmpty(configuration.getStatsCounter())) {
-                    builder.recordStats();
-                } else {
-                    builder.recordStats(configuration::getStatsCounter);
-                }
-            }
-            if (ObjectHelper.isNotEmpty(configuration.getRemovalListener())) {
-                builder.removalListener(configuration.getRemovalListener());
-            }
-            cache = builder.build();
         }
         super.doStart();
+    }
+
+    public static void defineBuilder(Caffeine<?, ?> builder, CaffeineConfiguration configuration) {
+        if (configuration.getEvictionType() == EvictionType.SIZE_BASED) {
+            builder.initialCapacity(configuration.getInitialCapacity());
+            builder.maximumSize(configuration.getMaximumSize());
+        } else if (configuration.getEvictionType() == EvictionType.TIME_BASED) {
+            builder.expireAfterAccess(configuration.getExpireAfterAccessTime(), TimeUnit.SECONDS);
+            builder.expireAfterWrite(configuration.getExpireAfterWriteTime(), TimeUnit.SECONDS);
+        }
+        if (configuration.isStatsEnabled()) {
+            if (ObjectHelper.isEmpty(configuration.getStatsCounter())) {
+                builder.recordStats();
+            } else {
+                builder.recordStats(configuration::getStatsCounter);
+            }
+        }
+        if (ObjectHelper.isNotEmpty(configuration.getRemovalListener())) {
+            builder.removalListener(configuration.getRemovalListener());
+        }
     }
 
     @Override

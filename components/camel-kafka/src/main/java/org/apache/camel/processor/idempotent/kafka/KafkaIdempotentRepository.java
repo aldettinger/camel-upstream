@@ -16,6 +16,7 @@
  */
 package org.apache.camel.processor.idempotent.kafka;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
@@ -30,6 +31,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelContextAware;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.api.management.ManagedOperation;
 import org.apache.camel.api.management.ManagedResource;
 import org.apache.camel.spi.IdempotentRepository;
@@ -364,7 +366,7 @@ public class KafkaIdempotentRepository extends ServiceSupport implements Idempot
             producer.send(new ProducerRecord<>(topic, key, action.toString())).get(); // sync
                                                                                      // send
         } catch (ExecutionException | InterruptedException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeCamelException(e);
         }
     }
 
@@ -447,13 +449,13 @@ public class KafkaIdempotentRepository extends ServiceSupport implements Idempot
             // callbacks will also only be invoked during that time".
             // We can safely trigger a poll(0) because the consumer doesn't have any record pre-fetched.
             log.debug("Forcing rebalance to get partitions assigned");
-            if (!consumer.poll(0).isEmpty()) {
-                throw new IllegalStateException("Firts call to Kafka consumer.poll(0) should never return any record");
+            if (!consumer.poll(Duration.ofMillis(0)).isEmpty()) {
+                throw new IllegalStateException("First call to Kafka consumer.poll(0) should never return any record");
             }
 
             POLL_LOOP: while (running.get()) {
                 log.trace("Polling");
-                ConsumerRecords<String, String> consumerRecords = consumer.poll(pollDurationMs);
+                ConsumerRecords<String, String> consumerRecords = consumer.poll(Duration.ofMillis(pollDurationMs));
                 if (consumerRecords.isEmpty()) {
                     // the first time this happens, we can assume that we have
                     // consumed all

@@ -16,9 +16,8 @@
  */
 package org.apache.camel.component.file.remote;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 
 import org.apache.camel.Exchange;
@@ -31,7 +30,6 @@ import org.apache.camel.component.file.GenericFileOperationFailedException;
 import org.apache.camel.component.file.GenericFileProcessStrategy;
 import org.apache.camel.util.FileUtil;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.camel.util.StopWatch;
 import org.apache.camel.util.StringHelper;
 import org.apache.camel.util.TimeUtils;
 import org.apache.camel.util.URISupport;
@@ -132,54 +130,26 @@ public class FtpConsumer extends RemoteFileConsumer<FTPFile> {
 
         // compute dir depending on stepwise is enabled or not
         String dir = null;
-        List<FTPFile> files = null;
-        try {
-            if (isStepwise()) {
-                dir = ObjectHelper.isNotEmpty(dirName) ? dirName : absolutePath;
-                operations.changeCurrentDirectory(dir);
-            } else {
-                dir = absolutePath;
-            }
-
-            LOG.trace("Polling directory: {}", dir);
-            if (isUseList()) {
-                if (isStepwise()) {
-                    files = operations.listFiles();
-                } else {
-                    files = operations.listFiles(dir);
-                }
-            } else {
-                // we cannot use the LIST command(s) so we can only poll a named
-                // file so created a pseudo file with that name
-                Exchange dummy = endpoint.createExchange();
-                String name = evaluateFileExpression(dummy);
-                if (name != null) {
-                    FTPFile file = new FTPFile();
-                    file.setType(FTPFile.FILE_TYPE);
-                    file.setName(name);
-                    files = new ArrayList<>(1);
-                    files.add(file);
-                }
-            }
-        } catch (GenericFileOperationFailedException e) {
-            if (ignoreCannotRetrieveFile(null, null, e)) {
-                LOG.debug("Cannot list files in directory {} due directory does not exists or file permission error.", dir);
-            } else {
-                throw e;
-            }
+        if (isStepwise()) {
+            dir = ObjectHelper.isNotEmpty(dirName) ? dirName : absolutePath;
+            operations.changeCurrentDirectory(dir);
+        } else {
+            dir = absolutePath;
         }
 
-        if (files == null || files.isEmpty()) {
+        final FTPFile[] files = getFtpFiles(dir);
+
+        if (files == null || files.length == 0) {
             // no files in this directory to poll
             LOG.trace("No files found in directory: {}", dir);
             return true;
         } else {
             // we found some files
-            LOG.trace("Found {} in directory: {}", files.size(), dir);
+            LOG.trace("Found {} files in directory: {}", files.length, dir);
         }
 
         if (getEndpoint().isPreSort()) {
-            Collections.sort(files, (a, b) -> a.getName().compareTo(b.getName()));
+            Arrays.sort(files, Comparator.comparing(FTPFile::getName));
         }
 
         for (FTPFile file : files) {
@@ -218,8 +188,51 @@ public class FtpConsumer extends RemoteFileConsumer<FTPFile> {
         return true;
     }
 
+    private FTPFile[] pollNamedFile() {
+        FTPFile[] files = null;
+        // we cannot use the LIST command(s) so we can only poll a named
+        // file so created a pseudo file with that name
+        Exchange dummy = endpoint.createExchange();
+        String name = evaluateFileExpression(dummy);
+        if (name != null) {
+            FTPFile file = new FTPFile();
+            file.setType(FTPFile.FILE_TYPE);
+            file.setName(name);
+            files = new FTPFile[1];
+            files[0] = file;
+        }
+        return files;
+    }
+
+    private FTPFile[] listFiles(String dir) {
+        if (isStepwise()) {
+            return operations.listFiles();
+        }
+
+        return operations.listFiles(dir);
+    }
+
+    private FTPFile[] getFtpFiles(String dir) {
+        FTPFile[] files = null;
+        try {
+            LOG.trace("Polling directory: {}", dir);
+            if (isUseList()) {
+                files = listFiles(dir);
+            } else {
+                files = pollNamedFile();
+            }
+        } catch (GenericFileOperationFailedException e) {
+            if (ignoreCannotRetrieveFile(null, null, e)) {
+                LOG.debug("Cannot list files in directory {} due directory does not exists or file permission error.", dir);
+            } else {
+                throw e;
+            }
+        }
+        return files;
+    }
+
     @Override
-    protected boolean isMatched(GenericFile<FTPFile> file, String doneFileName, List<FTPFile> files) {
+    protected boolean isMatched(GenericFile<FTPFile> file, String doneFileName, FTPFile[] files) {
         String onlyName = FileUtil.stripPath(doneFileName);
 
         for (FTPFile f : files) {
@@ -306,10 +319,10 @@ public class FtpConsumer extends RemoteFileConsumer<FTPFile> {
         file.setFileLength(length);
         file.setLastModified(modified);
         if (length >= 0) {
-            message.setHeader(Exchange.FILE_LENGTH, length);
+            message.setHeader(FtpConstants.FILE_LENGTH, length);
         }
         if (modified >= 0) {
-            message.setHeader(Exchange.FILE_LAST_MODIFIED, modified);
+            message.setHeader(FtpConstants.FILE_LAST_MODIFIED, modified);
         }
     }
 
@@ -332,9 +345,7 @@ public class FtpConsumer extends RemoteFileConsumer<FTPFile> {
             if (log != null) {
                 long since = listener.getLastLogActivityTimestamp();
                 if (since > 0) {
-                    StopWatch watch = new StopWatch(new Date(since));
-                    long delta = watch.taken();
-                    String human = TimeUtils.printDuration(delta);
+                    String human = TimeUtils.printSince(since);
                     return log + " " + human + " ago";
                 } else {
                     return log;
@@ -353,9 +364,7 @@ public class FtpConsumer extends RemoteFileConsumer<FTPFile> {
             if (log != null) {
                 long since = listener.getLastVerboseLogActivityTimestamp();
                 if (since > 0) {
-                    StopWatch watch = new StopWatch(new Date(since));
-                    long delta = watch.taken();
-                    String human = TimeUtils.printDuration(delta);
+                    String human = TimeUtils.printSince(since);
                     return log + " " + human + " ago";
                 } else {
                     return log;

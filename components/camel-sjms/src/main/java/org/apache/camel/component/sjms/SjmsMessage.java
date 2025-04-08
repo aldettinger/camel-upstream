@@ -36,6 +36,8 @@ import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.camel.support.MessageHelper.copyBody;
+
 /**
  * Represents a {@link org.apache.camel.Message} for working with JMS
  */
@@ -50,6 +52,24 @@ public class SjmsMessage extends DefaultMessage {
         setJmsMessage(jmsMessage);
         setJmsSession(jmsSession);
         setBinding(binding);
+    }
+
+    public void init(Exchange exchange, Message jmsMessage, Session jmsSession, JmsBinding binding) {
+        setExchange(exchange);
+        setJmsMessage(jmsMessage);
+        setJmsSession(jmsSession);
+        setBinding(binding);
+        // need to populate initial headers when we use pooled exchanges
+        populateInitialHeaders(getHeaders());
+    }
+
+    @Override
+    public void reset() {
+        super.reset();
+        setExchange(null);
+        jmsMessage = null;
+        jmsSession = null;
+        binding = null;
     }
 
     @Override
@@ -95,7 +115,7 @@ public class SjmsMessage extends DefaultMessage {
         }
 
         // copy body and fault flag
-        setBody(that.getBody());
+        copyBody(that, this);
 
         // we have already cleared the headers
         if (that.hasHeaders()) {
@@ -240,6 +260,11 @@ public class SjmsMessage extends DefaultMessage {
     protected void populateInitialHeaders(Map<String, Object> map) {
         if (jmsMessage != null && map != null) {
             map.putAll(getBinding().extractHeadersFromJms(jmsMessage, getExchange()));
+            try {
+                map.put(Exchange.MESSAGE_TIMESTAMP, jmsMessage.getJMSTimestamp());
+            } catch (JMSException e) {
+                // ignore
+            }
         }
     }
 

@@ -23,7 +23,6 @@ import java.util.Set;
 import org.apache.camel.Exchange;
 import org.apache.camel.component.hbase.filters.ModelAwareFilter;
 import org.apache.camel.component.hbase.mapping.CellMappingStrategy;
-import org.apache.camel.component.hbase.mapping.CellMappingStrategyFactory;
 import org.apache.camel.component.hbase.model.HBaseCell;
 import org.apache.camel.component.hbase.model.HBaseData;
 import org.apache.camel.component.hbase.model.HBaseRow;
@@ -94,9 +93,9 @@ public class HBaseProducer extends DefaultProducer {
             } else if (!deleteOperations.isEmpty()) {
                 table.delete(deleteOperations);
             } else if (!getOperationResult.isEmpty()) {
-                mappingStrategy.applyGetResults(exchange.getOut(), new HBaseData(getOperationResult));
+                mappingStrategy.applyGetResults(exchange.getMessage(), new HBaseData(getOperationResult));
             } else if (!scanOperationResult.isEmpty()) {
-                mappingStrategy.applyScanResults(exchange.getOut(), new HBaseData(scanOperationResult));
+                mappingStrategy.applyScanResults(exchange.getMessage(), new HBaseData(scanOperationResult));
             }
         }
     }
@@ -104,7 +103,7 @@ public class HBaseProducer extends DefaultProducer {
     /**
      * Creates an HBase {@link Put} on a specific row, using a collection of values (family/column/value pairs).
      */
-    private Put createPut(HBaseRow hRow) throws Exception {
+    private Put createPut(HBaseRow hRow) {
         ObjectHelper.notNull(hRow, "HBase row");
         ObjectHelper.notNull(hRow.getId(), "HBase row id");
         ObjectHelper.notNull(hRow.getCells(), "HBase cells");
@@ -181,7 +180,7 @@ public class HBaseProducer extends DefaultProducer {
     /**
      * Creates an HBase {@link Delete} on a specific row, using a collection of values (family/column/value pairs).
      */
-    private Delete createDeleteRow(HBaseRow hRow) throws Exception {
+    private Delete createDeleteRow(HBaseRow hRow) {
         ObjectHelper.notNull(hRow, "HBase row");
         ObjectHelper.notNull(hRow.getId(), "HBase row id");
         return new Delete(endpoint.getCamelContext().getTypeConverter().convertTo(byte[].class, hRow.getId()));
@@ -200,8 +199,9 @@ public class HBaseProducer extends DefaultProducer {
             throws Exception {
         List<HBaseRow> rowSet = new LinkedList<>();
 
-        HBaseRow startRow = new HBaseRow(model.getCells());
-        startRow.setId(start);
+        // unused
+        //HBaseRow startRow = new HBaseRow(model.getCells());
+        //startRow.setId(start);
 
         Scan scan = new Scan();
         if (start != null) {
@@ -277,13 +277,13 @@ public class HBaseProducer extends DefaultProducer {
                 exchange.getIn().setHeader(HBaseConstants.HBASE_MAX_SCAN_RESULTS, endpoint.getMaxResults());
             }
             if (endpoint.getMappingStrategyName() != null
-                    && exchange.getIn().getHeader(CellMappingStrategyFactory.STRATEGY) == null) {
-                exchange.getIn().setHeader(CellMappingStrategyFactory.STRATEGY, endpoint.getMappingStrategyName());
+                    && exchange.getIn().getHeader(HBaseConstants.STRATEGY) == null) {
+                exchange.getIn().setHeader(HBaseConstants.STRATEGY, endpoint.getMappingStrategyName());
             }
 
             if (endpoint.getMappingStrategyName() != null
-                    && exchange.getIn().getHeader(CellMappingStrategyFactory.STRATEGY_CLASS_NAME) == null) {
-                exchange.getIn().setHeader(CellMappingStrategyFactory.STRATEGY_CLASS_NAME,
+                    && exchange.getIn().getHeader(HBaseConstants.STRATEGY_CLASS_NAME) == null) {
+                exchange.getIn().setHeader(HBaseConstants.STRATEGY_CLASS_NAME,
                         endpoint.getMappingStrategyClassName());
             }
 

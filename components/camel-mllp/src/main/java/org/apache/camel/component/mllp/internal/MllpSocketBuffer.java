@@ -39,21 +39,25 @@ public class MllpSocketBuffer {
     static final int MIN_BUFFER_SIZE = 2048;
     static final int MAX_BUFFER_SIZE = 0x40000000;  // Approximately 1-GB
 
-    final Logger log = LoggerFactory.getLogger(this.getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(MllpSocketBuffer.class);
     final MllpEndpoint endpoint;
 
     byte buffer[];
-
     int availableByteCount;
 
     int startOfBlockIndex = -1;
     int endOfBlockIndex = -1;
+    String charset;
+    Hl7Util hl7Util;
 
     public MllpSocketBuffer(MllpEndpoint endpoint) {
         if (endpoint == null) {
             throw new IllegalArgumentException("MllpEndpoint cannot be null");
         }
         this.endpoint = endpoint;
+        this.charset = endpoint.getCharsetName();
+        MllpComponent component = endpoint.getComponent();
+        this.hl7Util = new Hl7Util(component.getLogPhiMaxBytes(), component.getLogPhi());
 
         buffer = new byte[MIN_BUFFER_SIZE];
     }
@@ -63,7 +67,7 @@ public class MllpSocketBuffer {
     }
 
     public boolean isEmpty() {
-        return (size() > 0) ? false : true;
+        return size() <= 0;
     }
 
     public synchronized void write(int b) {
@@ -174,7 +178,7 @@ public class MllpSocketBuffer {
     public synchronized void readFrom(Socket socket, int receiveTimeout, int readTimeout)
             throws MllpSocketException, SocketTimeoutException {
         if (socket != null && socket.isConnected() && !socket.isClosed()) {
-            log.trace("readFrom({}, {}, {}) - entering", socket, receiveTimeout, readTimeout);
+            LOG.trace("readFrom({}, {}, {}) - entering", socket, receiveTimeout, readTimeout);
             ensureCapacity(MIN_BUFFER_SIZE);
 
             try {
@@ -202,22 +206,22 @@ public class MllpSocketBuffer {
             } finally {
                 if (size() > 0 && !hasCompleteEnvelope()) {
                     if (!hasEndOfData() && hasEndOfBlock() && endOfBlockIndex < size() - 1) {
-                        log.warn("readFrom({}, {}, {}) - exiting with partial payload {}", socket, receiveTimeout, readTimeout,
-                                Hl7Util.convertToPrintFriendlyString(buffer, 0, size() - 1));
+                        LOG.warn("readFrom({}, {}, {}) - exiting with partial payload {}", socket, receiveTimeout, readTimeout,
+                                hl7Util.convertToPrintFriendlyString(buffer, 0, size() - 1));
                     }
                 }
             }
 
         } else {
-            log.warn("readFrom({}, {}, {}) - no data read because Socket is invalid", socket, receiveTimeout, readTimeout);
+            LOG.warn("readFrom({}, {}, {}) - no data read because Socket is invalid", socket, receiveTimeout, readTimeout);
         }
 
-        log.trace("readFrom({}, {}, {}) - exiting", socket, receiveTimeout, readTimeout);
+        LOG.trace("readFrom({}, {}, {}) - exiting", socket, receiveTimeout, readTimeout);
     }
 
     public synchronized void writeTo(Socket socket) throws MllpSocketException {
         if (socket != null && socket.isConnected() && !socket.isClosed()) {
-            log.trace("writeTo({}) - entering", socket);
+            LOG.trace("writeTo({}) - entering", socket);
             if (!isEmpty()) {
                 try {
                     OutputStream socketOutputStream = socket.getOutputStream();
@@ -243,13 +247,13 @@ public class MllpSocketBuffer {
                     throw new MllpSocketException(exceptionMessage, ioEx);
                 }
             } else {
-                log.warn("writeTo({}) - no data written because buffer is empty", socket);
+                LOG.warn("writeTo({}) - no data written because buffer is empty", socket);
             }
         } else {
-            log.warn("writeTo({}) - no data written because Socket is invalid", socket);
+            LOG.warn("writeTo({}) - no data written because Socket is invalid", socket);
         }
 
-        log.trace("writeTo({}) - exiting", socket);
+        LOG.trace("writeTo({}) - exiting", socket);
     }
 
     public synchronized byte[] toByteArray() {
@@ -270,7 +274,11 @@ public class MllpSocketBuffer {
 
     @Override
     public synchronized String toString() {
-        return toString(MllpComponent.getDefaultCharset());
+        if (charset != null) {
+            return toString(charset);
+        } else {
+            return toString(endpoint.getComponent().getDefaultCharset());
+        }
     }
 
     public synchronized String toString(Charset charset) {
@@ -287,34 +295,12 @@ public class MllpSocketBuffer {
                 if (Charset.isSupported(charsetName)) {
                     return toString(Charset.forName(charsetName));
                 }
-                log.warn("toString(charsetName[{}]) - unsupported character set name - using the MLLP default character set {}",
-                        charsetName, MllpComponent.getDefaultCharset());
             } catch (Exception charsetEx) {
-                log.warn(
-                        "toString(charsetName[{}]) - ignoring exception encountered determining character set - using the MLLP default character set {}",
-                        charsetName, MllpComponent.getDefaultCharset(), charsetEx);
+                // ignore
             }
-
-            return toString(MllpComponent.getDefaultCharset());
         }
 
         return "";
-    }
-
-    public synchronized String toStringAndReset() {
-        String answer = toString();
-
-        reset();
-
-        return answer;
-    }
-
-    public synchronized String toStringAndReset(String charsetName) {
-        String answer = toString(charsetName);
-
-        reset();
-
-        return answer;
     }
 
     /**
@@ -325,7 +311,7 @@ public class MllpSocketBuffer {
      */
     public synchronized String toPrintFriendlyString() {
         if (availableByteCount > 0) {
-            return Hl7Util.convertToPrintFriendlyString(buffer, 0, availableByteCount);
+            return hl7Util.convertToPrintFriendlyString(buffer, 0, availableByteCount);
         }
 
         return "";
@@ -340,15 +326,7 @@ public class MllpSocketBuffer {
     }
 
     public synchronized String toHl7String() {
-        return this.toHl7String(MllpComponent.getDefaultCharset());
-    }
-
-    public String toHl7StringAndReset() {
-        String answer = toHl7String();
-
-        reset();
-
-        return answer;
+        return this.toHl7String(charset);
     }
 
     public synchronized String toHl7String(String charsetName) {
@@ -357,17 +335,16 @@ public class MllpSocketBuffer {
                 if (Charset.isSupported(charsetName)) {
                     return toHl7String(Charset.forName(charsetName));
                 }
-                log.warn(
-                        "toHl7String(charsetName[{}]) - unsupported character set name - using the MLLP default character set {}",
-                        charsetName, MllpComponent.getDefaultCharset());
             } catch (Exception charsetEx) {
-                log.warn(
-                        "toHl7String(charsetName[{}]) - ignoring exception encountered determining character set for name - using the MLLP default character set {}",
-                        charsetName, MllpComponent.getDefaultCharset(), charsetEx);
+                // ignore
             }
         }
 
-        return toHl7String(MllpComponent.getDefaultCharset());
+        if (Charset.isSupported(endpoint.getComponent().getDefaultCharset())) {
+            return toHl7String(endpoint.getComponent().getDefaultCharset());
+        }
+
+        return "";
     }
 
     public synchronized String toHl7String(Charset charset) {
@@ -375,21 +352,13 @@ public class MllpSocketBuffer {
             int offset = hasStartOfBlock() ? startOfBlockIndex + 1 : 1;
             int length = hasEndOfBlock() ? endOfBlockIndex - offset : availableByteCount - startOfBlockIndex - 1;
             if (length > 0) {
-                return new String(buffer, offset, length, charset != null ? charset : MllpComponent.getDefaultCharset());
+                return new String(buffer, offset, length, charset);
             } else {
                 return "";
             }
         }
 
         return null;
-    }
-
-    public String toHl7StringAndReset(String charsetName) {
-        String answer = toHl7String(charsetName);
-
-        reset();
-
-        return answer;
     }
 
     /**
@@ -402,18 +371,10 @@ public class MllpSocketBuffer {
         if (hasCompleteEnvelope()) {
             int startPosition = hasStartOfBlock() ? startOfBlockIndex + 1 : 1;
             int endPosition = hasEndOfBlock() ? endOfBlockIndex : availableByteCount - 1;
-            return Hl7Util.convertToPrintFriendlyString(buffer, startPosition, endPosition);
+            return hl7Util.convertToPrintFriendlyString(buffer, startPosition, endPosition);
         }
 
         return "";
-    }
-
-    public String toPrintFriendlyHl7StringAndReset() {
-        String answer = toPrintFriendlyHl7String();
-
-        reset();
-
-        return answer;
     }
 
     public synchronized byte[] toMllpPayload() {
@@ -432,28 +393,6 @@ public class MllpSocketBuffer {
         }
 
         return mllpPayload;
-    }
-
-    public byte[] toMllpPayloadAndReset() {
-        byte[] answer = toMllpPayload();
-
-        reset();
-
-        return answer;
-    }
-
-    public synchronized int getMllpPayloadLength() {
-        int answer = -1;
-
-        if (hasCompleteEnvelope()) {
-            if (isEndOfDataRequired()) {
-                answer = endOfBlockIndex - startOfBlockIndex + 2;
-            } else {
-                answer = endOfBlockIndex - startOfBlockIndex + 2;
-            }
-        }
-
-        return answer;
     }
 
     public synchronized int getStartOfBlockIndex() {
@@ -477,18 +416,18 @@ public class MllpSocketBuffer {
     }
 
     public synchronized boolean hasStartOfBlock() {
-        return (startOfBlockIndex >= 0) ? true : false;
+        return startOfBlockIndex >= 0;
     }
 
     public synchronized boolean hasEndOfBlock() {
-        return (endOfBlockIndex >= 0) ? true : false;
+        return endOfBlockIndex >= 0;
     }
 
     public synchronized boolean hasEndOfData() {
         if (hasEndOfBlock()) {
             int potentialEndOfDataIndex = endOfBlockIndex + 1;
-            if ((potentialEndOfDataIndex < availableByteCount)
-                    && (buffer[potentialEndOfDataIndex] == MllpProtocolConstants.END_OF_DATA)) {
+            if (potentialEndOfDataIndex < availableByteCount
+                    && buffer[potentialEndOfDataIndex] == MllpProtocolConstants.END_OF_DATA) {
                 return true;
             }
         }
@@ -562,25 +501,6 @@ public class MllpSocketBuffer {
         return -1;
     }
 
-    public synchronized int bufferSize() {
-        if (buffer != null) {
-            return buffer.length;
-        }
-
-        return -1;
-    }
-
-    /**
-     * Get the internal buffer.
-     *
-     * USE WITH CAUTION!!
-     *
-     * @return
-     */
-    public byte[] getBuffer() {
-        return buffer;
-    }
-
     void ensureCapacity(int requiredAvailableCapacity) {
         int currentAvailableCapacity = capacity();
 
@@ -618,7 +538,7 @@ public class MllpSocketBuffer {
 
     void readSocketInputStream(InputStream socketInputStream, Socket socket)
             throws MllpSocketException, SocketTimeoutException {
-        log.trace("readSocketInputStream(socketInputStream, {}) - entering with initial buffer size = {}", socket, size());
+        LOG.trace("readSocketInputStream(socketInputStream, {}) - entering with initial buffer size = {}", socket, size());
         try {
             int readCount = socketInputStream.read(buffer, availableByteCount, buffer.length - availableByteCount);
             if (readCount == MllpProtocolConstants.END_OF_STREAM) {
@@ -635,10 +555,10 @@ public class MllpSocketBuffer {
                 availableByteCount += readCount;
 
                 if (hasStartOfBlock()) {
-                    log.trace("readSocketInputStream(socketInputStream, {}) - read {} bytes for a total of {} bytes", socket,
+                    LOG.trace("readSocketInputStream(socketInputStream, {}) - read {} bytes for a total of {} bytes", socket,
                             readCount, availableByteCount);
                 } else {
-                    log.warn(
+                    LOG.warn(
                             "readSocketInputStream(socketInputStream, {}) - ignoring {} bytes received before START_OF_BLOCK: {}",
                             socket, size(), toPrintFriendlyStringAndReset());
                 }
@@ -652,7 +572,7 @@ public class MllpSocketBuffer {
             resetSocket(socket);
             throw new MllpSocketException(exceptionMessage, ioEx);
         } finally {
-            log.trace("readSocketInputStream(socketInputStream, {}) - exiting with buffer size = {}", socket, size());
+            LOG.trace("readSocketInputStream(socketInputStream, {}) - exiting with buffer size = {}", socket, size());
         }
     }
 
@@ -675,9 +595,9 @@ public class MllpSocketBuffer {
     void doSocketClose(Socket socket, String logMessage, boolean reset) {
         if (socket != null && socket.isConnected() && !socket.isClosed()) {
             if (logMessage != null && !logMessage.isEmpty()) {
-                log.info("{} - {} socket {}", reset ? "Resetting" : "Closing", logMessage, socket);
+                LOG.info("{} - {} socket {}", reset ? "Resetting" : "Closing", logMessage, socket);
             } else {
-                log.debug("{} socket {}", reset ? "Resetting" : "Closing", socket);
+                LOG.debug("{} socket {}", reset ? "Resetting" : "Closing", socket);
             }
 
             endpoint.updateLastConnectionTerminatedTicks();
@@ -686,7 +606,7 @@ public class MllpSocketBuffer {
                 try {
                     socket.shutdownInput();
                 } catch (IOException ignoredEx) {
-                    log.trace(
+                    LOG.trace(
                             "doSocketClose(socket[{}], logMessage[{}], reset[{}] - ignoring exception raised by Socket.shutdownInput()",
                             socket, logMessage, reset, ignoredEx);
                 }
@@ -696,7 +616,7 @@ public class MllpSocketBuffer {
                 try {
                     socket.shutdownOutput();
                 } catch (IOException ignoredEx) {
-                    log.trace(
+                    LOG.trace(
                             "doSocketClose(socket[{}], logMessage[{}], reset[{}] - ignoring exception raised by Socket.shutdownOutput()",
                             socket, logMessage, reset, ignoredEx);
                 }
@@ -708,7 +628,7 @@ public class MllpSocketBuffer {
                 try {
                     socket.setSoLinger(on, linger);
                 } catch (IOException ignoredEx) {
-                    log.trace(
+                    LOG.trace(
                             "doSocketClose(socket[{}], logMessage[{}], reset[{}] - ignoring exception raised by Socket.setSoLinger({}, {})",
                             socket, logMessage, reset, on, linger, ignoredEx);
                 }
@@ -718,7 +638,7 @@ public class MllpSocketBuffer {
                 socket.close();
             } catch (IOException ignoredEx) {
                 // TODO: Maybe log this
-                log.trace("doSocketClose(socket[{}], logMessage[{}], reset[{}] - ignoring exception raised by Socket.close()",
+                LOG.trace("doSocketClose(socket[{}], logMessage[{}], reset[{}] - ignoring exception raised by Socket.close()",
                         socket, logMessage, reset, ignoredEx);
             }
         }

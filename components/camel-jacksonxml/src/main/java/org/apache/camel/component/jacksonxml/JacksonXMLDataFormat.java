@@ -50,9 +50,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * A <a href="http://camel.apache.org/data-format.html">data format</a> ({@link DataFormat}) using
- * <a href="http://jackson.codehaus.org/">Jackson</a> to marshal to and from XML.
+ * <a href="https://github.com/FasterXML/jackson">Jackson</a> to marshal to and from XML.
  */
-@Dataformat("jacksonxml")
+@Dataformat("jacksonXml")
 public class JacksonXMLDataFormat extends ServiceSupport
         implements DataFormat, DataFormatName, DataFormatContentTypeHeader, CamelContextAware {
 
@@ -102,7 +102,7 @@ public class JacksonXMLDataFormat extends ServiceSupport
      *
      * @param unmarshalType the custom unmarshal type
      * @param jsonView      marker class to specify properties to be included during marshalling. See also
-     *                      http://wiki.fasterxml.com/JacksonJsonViews
+     *                      https://github.com/FasterXML/jackson-annotations/blob/master/src/main/java/com/fasterxml/jackson/annotation/JsonView.java
      */
     public JacksonXMLDataFormat(Class<?> unmarshalType, Class<?> jsonView) {
         this(unmarshalType, jsonView, true);
@@ -113,7 +113,7 @@ public class JacksonXMLDataFormat extends ServiceSupport
      *
      * @param unmarshalType              the custom unmarshal type
      * @param jsonView                   marker class to specify properties to be included during marshalling. See also
-     *                                   http://wiki.fasterxml.com/JacksonJsonViews
+     *                                   https://github.com/FasterXML/jackson-annotations/blob/master/src/main/java/com/fasterxml/jackson/annotation/JsonView.java
      * @param enableJaxbAnnotationModule if it is true, will enable the JaxbAnnotationModule.
      */
     public JacksonXMLDataFormat(Class<?> unmarshalType, Class<?> jsonView, boolean enableJaxbAnnotationModule) {
@@ -138,7 +138,7 @@ public class JacksonXMLDataFormat extends ServiceSupport
      * @param mapper        the custom mapper
      * @param unmarshalType the custom unmarshal type
      * @param jsonView      marker class to specify properties to be included during marshalling. See also
-     *                      http://wiki.fasterxml.com/JacksonJsonViews
+     *                      https://github.com/FasterXML/jackson-annotations/blob/master/src/main/java/com/fasterxml/jackson/annotation/JsonView.java
      */
     public JacksonXMLDataFormat(XmlMapper mapper, Class<?> unmarshalType, Class<?> jsonView) {
         this.xmlMapper = mapper;
@@ -148,7 +148,7 @@ public class JacksonXMLDataFormat extends ServiceSupport
 
     @Override
     public String getDataFormatName() {
-        return "xml-jackson";
+        return "jacksonXml";
     }
 
     @Override

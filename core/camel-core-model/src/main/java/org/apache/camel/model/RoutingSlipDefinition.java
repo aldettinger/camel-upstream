@@ -32,24 +32,29 @@ import org.apache.camel.spi.Metadata;
 /**
  * Routes a message through a series of steps that are pre-determined (the slip)
  */
-@Metadata(label = "eip,endpoint,routing")
+@Metadata(label = "eip,routing")
 @XmlRootElement(name = "routingSlip")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class RoutingSlipDefinition<Type extends ProcessorDefinition<Type>> extends ExpressionNode {
+
     public static final String DEFAULT_DELIMITER = ",";
 
     @XmlAttribute
     @Metadata(defaultValue = ",")
     private String uriDelimiter;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String ignoreInvalidEndpoints;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Integer")
+    @Metadata(label = "advanced", javaType = "java.lang.Integer")
     private String cacheSize;
 
     public RoutingSlipDefinition() {
-        this((String) null, DEFAULT_DELIMITER);
+        if (uriDelimiter == null) {
+            setUriDelimiter(DEFAULT_DELIMITER);
+        } else {
+            setUriDelimiter(uriDelimiter);
+        }
     }
 
     public RoutingSlipDefinition(String headerName) {

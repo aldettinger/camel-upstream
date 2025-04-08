@@ -18,7 +18,9 @@ package org.apache.camel.builder;
 
 import java.util.Map;
 
+import org.apache.camel.CamelContext;
 import org.apache.camel.EndpointConsumerResolver;
+import org.apache.camel.Expression;
 
 /**
  * Type-safe endpoint DSL for building consumer endpoints.
@@ -27,9 +29,14 @@ import org.apache.camel.EndpointConsumerResolver;
  */
 public interface EndpointConsumerBuilder extends EndpointConsumerResolver {
     /**
-     * Builds the url of this endpoint. This API is only intended for Camel internally.
+     * Builds the encoded url of this endpoint. This API is only intended for Camel internally.
      */
     String getUri();
+
+    /**
+     * Builds the raw url of this endpoint. This API is only intended for Camel internally.
+     */
+    String getRawUri();
 
     /**
      * Adds an option to this endpoint. This API is only intended for Camel internally.
@@ -45,5 +52,10 @@ public interface EndpointConsumerBuilder extends EndpointConsumerResolver {
      * Adds multi-value options to this endpoint. This API is only intended for Camel internally.
      */
     void doSetMultiValueProperties(String name, String prefix, Map<String, Object> values);
+
+    /**
+     * Builds a dynamic expression of this endpoint url. This API is only intended for Camel internally.
+     */
+    Expression expr(CamelContext camelContext);
 
 }

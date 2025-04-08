@@ -69,8 +69,6 @@ public class QuartzComponent extends DefaultComponent implements ExtendedStartup
     private Map properties;
     @Metadata
     private String propertiesFile;
-    @Metadata(label = "scheduler")
-    private int startDelayedSeconds;
     @Metadata(label = "scheduler", defaultValue = "true")
     private boolean autoStartScheduler = true;
     @Metadata(label = "scheduler")
@@ -100,17 +98,6 @@ public class QuartzComponent extends DefaultComponent implements ExtendedStartup
      */
     public void setAutoStartScheduler(boolean autoStartScheduler) {
         this.autoStartScheduler = autoStartScheduler;
-    }
-
-    public int getStartDelayedSeconds() {
-        return startDelayedSeconds;
-    }
-
-    /**
-     * Seconds to wait before starting the quartz scheduler.
-     */
-    public void setStartDelayedSeconds(int startDelayedSeconds) {
-        this.startDelayedSeconds = startDelayedSeconds;
     }
 
     public boolean isPrefixJobNameWithEndpointId() {
@@ -193,7 +180,10 @@ public class QuartzComponent extends DefaultComponent implements ExtendedStartup
 
     /**
      * Whether to interrupt jobs on shutdown which forces the scheduler to shutdown quicker and attempt to interrupt any
-     * running jobs. If this is enabled then any running jobs can fail due to being interrupted.
+     * running jobs. If this is enabled then any running jobs can fail due to being interrupted. When a job is
+     * interrupted then Camel will mark the exchange to stop continue routing and set
+     * {@link java.util.concurrent.RejectedExecutionException} as caused exception. Therefore use this with care, as its
+     * often better to allow Camel jobs to complete and shutdown gracefully.
      */
     public void setInterruptJobsOnShutdown(boolean interruptJobsOnShutdown) {
         this.interruptJobsOnShutdown = interruptJobsOnShutdown;
@@ -374,22 +364,10 @@ public class QuartzComponent extends DefaultComponent implements ExtendedStartup
 
     @Override
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
-        // Get couple of scheduler settings
-        Integer startDelayedSeconds = getAndRemoveParameter(parameters, "startDelayedSeconds", Integer.class);
-        if (startDelayedSeconds != null) {
-            if (this.startDelayedSeconds != 0 && !(this.startDelayedSeconds == startDelayedSeconds)) {
-                LOG.warn("A Quartz job is already configured with a different 'startDelayedSeconds' configuration! "
-                         + "All Quartz jobs must share the same 'startDelayedSeconds' configuration! Cannot apply the 'startDelayedSeconds' configuration!");
-            } else {
-                this.startDelayedSeconds = startDelayedSeconds;
-            }
-        }
-
         Boolean autoStartScheduler = getAndRemoveParameter(parameters, "autoStartScheduler", Boolean.class);
         if (autoStartScheduler != null) {
             this.autoStartScheduler = autoStartScheduler;
         }
-
         Boolean prefixJobNameWithEndpointId = getAndRemoveParameter(parameters, "prefixJobNameWithEndpointId", Boolean.class);
         if (prefixJobNameWithEndpointId != null) {
             this.prefixJobNameWithEndpointId = prefixJobNameWithEndpointId;
@@ -405,9 +383,6 @@ public class QuartzComponent extends DefaultComponent implements ExtendedStartup
         result.setTriggerKey(triggerKey);
         result.setTriggerParameters(triggerParameters);
         result.setJobParameters(jobParameters);
-        if (startDelayedSeconds != null) {
-            result.setStartDelayedSeconds(startDelayedSeconds);
-        }
         if (autoStartScheduler != null) {
             result.setAutoStartScheduler(autoStartScheduler);
         }
@@ -475,11 +450,7 @@ public class QuartzComponent extends DefaultComponent implements ExtendedStartup
 
         // Set camel job counts to zero. We needed this to prevent shutdown in case there are multiple Camel contexts
         // that has not completed yet, and the last one with job counts to zero will eventually shutdown.
-        AtomicInteger number = (AtomicInteger) quartzContext.get(QuartzConstants.QUARTZ_CAMEL_JOBS_COUNT);
-        if (number == null) {
-            number = new AtomicInteger();
-            quartzContext.put(QuartzConstants.QUARTZ_CAMEL_JOBS_COUNT, number);
-        }
+        quartzContext.computeIfAbsent(QuartzConstants.QUARTZ_CAMEL_JOBS_COUNT, k -> new AtomicInteger());
     }
 
     private SchedulerContext storeCamelContextInQuartzContext() throws SchedulerException {
@@ -552,22 +523,13 @@ public class QuartzComponent extends DefaultComponent implements ExtendedStartup
 
         // Now scheduler is ready, let see how we should start it.
         if (!autoStartScheduler) {
-            LOG.info("Not starting scheduler because autoStartScheduler is set to false.");
+            LOG.info("Not starting scheduler because autoStartScheduler is set to false");
         } else {
-            if (startDelayedSeconds > 0) {
-                if (scheduler.isStarted()) {
-                    LOG.warn("The scheduler has already started. Cannot apply the 'startDelayedSeconds' configuration!");
-                } else {
-                    LOG.info("Starting scheduler with startDelayedSeconds={}", startDelayedSeconds);
-                    scheduler.startDelayed(startDelayedSeconds);
-                }
+            if (scheduler.isStarted()) {
+                LOG.info("The scheduler has already been started");
             } else {
-                if (scheduler.isStarted()) {
-                    LOG.info("The scheduler has already been started.");
-                } else {
-                    LOG.info("Starting scheduler.");
-                    scheduler.start();
-                }
+                LOG.info("Starting scheduler");
+                scheduler.start();
             }
         }
     }

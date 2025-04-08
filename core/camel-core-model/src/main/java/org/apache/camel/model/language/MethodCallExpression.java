@@ -23,15 +23,21 @@ import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.XmlTransient;
 
 import org.apache.camel.spi.Metadata;
-import org.apache.camel.util.ObjectHelper;
+import org.apache.camel.util.StringHelper;
 
 /**
- * Call a method of the specified Java bean passing the Exchange, Body or specific headers to it.
+ * Calls a Java bean method.
  */
-@Metadata(firstVersion = "1.3.0", label = "language,core,java", title = "Bean method")
+@Metadata(firstVersion = "1.3.0", label = "language,core,java", title = "Bean Method")
 @XmlRootElement(name = "method")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class MethodCallExpression extends ExpressionDefinition {
+
+    @XmlTransient
+    private Class<?> beanType;
+    @XmlTransient
+    private Object instance;
+
     @XmlAttribute
     private String ref;
     @XmlAttribute
@@ -39,12 +45,8 @@ public class MethodCallExpression extends ExpressionDefinition {
     @XmlAttribute(name = "beanType")
     private String beanTypeName;
     @XmlAttribute
-    @Metadata(defaultValue = "Singleton", enums = "Singleton,Request,Prototype")
+    @Metadata(label = "advanced", defaultValue = "Singleton", enums = "Singleton,Request,Prototype")
     private String scope;
-    @XmlTransient
-    private Class<?> beanType;
-    @XmlTransient
-    private Object instance;
 
     public MethodCallExpression() {
     }
@@ -96,7 +98,7 @@ public class MethodCallExpression extends ExpressionDefinition {
     }
 
     /**
-     * Reference to bean to lookup in the registry
+     * Reference to an existing bean (bean id) to lookup in the registry
      */
     public void setRef(String ref) {
         this.ref = ref;
@@ -127,7 +129,10 @@ public class MethodCallExpression extends ExpressionDefinition {
     }
 
     /**
-     * Class name of the bean to use
+     * Class name (fully qualified) of the bean to use
+     *
+     * Will lookup in registry and if there is a single instance of the same type, then the existing bean is used,
+     * otherwise a new bean is created (requires a default no-arg constructor).
      */
     public void setBeanTypeName(String beanTypeName) {
         this.beanTypeName = beanTypeName;
@@ -147,7 +152,7 @@ public class MethodCallExpression extends ExpressionDefinition {
      * times while processing the request. The bean does not have to be thread-safe as the instance is only called from
      * the same request. When using prototype scope, then the bean will be looked up or created per call. However in
      * case of lookup then this is delegated to the bean registry such as Spring or CDI (if in use), which depends on
-     * their configuration can act as either singleton or prototype scope. so when using prototype scope then this
+     * their configuration can act as either singleton or prototype scope. So when using prototype scope then this
      * depends on the bean registry implementation.
      */
     public void setScope(String scope) {
@@ -169,19 +174,22 @@ public class MethodCallExpression extends ExpressionDefinition {
         }
     }
 
-    private String beanName() {
-        if (ref != null) {
-            return ref;
-        } else if (instance != null) {
-            return ObjectHelper.className(instance);
-        }
-        return getExpression();
-    }
-
     @Override
     public String toString() {
-        boolean isRef = ref != null;
-        return "bean[" + (isRef ? "ref:" : "") + beanName() + (method != null ? " method:" + method : "") + "]";
+        String name;
+        if (ref != null) {
+            name = "ref:" + ref;
+        } else if (beanTypeName != null) {
+            // we just want the simple name
+            name = StringHelper.afterLast(beanTypeName, ".", beanTypeName);
+        } else if (beanType != null) {
+            name = beanType.getSimpleName();
+        } else if (instance != null) {
+            name = instance.getClass().getSimpleName();
+        } else {
+            name = getExpression();
+        }
+        return "bean[" + name + (method != null ? " method:" + method : "") + "]";
     }
 
 }

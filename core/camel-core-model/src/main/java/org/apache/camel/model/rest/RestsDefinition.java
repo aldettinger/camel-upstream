@@ -23,9 +23,7 @@ import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlElementRef;
 import javax.xml.bind.annotation.XmlRootElement;
-import javax.xml.bind.annotation.XmlTransient;
 
-import org.apache.camel.CamelContext;
 import org.apache.camel.model.OptionalIdentifiedDefinition;
 import org.apache.camel.spi.Metadata;
 
@@ -36,10 +34,9 @@ import org.apache.camel.spi.Metadata;
 @XmlRootElement(name = "rests")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class RestsDefinition extends OptionalIdentifiedDefinition<RestsDefinition> implements RestContainer {
+
     @XmlElementRef
     private List<RestDefinition> rests = new ArrayList<>();
-    @XmlTransient
-    private CamelContext camelContext;
 
     public RestsDefinition() {
     }
@@ -75,14 +72,6 @@ public class RestsDefinition extends OptionalIdentifiedDefinition<RestsDefinitio
         this.rests = rests;
     }
 
-    public CamelContext getCamelContext() {
-        return camelContext;
-    }
-
-    public void setCamelContext(CamelContext camelContext) {
-        this.camelContext = camelContext;
-    }
-
     // Fluent API
     // -------------------------------------------------------------------------
 
@@ -115,6 +104,7 @@ public class RestsDefinition extends OptionalIdentifiedDefinition<RestsDefinitio
 
     // Implementation methods
     // -------------------------------------------------------------------------
+
     protected RestDefinition createRest() {
         RestDefinition rest = new RestDefinition();
         return rest;

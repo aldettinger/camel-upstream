@@ -213,13 +213,13 @@ public class Web3jConsumer extends DefaultConsumer {
     private void processDone(String operation) {
         LOG.debug("processDone for operation: {}", operation);
         Exchange exchange = this.getEndpoint().createExchange();
-        exchange.getIn().setHeader("status", "done");
-        exchange.getIn().setHeader("operation", operation);
+        exchange.getIn().setHeader(Web3jConstants.HEADER_STATUS, "done");
+        exchange.getIn().setHeader(Web3jConstants.HEADER_OPERATION, operation);
         processEvent(exchange);
     }
 
     private void processError(Throwable throwable, String operation) {
-        LOG.debug("processError for operation: " + operation + " " + throwable);
+        LOG.debug("processError for operation: {} {}", operation, throwable.getMessage(), throwable);
         Exchange exchange = this.getEndpoint().createExchange();
         exchange.setException(throwable);
         processEvent(exchange);

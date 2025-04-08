@@ -24,19 +24,21 @@ import javax.xml.bind.annotation.XmlRootElement;
 import org.apache.camel.spi.Metadata;
 
 /**
- * Tokenize XML payloads using the specified path expression.
+ * Tokenize XML payloads.
  */
 @Metadata(firstVersion = "2.14.0", label = "language,core,xml", title = "XML Tokenize")
 @XmlRootElement(name = "xtokenize")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class XMLTokenizerExpression extends NamespaceAwareExpression {
+
     @XmlAttribute
+    @Metadata(label = "advanced")
     private String headerName;
     @XmlAttribute
-    @Metadata(enums = "i,w,u,t")
+    @Metadata(label = "advanced", enums = "i,w,u,t")
     private String mode;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Integer")
+    @Metadata(label = "advanced", javaType = "java.lang.Integer")
     private String group;
 
     public XMLTokenizerExpression() {

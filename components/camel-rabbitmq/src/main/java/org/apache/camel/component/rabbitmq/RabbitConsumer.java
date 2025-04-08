@@ -17,6 +17,8 @@
 package org.apache.camel.component.rabbitmq;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeoutException;
 
@@ -32,6 +34,9 @@ import org.apache.camel.ExchangePattern;
 import org.apache.camel.Message;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.support.service.ServiceSupport;
+import org.apache.camel.support.task.BlockingTask;
+import org.apache.camel.support.task.Tasks;
+import org.apache.camel.support.task.budget.Budgets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +48,6 @@ class RabbitConsumer extends ServiceSupport implements com.rabbitmq.client.Consu
     private Channel channel;
     private String tag;
     private volatile String consumerTag;
-    private volatile boolean stopping;
 
     private final Semaphore lock = new Semaphore(1);
 
@@ -69,7 +73,7 @@ class RabbitConsumer extends ServiceSupport implements com.rabbitmq.client.Consu
                 lock.acquire();
             }
             // Channel might be open because while we were waiting for the lock,
-            // stop() has been succesfully called.
+            // stop() has been successfully called.
             if (!channel.isOpen()) {
                 // we could not open the channel so release the lock
                 if (!consumer.getEndpoint().isAutoAck()) {
@@ -78,12 +82,15 @@ class RabbitConsumer extends ServiceSupport implements com.rabbitmq.client.Consu
                 return;
             }
 
+            Exchange exchange = consumer.createExchange(envelope, properties, body);
             try {
-                doHandleDelivery(consumerTag, envelope, properties, body);
+                consumer.getEndpoint().getMessageConverter().mergeAmqpProperties(exchange, properties);
+                doHandleDelivery(exchange, envelope, properties);
             } finally {
                 if (!consumer.getEndpoint().isAutoAck()) {
                     lock.release();
                 }
+                consumer.releaseExchange(exchange, false);
             }
 
         } catch (InterruptedException e) {
@@ -91,10 +98,8 @@ class RabbitConsumer extends ServiceSupport implements com.rabbitmq.client.Consu
         }
     }
 
-    public void doHandleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
+    public void doHandleDelivery(Exchange exchange, Envelope envelope, AMQP.BasicProperties properties)
             throws IOException {
-        Exchange exchange = consumer.getEndpoint().createRabbitExchange(envelope, properties, body);
-        consumer.getEndpoint().getMessageConverter().mergeAmqpProperties(exchange, properties);
 
         boolean sendReply = properties.getReplyTo() != null;
         if (sendReply && !exchange.getPattern().isOutCapable()) {
@@ -111,12 +116,7 @@ class RabbitConsumer extends ServiceSupport implements com.rabbitmq.client.Consu
         }
 
         // obtain the message after processing
-        Message msg;
-        if (exchange.hasOut()) {
-            msg = exchange.getOut();
-        } else {
-            msg = exchange.getIn();
-        }
+        Message msg = exchange.getMessage();
 
         if (exchange.getException() != null) {
             consumer.getExceptionHandler().handleException("Error processing exchange", exchange, exchange.getException());
@@ -162,8 +162,8 @@ class RabbitConsumer extends ServiceSupport implements com.rabbitmq.client.Consu
                 // the inOut exchange failed so put the exception in the body
                 // and send back
                 msg.setBody(exchange.getException());
-                exchange.setOut(msg);
-                exchange.getOut().setHeader(RabbitMQConstants.CORRELATIONID,
+                exchange.setMessage(msg);
+                exchange.getMessage().setHeader(RabbitMQConstants.CORRELATIONID,
                         exchange.getIn().getHeader(RabbitMQConstants.CORRELATIONID));
                 try {
                     consumer.getEndpoint().publishExchangeToChannel(exchange, channel, properties.getReplyTo());
@@ -285,6 +285,27 @@ class RabbitConsumer extends ServiceSupport implements com.rabbitmq.client.Consu
         }
     }
 
+    private boolean doReconnect() {
+        if (isStopping()) {
+            return true;
+        }
+
+        try {
+            reconnect();
+            return true;
+        } catch (Exception e) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Unable to obtain a RabbitMQ channel. Will try again. Caused by: {}.", e.getMessage());
+            } else {
+                LOG.warn(
+                        "Unable to obtain a RabbitMQ channel. Will try again. Caused by: {}. Stacktrace logged at DEBUG logging level.",
+                        e.getMessage());
+            }
+
+            return false;
+        }
+    }
+
     /**
      * No-op implementation of {@link Consumer#handleShutdownSignal}.
      */
@@ -292,32 +313,28 @@ class RabbitConsumer extends ServiceSupport implements com.rabbitmq.client.Consu
     public void handleShutdownSignal(String consumerTag, ShutdownSignalException sig) {
         LOG.info("Received shutdown signal on the rabbitMQ channel");
 
-        // Check if the consumer closed the connection or something else
-        if (!sig.isInitiatedByApplication()) {
-            // Something else closed the connection so reconnect
-            boolean connected = false;
-            while (!connected && !isStopping()) {
-                try {
-                    reconnect();
-                    connected = true;
-                } catch (Exception e) {
-                    LOG.warn(
-                            "Unable to obtain a RabbitMQ channel. Will try again. Caused by: {}. Stacktrace logged at DEBUG logging level.",
-                            e.getMessage());
-                    // include stacktrace in DEBUG logging
-                    LOG.debug(e.getMessage(), e);
-
-                    Integer networkRecoveryInterval = consumer.getEndpoint().getNetworkRecoveryInterval();
-                    final long connectionRetryInterval
-                            = networkRecoveryInterval != null && networkRecoveryInterval > 0 ? networkRecoveryInterval : 100L;
-                    try {
-                        Thread.sleep(connectionRetryInterval);
-                    } catch (InterruptedException e1) {
-                        Thread.currentThread().interrupt();
-                    }
-                }
-            }
+        if (sig.isInitiatedByApplication()) {
+            LOG.debug("Nothing to do because the consumer closed the connection");
+            return;
         }
+
+        Integer networkRecoveryInterval = consumer.getEndpoint().getNetworkRecoveryInterval();
+        final long connectionRetryInterval
+                = networkRecoveryInterval != null && networkRecoveryInterval > 0 ? networkRecoveryInterval : 100L;
+
+        String taskName = "shutdown-handler";
+        ScheduledExecutorService service = consumer.getEndpoint().createScheduledExecutor(taskName);
+
+        BlockingTask task = Tasks.backgroundTask()
+                .withBudget(Budgets.timeBudget()
+                        .withUnlimitedDuration()
+                        .withInterval(Duration.ofMillis(connectionRetryInterval))
+                        .build())
+                .withScheduledExecutor(service)
+                .withName(taskName)
+                .build();
+
+        task.run(this::doReconnect);
     }
 
     /**
@@ -380,7 +397,23 @@ class RabbitConsumer extends ServiceSupport implements com.rabbitmq.client.Consu
         // This really only needs to be called on the first consumer or on
         // reconnections.
         if (consumer.getEndpoint().isDeclare()) {
-            consumer.getEndpoint().declareExchangeAndQueue(channel);
+            try {
+                consumer.getEndpoint().declareExchangeAndQueue(channel);
+            } catch (IOException e) {
+                if (channel != null && channel.isOpen()) {
+                    try {
+                        channel.close();
+                    } catch (Exception innerEx) {
+                        e.addSuppressed(innerEx);
+                    }
+                }
+                if (this.consumer.getEndpoint().isRecoverFromDeclareException()) {
+                    throw e;
+                } else {
+                    throw new RuntimeCamelException(
+                            "Unrecoverable error when attempting to declare exchange or queue for " + consumer, e);
+                }
+            }
         }
         return channel;
     }

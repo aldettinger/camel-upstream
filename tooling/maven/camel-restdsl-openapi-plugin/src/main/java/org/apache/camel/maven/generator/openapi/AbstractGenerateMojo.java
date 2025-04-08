@@ -21,7 +21,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -32,6 +31,7 @@ import java.net.URLDecoder;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -57,6 +57,7 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.twdata.maven.mojoexecutor.MojoExecutor;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import static org.twdata.maven.mojoexecutor.MojoExecutor.artifactId;
@@ -80,6 +81,9 @@ abstract class AbstractGenerateMojo extends AbstractMojo {
 
     @Parameter
     String destinationGenerator;
+
+    @Parameter
+    String destinationToSyntax;
 
     @Parameter
     String filterOperation;
@@ -106,6 +110,9 @@ abstract class AbstractGenerateMojo extends AbstractMojo {
     boolean restConfiguration;
 
     @Parameter(defaultValue = "false")
+    boolean clientRequestValidation;
+
+    @Parameter(defaultValue = "false")
     boolean skip;
 
     @Parameter(defaultValue = "${project.basedir}/src/spec/openapi.json", required = true)
@@ -114,7 +121,10 @@ abstract class AbstractGenerateMojo extends AbstractMojo {
     @Parameter(name = "auth")
     String auth;
 
-    @Parameter(defaultValue = "3.0.19")
+    @Parameter
+    String basePath;
+
+    @Parameter(defaultValue = "3.0.25")
     String swaggerCodegenMavenPluginVersion;
 
     @Parameter(defaultValue = "${project}", readonly = true)
@@ -330,7 +340,7 @@ abstract class AbstractGenerateMojo extends AbstractMojo {
 
         String suffix = ".yaml";
         if (specificationUri.regionMatches(true, specificationUri.length() - suffix.length(), suffix, 0, suffix.length())) {
-            Yaml loader = new Yaml();
+            Yaml loader = new Yaml(new SafeConstructor());
             Map map = loader.load(is);
             JsonNode node = mapper.convertValue(map, JsonNode.class);
             return (OasDocument) Library.readDocument(node);
@@ -381,17 +391,14 @@ abstract class AbstractGenerateMojo extends AbstractMojo {
     }
 
     private Map<String, String> parse(String urlEncodedAuthStr) {
-        Map<String, String> auths = new HashMap<String, String>();
+        Map<String, String> auths = new HashMap<>();
         if (isNotEmpty(urlEncodedAuthStr)) {
             String[] parts = urlEncodedAuthStr.split(",");
             for (String part : parts) {
                 String[] kvPair = part.split(":");
                 if (kvPair.length == 2) {
-                    try {
-                        auths.put(URLDecoder.decode(kvPair[0], "UTF-8"), URLDecoder.decode(kvPair[1], "UTF-8"));
-                    } catch (UnsupportedEncodingException e) {
-                        getLog().warn(e.getMessage());
-                    }
+                    auths.put(URLDecoder.decode(kvPair[0], StandardCharsets.UTF_8),
+                            URLDecoder.decode(kvPair[1], StandardCharsets.UTF_8));
                 }
             }
         }

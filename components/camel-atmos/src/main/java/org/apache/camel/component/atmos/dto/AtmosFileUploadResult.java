@@ -19,8 +19,8 @@ package org.apache.camel.component.atmos.dto;
 import java.util.Map;
 
 import org.apache.camel.Exchange;
+import org.apache.camel.component.atmos.util.AtmosConstants;
 import org.apache.camel.component.atmos.util.AtmosResultCode;
-import org.apache.camel.component.atmos.util.AtmosResultHeader;
 
 public class AtmosFileUploadResult extends AtmosResult {
 
@@ -37,21 +37,16 @@ public class AtmosFileUploadResult extends AtmosResult {
     public void populateExchange(Exchange exchange) {
         Map<String, AtmosResultCode> map = (Map<String, AtmosResultCode>) resultEntries;
         if (map.size() == 1) {
-            //set info in exchange
-            String pathExtracted = null;
-            AtmosResultCode codeExtracted = null;
-            for (Map.Entry<String, AtmosResultCode> entry : map.entrySet()) {
-                pathExtracted = entry.getKey();
-                codeExtracted = entry.getValue();
-            }
-            exchange.getIn().setHeader(AtmosResultHeader.UPLOADED_FILE.name(), pathExtracted);
-            exchange.getIn().setBody(codeExtracted.name());
+            //set info in exchange (note: it runs only once)
+            map.forEach((pathExtracted, codeExtracted) -> {
+                exchange.getIn().setHeader(AtmosConstants.UPLOADED_FILE, pathExtracted);
+                exchange.getIn().setBody(codeExtracted.name());
+            });
+
         } else {
-            StringBuffer pathsExtracted = new StringBuffer();
-            for (Map.Entry<String, AtmosResultCode> entry : map.entrySet()) {
-                pathsExtracted.append(entry.getKey() + "\n");
-            }
-            exchange.getIn().setHeader(AtmosResultHeader.UPLOADED_FILES.name(), pathsExtracted.toString());
+            final String pathsExtracted = String.join("\n", map.keySet());
+
+            exchange.getIn().setHeader(AtmosConstants.UPLOADED_FILES, pathsExtracted);
             exchange.getIn().setBody(map);
         }
     }

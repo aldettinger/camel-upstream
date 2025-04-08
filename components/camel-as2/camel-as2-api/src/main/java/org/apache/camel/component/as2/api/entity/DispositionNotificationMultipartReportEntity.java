@@ -16,10 +16,10 @@
  */
 package org.apache.camel.component.as2.api.entity;
 
+import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.util.Map;
 
-import org.apache.camel.component.as2.api.AS2Charset;
 import org.apache.camel.component.as2.api.AS2Header;
 import org.apache.camel.component.as2.api.AS2MimeType;
 import org.apache.camel.component.as2.api.AS2TransferEncoding;
@@ -71,9 +71,8 @@ public class DispositionNotificationMultipartReportEntity extends MultipartRepor
         return AS2MimeType.MULTIPART_REPORT + "; report-type=disposition-notification; boundary=\"" + boundary + "\"";
     }
 
-    protected TextPlainEntity buildPlainTextReport(String mdnMessage)
-            throws HttpException {
-        return new TextPlainEntity(mdnMessage, AS2Charset.US_ASCII, AS2TransferEncoding.SEVENBIT, false);
+    protected TextPlainEntity buildPlainTextReport(String mdnMessage) {
+        return new TextPlainEntity(mdnMessage, StandardCharsets.US_ASCII.name(), AS2TransferEncoding.SEVENBIT, false);
     }
 
     protected String getContentTypeValue(String boundary) {

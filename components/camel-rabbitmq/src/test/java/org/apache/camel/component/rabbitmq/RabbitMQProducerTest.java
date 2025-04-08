@@ -26,24 +26,27 @@ import java.util.concurrent.TimeoutException;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Connection;
+import org.apache.camel.CamelContext;
+import org.apache.camel.Channel;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.support.DefaultMessage;
+import org.apache.camel.util.ReflectionHelper;
+import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 
 public class RabbitMQProducerTest {
 
+    private CamelContext context = new DefaultCamelContext();
     private RabbitMQEndpoint endpoint = Mockito.mock(RabbitMQEndpoint.class);
     private Exchange exchange = Mockito.mock(Exchange.class);
-    private Message message = new DefaultMessage(new DefaultCamelContext());
+    private Message message = new DefaultMessage(context);
     private Connection conn = Mockito.mock(Connection.class);
 
     @BeforeEach
@@ -55,10 +58,11 @@ public class RabbitMQProducerTest {
         Mockito.when(endpoint.connect(any(ExecutorService.class))).thenReturn(conn);
         Mockito.when(conn.createChannel()).thenReturn(null);
         Mockito.when(endpoint.getMessageConverter()).thenReturn(converter);
+        Mockito.when(endpoint.getCamelContext()).thenReturn(context);
     }
 
     @Test
-    public void testPropertiesUsesContentTypeHeader() throws IOException {
+    public void testPropertiesUsesContentTypeHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.CONTENT_TYPE, "application/json");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -66,7 +70,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesCorrelationHeader() throws IOException {
+    public void testPropertiesUsesCorrelationHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.CORRELATIONID, "124544");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -74,7 +78,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesUserIdHeader() throws IOException {
+    public void testPropertiesUsesUserIdHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.USERID, "abcd");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -82,7 +86,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesMessageIdHeader() throws IOException {
+    public void testPropertiesUsesMessageIdHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.MESSAGE_ID, "abvasweaqQQ");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -90,7 +94,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesDeliveryModeHeader() throws IOException {
+    public void testPropertiesUsesDeliveryModeHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.DELIVERY_MODE, "444");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -98,7 +102,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesClusterIdHeader() throws IOException {
+    public void testPropertiesUsesClusterIdHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.CLUSTERID, "abtasg5r");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -106,7 +110,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesReplyToHeader() throws IOException {
+    public void testPropertiesUsesReplyToHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.REPLY_TO, "bbbbdfgdfg");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -114,7 +118,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesPriorityHeader() throws IOException {
+    public void testPropertiesUsesPriorityHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.PRIORITY, "15");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -122,7 +126,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesExpirationHeader() throws IOException {
+    public void testPropertiesUsesExpirationHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.EXPIRATION, "thursday");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -130,7 +134,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesTypeHeader() throws IOException {
+    public void testPropertiesUsesTypeHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.TYPE, "sometype");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -138,7 +142,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesContentEncodingHeader() throws IOException {
+    public void testPropertiesUsesContentEncodingHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.CONTENT_ENCODING, "qwergghdfdfgdfgg");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -146,7 +150,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesAppIdHeader() throws IOException {
+    public void testPropertiesAppIdHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.APP_ID, "qweeqwe");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -154,7 +158,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesOverrideNameHeader() throws IOException {
+    public void testPropertiesOverrideNameHeader() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.EXCHANGE_OVERRIDE_NAME, "qweeqwe");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -162,7 +166,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesTimestampHeaderAsLongValue() throws IOException {
+    public void testPropertiesUsesTimestampHeaderAsLongValue() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.TIMESTAMP, "12345123");
         AMQP.BasicProperties props = producer.buildProperties(exchange).build();
@@ -170,7 +174,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesTimestampHeaderAsDateValue() throws IOException {
+    public void testPropertiesUsesTimestampHeaderAsDateValue() {
         Date timestamp = new Date();
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         message.setHeader(RabbitMQConstants.TIMESTAMP, timestamp);
@@ -179,7 +183,7 @@ public class RabbitMQProducerTest {
     }
 
     @Test
-    public void testPropertiesUsesCustomHeaders() throws IOException {
+    public void testPropertiesUsesCustomHeaders() {
         RabbitMQProducer producer = new RabbitMQProducer(endpoint);
         Map<String, Object> customHeaders = new HashMap<>();
         customHeaders.put("stringHeader", "A string");
@@ -200,6 +204,20 @@ public class RabbitMQProducerTest {
         assertEquals(new Date(0), props.getHeaders().get("dateHeader"));
         assertArrayEquals("foo".getBytes(), (byte[]) props.getHeaders().get("byteArrayHeader"));
         assertNull(props.getHeaders().get("invalidHeader"));
+    }
+
+    @Test
+    public void testChannelPoolConfiguration() throws Exception {
+        RabbitMQProducer producer = new RabbitMQProducer(endpoint);
+        Mockito.when(endpoint.getChannelPoolMaxSize()).thenReturn(123);
+        Mockito.when(endpoint.getChannelPoolMaxWait()).thenReturn(321L);
+        producer.doStart();
+        Object channelPool = ReflectionHelper.getField(producer.getClass().getDeclaredField("channelPool"), producer);
+        assertNotNull(channelPool);
+        assertTrue(channelPool instanceof GenericObjectPool);
+        GenericObjectPool<Channel> genericObjectPool = (GenericObjectPool<Channel>) channelPool;
+        assertEquals(123, genericObjectPool.getMaxTotal());
+        assertEquals(321L, genericObjectPool.getMaxWaitDuration().toMillis());
     }
 
     private static class Something {

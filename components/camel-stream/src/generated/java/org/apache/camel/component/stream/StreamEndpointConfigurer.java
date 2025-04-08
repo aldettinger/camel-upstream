@@ -21,6 +21,8 @@ public class StreamEndpointConfigurer extends PropertyConfigurerSupport implemen
     public boolean configure(CamelContext camelContext, Object obj, String name, Object value, boolean ignoreCase) {
         StreamEndpoint target = (StreamEndpoint) obj;
         switch (ignoreCase ? name.toLowerCase() : name) {
+        case "appendnewline":
+        case "appendNewLine": target.setAppendNewLine(property(camelContext, boolean.class, value)); return true;
         case "autoclosecount":
         case "autoCloseCount": target.setAutoCloseCount(property(camelContext, int.class, value)); return true;
         case "bridgeerrorhandler":
@@ -49,6 +51,8 @@ public class StreamEndpointConfigurer extends PropertyConfigurerSupport implemen
         case "promptDelay": target.setPromptDelay(property(camelContext, long.class, value)); return true;
         case "promptmessage":
         case "promptMessage": target.setPromptMessage(property(camelContext, java.lang.String.class, value)); return true;
+        case "readline":
+        case "readLine": target.setReadLine(property(camelContext, boolean.class, value)); return true;
         case "readtimeout":
         case "readTimeout": target.setReadTimeout(property(camelContext, int.class, value)); return true;
         case "retry": target.setRetry(property(camelContext, boolean.class, value)); return true;
@@ -63,6 +67,8 @@ public class StreamEndpointConfigurer extends PropertyConfigurerSupport implemen
     @Override
     public Class<?> getOptionType(String name, boolean ignoreCase) {
         switch (ignoreCase ? name.toLowerCase() : name) {
+        case "appendnewline":
+        case "appendNewLine": return boolean.class;
         case "autoclosecount":
         case "autoCloseCount": return int.class;
         case "bridgeerrorhandler":
@@ -91,6 +97,8 @@ public class StreamEndpointConfigurer extends PropertyConfigurerSupport implemen
         case "promptDelay": return long.class;
         case "promptmessage":
         case "promptMessage": return java.lang.String.class;
+        case "readline":
+        case "readLine": return boolean.class;
         case "readtimeout":
         case "readTimeout": return int.class;
         case "retry": return boolean.class;
@@ -106,6 +114,8 @@ public class StreamEndpointConfigurer extends PropertyConfigurerSupport implemen
     public Object getOptionValue(Object obj, String name, boolean ignoreCase) {
         StreamEndpoint target = (StreamEndpoint) obj;
         switch (ignoreCase ? name.toLowerCase() : name) {
+        case "appendnewline":
+        case "appendNewLine": return target.isAppendNewLine();
         case "autoclosecount":
         case "autoCloseCount": return target.getAutoCloseCount();
         case "bridgeerrorhandler":
@@ -134,6 +144,8 @@ public class StreamEndpointConfigurer extends PropertyConfigurerSupport implemen
         case "promptDelay": return target.getPromptDelay();
         case "promptmessage":
         case "promptMessage": return target.getPromptMessage();
+        case "readline":
+        case "readLine": return target.isReadLine();
         case "readtimeout":
         case "readTimeout": return target.getReadTimeout();
         case "retry": return target.isRetry();

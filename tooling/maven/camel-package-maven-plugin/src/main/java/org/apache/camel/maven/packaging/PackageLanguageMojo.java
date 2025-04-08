@@ -116,7 +116,6 @@ public class PackageLanguageMojo extends AbstractGeneratorMojo {
         StringBuilder buffer = new StringBuilder();
         int count = 0;
 
-        // TODO
         File f = new File(project.getBasedir(), "target/classes");
         f = new File(f, "META-INF/services/org/apache/camel/language");
         if (f.exists() && f.isDirectory()) {
@@ -312,7 +311,7 @@ public class PackageLanguageMojo extends AbstractGeneratorMojo {
     private static String asDescription(String name, String description) {
         // special for some languages
         if ("file".equals(name)) {
-            return "For expressions and predicates using the file/simple language.";
+            return "File related capabilities for the Simple language";
         }
         return description;
     }

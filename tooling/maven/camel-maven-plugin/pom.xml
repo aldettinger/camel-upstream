@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>maven-plugins</artifactId>
-        <version>3.9.0-SNAPSHOT</version>
+        <version>3.18.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>camel-maven-plugin</artifactId>
@@ -82,22 +82,31 @@
             <groupId>org.apache.camel</groupId>
             <artifactId>camel-spring-main</artifactId>
         </dependency>
+        <!-- camel-cdi-main has Main class for running CDI -->
         <dependency>
             <groupId>org.apache.camel</groupId>
-            <artifactId>camel-spring-javaconfig</artifactId>
+            <artifactId>camel-cdi-main</artifactId>
         </dependency>
-        <!-- camel-cdi has Main class for running CDI -->
+        <!-- for logging in color -->
         <dependency>
-            <groupId>org.apache.camel</groupId>
-            <artifactId>camel-cdi</artifactId>
+            <groupId>org.fusesource.jansi</groupId>
+            <artifactId>jansi</artifactId>
+            <version>${jansi-version}</version>
         </dependency>
-
         <!-- logging -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j-impl</artifactId>
-            <scope>test</scope>
+            <artifactId>log4j-api</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>

@@ -31,6 +31,7 @@ import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangeTimedOutException;
 import org.apache.camel.component.sjms.MessageListenerContainer;
+import org.apache.camel.component.sjms.SjmsConstants;
 import org.apache.camel.component.sjms.SjmsEndpoint;
 import org.apache.camel.component.sjms.SjmsMessage;
 import org.apache.camel.component.sjms.jms.JmsMessageHelper;
@@ -41,7 +42,7 @@ import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.camel.component.sjms.jms.JmsMessageHelper.getJMSCorrelationIDAsBytes;
+import static org.apache.camel.component.sjms.jms.JmsMessageHelper.getJMSCorrelationID;
 
 /**
  * Base class for {@link ReplyManager} implementations.
@@ -127,7 +128,7 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
 
     @Override
     public void onMessage(Message message, Session session) throws JMSException {
-        String correlationID = getJMSCorrelationIDAsBytes(message);
+        String correlationID = getJMSCorrelationID(message);
 
         if (correlationID == null) {
             log.warn("Ignoring message with no correlationID: {}", message);
@@ -183,7 +184,7 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
                     // restore correlation id in case the remote server messed with it
                     if (holder.getOriginalCorrelationId() != null) {
                         JmsMessageHelper.setCorrelationId(message, holder.getOriginalCorrelationId());
-                        exchange.getOut().setHeader("JMSCorrelationID", holder.getOriginalCorrelationId());
+                        exchange.getOut().setHeader(SjmsConstants.JMS_CORRELATION_ID, holder.getOriginalCorrelationId());
                     }
                 }
             } finally {

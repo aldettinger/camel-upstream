@@ -23,8 +23,8 @@ import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.fhir.api.ExtraParameters;
 import org.apache.camel.component.fhir.internal.FhirApiCollection;
 import org.apache.camel.component.fhir.internal.FhirSearchApiMethod;
-import org.hl7.fhir.dstu3.model.Bundle;
-import org.hl7.fhir.dstu3.model.Patient;
+import org.hl7.fhir.r4.model.Bundle;
+import org.hl7.fhir.r4.model.Patient;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +42,7 @@ public class FhirExtraParametersIT extends AbstractFhirTestSupport {
     private static final String PATH_PREFIX = FhirApiCollection.getCollection().getApiName(FhirSearchApiMethod.class).getName();
 
     @Test
-    public void testEncodeRequestToXml() throws Exception {
+    public void testEncodeRequestToXml() {
         final Map<String, Object> headers = new HashMap<>();
         // encode request to XML
         headers.put(ExtraParameters.ENCODE_XML.getHeaderName(), Boolean.TRUE);
@@ -58,7 +58,7 @@ public class FhirExtraParametersIT extends AbstractFhirTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             public void configure() {
                 // test route for searchByUrl

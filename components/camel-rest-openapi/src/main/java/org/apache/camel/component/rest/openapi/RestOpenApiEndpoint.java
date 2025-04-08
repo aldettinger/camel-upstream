@@ -16,6 +16,7 @@
  */
 package org.apache.camel.component.rest.openapi;
 
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -35,8 +36,10 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.apicurio.datamodels.Library;
 import io.apicurio.datamodels.core.models.Document;
 import io.apicurio.datamodels.core.models.common.SecurityRequirement;
@@ -65,6 +68,7 @@ import org.apache.camel.ExchangePattern;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.spi.Metadata;
+import org.apache.camel.spi.Resource;
 import org.apache.camel.spi.RestConfiguration;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
@@ -72,6 +76,7 @@ import org.apache.camel.spi.UriPath;
 import org.apache.camel.support.CamelContextHelper;
 import org.apache.camel.support.DefaultEndpoint;
 import org.apache.camel.support.ResourceHelper;
+import org.apache.camel.util.FileUtil;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.StringHelper;
 import org.apache.camel.util.UnsafeUriCharactersEncoder;
@@ -340,21 +345,25 @@ public final class RestOpenApiEndpoint extends DefaultEndpoint {
             final Document openapi, final OasOperation operation, final String method,
             final String uriTemplate)
             throws Exception {
-        final String basePath = determineBasePath(openapi);
-        final String componentEndpointUri = "rest:" + method + ":" + basePath + ":" + uriTemplate;
 
-        final CamelContext camelContext = getCamelContext();
-
-        final Endpoint endpoint = camelContext.getEndpoint(componentEndpointUri);
+        CamelContext camelContext = getCamelContext();
 
         Map<String, Object> params = determineEndpointParameters(openapi, operation);
         boolean hasHost = params.containsKey("host");
+
+        String basePath = determineBasePath(openapi);
+        String componentEndpointUri = "rest:" + method + ":" + basePath + ":" + uriTemplate;
+        if (hasHost) {
+            componentEndpointUri += "?host=" + params.get("host");
+        }
+
+        Endpoint endpoint = camelContext.getEndpoint(componentEndpointUri);
         // let the rest endpoint configure itself
         endpoint.configureProperties(params);
 
         // if there is a host then we should use this hardcoded host instead of any Header that may have an existing
         // Host header from some other HTTP input, and if so then lets remove it
-        return new RestOpenApiProducer(endpoint.createAsyncProducer(), hasHost);
+        return new RestOpenApiProducer(endpoint.createProducer(), hasHost);
     }
 
     String determineBasePath(final Document openapi) {
@@ -478,8 +487,7 @@ public final class RestOpenApiEndpoint extends DefaultEndpoint {
             parameters.put("consumes", determinedConsumes);
         }
 
-        // what we produce is what the API defined by OpenApi specification
-        // consumes
+        // what we produce is what the API defined by OpenApi specification consumes
 
         List<String> specificationLevelProducers = new ArrayList<>();
         if (openapi instanceof Oas20Document) {
@@ -493,7 +501,6 @@ public final class RestOpenApiEndpoint extends DefaultEndpoint {
             if (oas30Operation.requestBody != null && oas30Operation.requestBody.content != null) {
                 operationLevelProducers.addAll(oas30Operation.requestBody.content.keySet());
             }
-
         }
 
         final String determinedProducers = determineOption(specificationLevelProducers, operationLevelProducers,
@@ -522,10 +529,30 @@ public final class RestOpenApiEndpoint extends DefaultEndpoint {
             componentParameters.put("sslContextParameters", component.getSslContextParameters());
         }
 
+        final Map<Object, Object> nestedParameters = new HashMap<>();
         if (!componentParameters.isEmpty()) {
-            final Map<Object, Object> nestedParameters = new HashMap<>();
             nestedParameters.put("component", componentParameters);
+        }
 
+        // Add rest endpoint parameters
+        if (this.parameters != null) {
+            if (operation.getParameters() != null) {
+                for (Map.Entry<String, Object> entry : this.parameters.entrySet()) {
+                    for (OasParameter param : operation.getParameters()) {
+                        // skip parameters that are part of the operation as path as otherwise
+                        // it will be duplicated as query parameter as well
+                        boolean clash = "path".equals(param.in) && entry.getKey().equals(param.getName());
+                        if (!clash) {
+                            nestedParameters.put(entry.getKey(), entry.getValue());
+                        }
+                    }
+                }
+            } else {
+                nestedParameters.putAll(this.parameters);
+            }
+        }
+
+        if (!nestedParameters.isEmpty()) {
             // we're trying to set RestEndpoint.parameters['component']
             parameters.put("parameters", nestedParameters);
         }
@@ -737,7 +764,6 @@ public final class RestOpenApiEndpoint extends DefaultEndpoint {
             } else {
                 throw new IllegalStateException("We only support OpenApi 2.0 or 3.0 document here");
             }
-
         }
 
         if (operation.getParameters() != null) {
@@ -779,16 +805,28 @@ public final class RestOpenApiEndpoint extends DefaultEndpoint {
      * @return              the specification
      */
     static Document loadSpecificationFrom(final CamelContext camelContext, final URI uri) {
-        final ObjectMapper mapper = new ObjectMapper();
-
         final String uriAsString = uri.toString();
+        JsonFactory factory = null;
 
-        try (InputStream stream = ResourceHelper.resolveMandatoryResourceAsInputStream(camelContext, uriAsString)) {
-            final JsonNode node = mapper.readTree(stream);
+        try {
+            final Resource resource = ResourceHelper.resolveMandatoryResource(camelContext, uriAsString);
 
-            return Library.readDocument(node);
+            try (InputStream stream = resource.getInputStream()) {
+                if (stream == null) {
+                    String resourcePath = FileUtil.compactPath(uriAsString, '/');
+                    throw new FileNotFoundException("Cannot find resource: " + resourcePath + " for URI: " + uri);
+                }
+
+                if (RestOpenApiHelper.isYamlResource(resource)) {
+                    factory = new YAMLFactory();
+                }
+
+                ObjectMapper mapper = new ObjectMapper(factory);
+                final JsonNode node = mapper.readTree(stream);
+
+                return Library.readDocument(node);
+            }
         } catch (final Exception e) {
-
             throw new IllegalArgumentException(
                     "The given OpenApi specification could not be loaded from `" + uri
                                                + "`. Tried loading using Camel's resource resolution and using OpenApi's own resource resolution."

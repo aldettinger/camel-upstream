@@ -62,17 +62,18 @@ public class Web3jMockTestSupport extends CamelTestSupport {
     }
 
     @BeforeAll
-    public static void startServer() throws Exception {
+    public static void startServer() {
     }
 
     @AfterAll
-    public static void stopServer() throws Exception {
+    public static void stopServer() {
     }
 
     @Override
     @BeforeEach
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
-        super.setUp();
+        try (AutoCloseable closeable = MockitoAnnotations.openMocks(this)) {
+            super.setUp();
+        }
     }
 }

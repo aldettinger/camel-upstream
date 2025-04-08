@@ -16,7 +16,6 @@
  */
 package org.apache.camel.component.jgroups.raft;
 
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.camel.Category;
@@ -40,7 +39,7 @@ import org.slf4j.LoggerFactory;
  * Exchange messages with JGroups-raft clusters.
  */
 @UriEndpoint(firstVersion = "2.24.0", scheme = "jgroups-raft", title = "JGroups raft", syntax = "jgroup-raft:clusterName",
-             category = { Category.CLUSTERING, Category.MESSAGING })
+             category = { Category.CLUSTERING, Category.MESSAGING }, headersClass = JGroupsRaftConstants.class)
 public class JGroupsRaftEndpoint extends DefaultEndpoint {
     private static final Logger LOG = LoggerFactory.getLogger(JGroupsRaftEndpoint.class);
 
@@ -58,8 +57,7 @@ public class JGroupsRaftEndpoint extends DefaultEndpoint {
     @UriParam(label = "consumer", defaultValue = "false")
     private boolean enableRoleChangeEvents;
 
-    public JGroupsRaftEndpoint(String endpointUri, String clusterName, Component component, String remaining,
-                               Map<String, Object> parameters,
+    public JGroupsRaftEndpoint(String endpointUri, String clusterName, Component component,
                                String raftId, String channelProperties, StateMachine stateMachine, RaftHandle raftHandle) {
         super(endpointUri, component);
         this.clusterName = clusterName;
@@ -80,13 +78,6 @@ public class JGroupsRaftEndpoint extends DefaultEndpoint {
         JGroupsRaftConsumer consumer = new JGroupsRaftConsumer(this, processor, clusterName, enableRoleChangeEvents);
         configureConsumer(consumer);
         return consumer;
-    }
-
-    @Override
-    public Exchange createExchange() {
-        Exchange exchange = super.createExchange();
-        populateJGroupsRaftHeaders(exchange);
-        return exchange;
     }
 
     public void populateJGroupsRaftHeaders(Exchange exchange) {

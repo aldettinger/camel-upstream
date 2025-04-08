@@ -44,7 +44,7 @@ public class RestDslGeneratorV3Test {
     @Test
     public void shouldCreateDefinitions() throws Exception {
         try (CamelContext context = new DefaultCamelContext()) {
-            final RestsDefinition definition = RestDslGenerator.toDefinition(document).generate(context);
+            final RestsDefinition definition = RestDslGenerator.toDefinition(document).generate();
             assertThat(definition).isNotNull();
             assertThat(definition.getRests()).hasSize(1);
             assertThat(definition.getRests().get(0).getPath()).isEqualTo("/api/v3");
@@ -62,7 +62,6 @@ public class RestDslGeneratorV3Test {
         final URI file = RestDslGeneratorV3Test.class.getResource("/OpenApiV3Petstore.txt").toURI();
         final String expectedContent = new String(Files.readAllBytes(Paths.get(file)), StandardCharsets.UTF_8);
         assertThat(code.toString()).isEqualTo(expectedContent);
-
     }
 
     @Test

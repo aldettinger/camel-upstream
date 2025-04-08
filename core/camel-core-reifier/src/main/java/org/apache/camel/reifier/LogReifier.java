@@ -36,6 +36,8 @@ import org.apache.camel.util.StringHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.camel.support.LoggerHelper.getLineNumberLoggerName;
+
 public class LogReifier extends ProcessorReifier<LogDefinition> {
 
     private static final Logger LOG = LoggerFactory.getLogger(LogReifier.class);
@@ -56,11 +58,11 @@ public class LogReifier extends ProcessorReifier<LogDefinition> {
         }
 
         // get logger explicitly set in the definition
-        Logger logger = definition.getLogger();
+        Logger logger = definition.getLoggerBean();
 
         // get logger which may be set in XML definition
-        if (logger == null && ObjectHelper.isNotEmpty(definition.getLoggerRef())) {
-            logger = mandatoryLookup(definition.getLoggerRef(), Logger.class);
+        if (logger == null && ObjectHelper.isNotEmpty(definition.getLogger())) {
+            logger = mandatoryLookup(definition.getLogger(), Logger.class);
         }
 
         if (logger == null) {
@@ -86,8 +88,11 @@ public class LogReifier extends ProcessorReifier<LogDefinition> {
                 }
             }
             if (name == null) {
-                name = route.getRouteId();
-                LOG.debug("LogName is not configured, using route id as logName: {}", name);
+                name = getLineNumberLoggerName(definition);
+                if (name == null) {
+                    name = route.getRouteId();
+                    LOG.debug("LogName is not configured, using route id as logName: {}", name);
+                }
             }
             logger = LoggerFactory.getLogger(name);
         }
@@ -110,7 +115,7 @@ public class LogReifier extends ProcessorReifier<LogDefinition> {
 
     private MaskingFormatter getMaskingFormatter() {
         if (route.isLogMask()) {
-            MaskingFormatter formatter = lookup(MaskingFormatter.CUSTOM_LOG_MASK_REF, MaskingFormatter.class);
+            MaskingFormatter formatter = lookupByNameAndType(MaskingFormatter.CUSTOM_LOG_MASK_REF, MaskingFormatter.class);
             if (formatter == null) {
                 formatter = new DefaultMaskingFormatter();
             }

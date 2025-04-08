@@ -27,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,11 +54,8 @@ import org.apache.camel.parser.XmlRouteParser;
 import org.apache.camel.parser.helper.RouteCoverageHelper;
 import org.apache.camel.parser.model.CamelNodeDetails;
 import org.apache.camel.parser.model.CoverageData;
-import org.apache.camel.support.PatternHelper;
 import org.apache.camel.util.FileUtil;
-import org.apache.maven.model.Resource;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
@@ -65,6 +63,12 @@ import org.codehaus.mojo.exec.AbstractExecMojo;
 import org.jboss.forge.roaster.Roaster;
 import org.jboss.forge.roaster.model.JavaType;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
+
+import static org.apache.camel.maven.ReportPluginCommon.asRelativeFile;
+import static org.apache.camel.maven.ReportPluginCommon.findJavaRouteBuilderClasses;
+import static org.apache.camel.maven.ReportPluginCommon.findXmlRouters;
+import static org.apache.camel.maven.ReportPluginCommon.matchRouteFile;
+import static org.apache.camel.maven.ReportPluginCommon.stripRootPath;
 
 /**
  * Performs route coverage reports after running Camel unit tests with camel-test modules
@@ -141,36 +145,15 @@ public class RouteCoverageMojo extends AbstractExecMojo {
 
     // CHECKSTYLE:OFF
     @Override
-    public void execute() throws MojoExecutionException, MojoFailureException {
+    public void execute() throws MojoExecutionException {
 
         Set<File> javaFiles = new LinkedHashSet<>();
         Set<File> xmlFiles = new LinkedHashSet<>();
 
         // find all java route builder classes
-        List list = project.getCompileSourceRoots();
-        for (Object obj : list) {
-            String dir = (String) obj;
-            findJavaFiles(new File(dir), javaFiles);
-        }
+        findJavaRouteBuilderClasses(javaFiles, true, includeTest, project);
         // find all xml routes
-        list = project.getResources();
-        for (Object obj : list) {
-            Resource dir = (Resource) obj;
-            findXmlFiles(new File(dir.getDirectory()), xmlFiles);
-        }
-
-        if (includeTest) {
-            list = project.getTestCompileSourceRoots();
-            for (Object obj : list) {
-                String dir = (String) obj;
-                findJavaFiles(new File(dir), javaFiles);
-            }
-            list = project.getTestResources();
-            for (Object obj : list) {
-                Resource dir = (Resource) obj;
-                findXmlFiles(new File(dir.getDirectory()), xmlFiles);
-            }
-        }
+        findXmlRouters(xmlFiles, true, includeTest, project);
 
         List<CamelNodeDetails> routeTrees = new ArrayList<>();
 
@@ -184,7 +167,7 @@ public class RouteCoverageMojo extends AbstractExecMojo {
                     // we should only parse java classes (not interfaces and enums etc)
                     if (out instanceof JavaClassSource) {
                         JavaClassSource clazz = (JavaClassSource) out;
-                        List<CamelNodeDetails> result = RouteBuilderParser.parseRouteBuilderTree(clazz, baseDir, fqn, true);
+                        List<CamelNodeDetails> result = RouteBuilderParser.parseRouteBuilderTree(clazz, fqn, true);
                         routeTrees.addAll(result);
                     }
                 } catch (Exception e) {
@@ -248,7 +231,7 @@ public class RouteCoverageMojo extends AbstractExecMojo {
         // favor strict matching on route ids
         for (CamelNodeDetails t : routeIdTrees) {
             String routeId = t.getRouteId();
-            String fileName = stripRootPath(asRelativeFile(t.getFileName()));
+            String fileName = stripRootPath(asRelativeFile(t.getFileName(), project), project);
             String sourceFileName = new File(fileName).getName();
             String packageName = new File(fileName).getParent();
             Element pack = null;
@@ -320,7 +303,7 @@ public class RouteCoverageMojo extends AbstractExecMojo {
 
                         if (!coverage.isEmpty()) {
                             totalNumberOfNodes += coverage.size();
-                            String fileName = stripRootPath(asRelativeFile(t.getValue().get(0).getFileName()));
+                            String fileName = stripRootPath(asRelativeFile(t.getValue().get(0).getFileName(), project), project);
                             String out = templateCoverageData(fileName, null, coverage, notCovered, coveredNodes);
                             getLog().info("Route coverage summary:\n\n" + out);
                             getLog().info("");
@@ -349,7 +332,7 @@ public class RouteCoverageMojo extends AbstractExecMojo {
         Map<String, List<CamelNodeDetails>> answer = new LinkedHashMap<>();
 
         for (CamelNodeDetails t : anonymousRouteTrees) {
-            String fileName = asRelativeFile(t.getFileName());
+            String fileName = asRelativeFile(t.getFileName(), project);
             String className = FileUtil.stripExt(FileUtil.stripPath(fileName));
             List<CamelNodeDetails> list = answer.computeIfAbsent(className, k -> new ArrayList<>());
             list.add(t);
@@ -401,8 +384,7 @@ public class RouteCoverageMojo extends AbstractExecMojo {
     @SuppressWarnings("unchecked")
     private String templateCoverageData(
             String fileName, String routeId, List<RouteCoverageNode> model, AtomicInteger notCovered,
-            AtomicInteger coveredNodes)
-            throws MojoExecutionException {
+            AtomicInteger coveredNodes) {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         PrintStream sw = new PrintStream(bos);
 
@@ -440,7 +422,7 @@ public class RouteCoverageMojo extends AbstractExecMojo {
         }
 
         sw.println();
-        sw.println("Coverage: " + covered + " out of " + model.size() + " (" + String.format("%.1f", percentage)
+        sw.println("Coverage: " + covered + " out of " + model.size() + " (" + String.format(Locale.ROOT, "%.1f", percentage)
                    + "% / threshold " + coverageThreshold + ".0%)");
         sw.println("Status: " + (success ? "Success" : "Failed"));
         sw.println();
@@ -458,7 +440,8 @@ public class RouteCoverageMojo extends AbstractExecMojo {
 
         overallCoverageAboveThreshold.set(coveredNodes == totalNumberOfNodes || percentage >= overallCoverageThreshold);
 
-        sw.println("Coverage: " + coveredNodes + " out of " + totalNumberOfNodes + " (" + String.format("%.1f", percentage)
+        sw.println("Coverage: " + coveredNodes + " out of " + totalNumberOfNodes + " ("
+                   + String.format(Locale.ROOT, "%.1f", percentage)
                    + "% / threshold " + overallCoverageThreshold + ".0%)");
         sw.println("Status: " + (overallCoverageAboveThreshold.get() ? "Success" : "Failed"));
         sw.println();
@@ -492,7 +475,7 @@ public class RouteCoverageMojo extends AbstractExecMojo {
 
         RouteCoverageNode data = new RouteCoverageNode();
         data.setName(node.getName());
-        data.setLineNumber(Integer.valueOf(node.getLineNumber()));
+        data.setLineNumber(Integer.parseInt(node.getLineNumber()));
         data.setLevel(level.get());
         data.setClassName(node.getClassName());
         data.setMethodName(node.getMethodName());
@@ -527,120 +510,8 @@ public class RouteCoverageMojo extends AbstractExecMojo {
         return sb.toString();
     }
 
-    private void findJavaFiles(File dir, Set<File> javaFiles) {
-        File[] files = dir.isDirectory() ? dir.listFiles() : null;
-        if (files != null) {
-            for (File file : files) {
-                if (file.getName().endsWith(".java")) {
-                    javaFiles.add(file);
-                } else if (file.isDirectory()) {
-                    findJavaFiles(file, javaFiles);
-                }
-            }
-        }
-    }
-
-    private void findXmlFiles(File dir, Set<File> xmlFiles) {
-        File[] files = dir.isDirectory() ? dir.listFiles() : null;
-        if (files != null) {
-            for (File file : files) {
-                if (file.getName().endsWith(".xml")) {
-                    xmlFiles.add(file);
-                } else if (file.isDirectory()) {
-                    findXmlFiles(file, xmlFiles);
-                }
-            }
-        }
-    }
-
     private boolean matchFile(File file) {
-        if (excludes == null && includes == null) {
-            return true;
-        }
-
-        // exclude take precedence
-        if (excludes != null) {
-            for (String exclude : excludes.split(",")) {
-                exclude = exclude.trim();
-                // try both with and without directory in the name
-                String fqn = stripRootPath(asRelativeFile(file.getAbsolutePath()));
-                boolean match = PatternHelper.matchPattern(fqn, exclude) || PatternHelper.matchPattern(file.getName(), exclude);
-                if (match) {
-                    return false;
-                }
-            }
-        }
-
-        // include
-        if (includes != null) {
-            for (String include : includes.split(",")) {
-                include = include.trim();
-                // try both with and without directory in the name
-                String fqn = stripRootPath(asRelativeFile(file.getAbsolutePath()));
-                boolean match = PatternHelper.matchPattern(fqn, include) || PatternHelper.matchPattern(file.getName(), include);
-                if (match) {
-                    return true;
-                }
-            }
-            // did not match any includes
-            return false;
-        }
-
-        // was not excluded nor failed include so its accepted
-        return true;
-    }
-
-    private String asRelativeFile(String name) {
-        String answer = name;
-
-        String base = project.getBasedir().getAbsolutePath();
-        if (name.startsWith(base)) {
-            answer = name.substring(base.length());
-            // skip leading slash for relative path
-            if (answer.startsWith(File.separator)) {
-                answer = answer.substring(1);
-            }
-        }
-        return answer;
-    }
-
-    private String stripRootPath(String name) {
-        // strip out any leading source / resource directory
-
-        List list = project.getCompileSourceRoots();
-        for (Object obj : list) {
-            String dir = (String) obj;
-            dir = asRelativeFile(dir);
-            if (name.startsWith(dir)) {
-                return name.substring(dir.length() + 1);
-            }
-        }
-        list = project.getTestCompileSourceRoots();
-        for (Object obj : list) {
-            String dir = (String) obj;
-            dir = asRelativeFile(dir);
-            if (name.startsWith(dir)) {
-                return name.substring(dir.length() + 1);
-            }
-        }
-        List resources = project.getResources();
-        for (Object obj : resources) {
-            Resource resource = (Resource) obj;
-            String dir = asRelativeFile(resource.getDirectory());
-            if (name.startsWith(dir)) {
-                return name.substring(dir.length() + 1);
-            }
-        }
-        resources = project.getTestResources();
-        for (Object obj : resources) {
-            Resource resource = (Resource) obj;
-            String dir = asRelativeFile(resource.getDirectory());
-            if (name.startsWith(dir)) {
-                return name.substring(dir.length() + 1);
-            }
-        }
-
-        return name;
+        return matchRouteFile(file, excludes, includes, project);
     }
 
     private void appendSourcefileNode(

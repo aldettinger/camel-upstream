@@ -20,8 +20,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
+import org.apache.camel.PropertiesLookupListener;
 import org.apache.camel.StaticService;
 
 /**
@@ -46,6 +48,16 @@ public interface PropertiesComponent extends StaticService {
     String SUFFIX_TOKEN = "}}";
 
     /**
+     * The token for marking a placeholder as optional
+     */
+    String OPTIONAL_TOKEN = "?";
+
+    /**
+     * The prefix and optional tokens
+     */
+    String PREFIX_OPTIONAL_TOKEN = PREFIX_TOKEN + OPTIONAL_TOKEN;
+
+    /**
      * Parses the input text and resolve all property placeholders from within the text.
      *
      * @param  uri                      input text
@@ -53,6 +65,16 @@ public interface PropertiesComponent extends StaticService {
      * @throws IllegalArgumentException is thrown if error during parsing
      */
     String parseUri(String uri);
+
+    /**
+     * Parses the input text and resolve all property placeholders from within the text.
+     *
+     * @param  uri                      input text
+     * @param  keepUnresolvedOptional   whether to keep placeholders that are optional and was unresolved
+     * @return                          text with resolved property placeholders
+     * @throws IllegalArgumentException is thrown if error during parsing
+     */
+    String parseUri(String uri, boolean keepUnresolvedOptional);
 
     /**
      * Looks up the property with the given key
@@ -81,14 +103,10 @@ public interface PropertiesComponent extends StaticService {
 
     /**
      * Loads the properties from the default locations and sources filtering them out according to a predicate.
-     * </p>
      *
      * <pre>
-     * {
-     *     &#64;code
-     *     PropertiesComponent pc = getPropertiesComponent();
-     *     Properties props = pc.loadProperties(key -> key.startsWith("camel.component.seda"));
-     * }
+     * PropertiesComponent pc = getPropertiesComponent();
+     * Properties props = pc.loadProperties(key -> key.startsWith("camel.component.seda"));
      * </pre>
      *
      * @param  filter the predicate used to filter out properties based on the key.
@@ -97,15 +115,26 @@ public interface PropertiesComponent extends StaticService {
     Properties loadProperties(Predicate<String> filter);
 
     /**
-     * Loads the properties from the default locations and sources filtering them out according to a predicate.
-     * </p>
+     * Loads the properties from the default locations and sources filtering them out according to a predicate, and maps
+     * the key using the key mapper.
      *
      * <pre>
-     * {
-     *     &#64;code
-     *     PropertiesComponent pc = getPropertiesComponent();
-     *     Map<String, Object> props = pc.loadPropertiesAsMap(key -> key.startsWith("camel.component.seda"));
-     * }
+     * PropertiesComponent pc = getPropertiesComponent();
+     * Properties props = pc.loadProperties(key -> key.startsWith("camel.component.seda"), StringHelper::dashToCamelCase);
+     * </pre>
+     *
+     * @param  filter    the predicate used to filter out properties based on the key.
+     * @param  keyMapper to map keys
+     * @return           the properties loaded.
+     */
+    Properties loadProperties(Predicate<String> filter, Function<String, String> keyMapper);
+
+    /**
+     * Loads the properties from the default locations and sources filtering them out according to a predicate.
+     *
+     * <pre>
+     * PropertiesComponent pc = getPropertiesComponent();
+     * Map props = pc.loadPropertiesAsMap(key -> key.startsWith("camel.component.seda"));
      * </pre>
      *
      * @param  filter the predicate used to filter out properties based on the key.
@@ -140,6 +169,14 @@ public interface PropertiesComponent extends StaticService {
     void addPropertiesSource(PropertiesSource propertiesSource);
 
     /**
+     * Gets the custom {@link PropertiesSource} by the name
+     *
+     * @param  name the name of the source
+     * @return      the source, or null if no source exists
+     */
+    PropertiesSource getPropertiesSource(String name);
+
+    /**
      * Registers the {@link PropertiesFunction} as a function to this component.
      */
     void addPropertiesFunction(PropertiesFunction function);
@@ -155,9 +192,25 @@ public interface PropertiesComponent extends StaticService {
     void setInitialProperties(Properties initialProperties);
 
     /**
+     * Adds an initial property which will be added before any property locations are loaded.
+     *
+     * @param key   the key
+     * @param value the value
+     */
+    void addInitialProperty(String key, String value);
+
+    /**
      * Sets a special list of override properties that take precedence and will use first, if a property exist.
      */
     void setOverrideProperties(Properties overrideProperties);
+
+    /**
+     * Adds a special override property that take precedence and will use first, if a property exist.
+     *
+     * @param key   the key
+     * @param value the value
+     */
+    void addOverrideProperty(String key, String value);
 
     /**
      * Sets a special list of local properties (ie thread local) that take precedence and will use first, if a property
@@ -166,14 +219,16 @@ public interface PropertiesComponent extends StaticService {
     void setLocalProperties(Properties localProperties);
 
     /**
-     * Gets a list of properties that are local for the current thread only (ie thread local)
+     * Gets a list of properties that are local for the current thread only (ie thread local), or <tt>null</tt> if not
+     * currently in use.
      */
     Properties getLocalProperties();
 
     /**
-     * Gets a list of properties that are local for the current thread only (ie thread local)
+     * Gets a list of properties that are local for the current thread only (ie thread local), or <tt>null</tt> if not
+     * currently in use.
      *
-     * @return a {@link Map} representing the local properties.
+     * @return a {@link Map} representing the local properties, or <tt>null</tt> if not currently in use.
      */
     @SuppressWarnings("unchecked")
     default Map<String, Object> getLocalPropertiesAsMap() {
@@ -189,5 +244,18 @@ public interface PropertiesComponent extends StaticService {
      * Important you must set encoding before setting locations.
      */
     void setEncoding(String encoding);
+
+    /**
+     * Reload properties from the given location patterns.
+     *
+     * @param  pattern patterns, or null to reload from all known locations
+     * @return         true if some properties was reloaded
+     */
+    boolean reloadProperties(String pattern);
+
+    /**
+     * Adds the {@link PropertiesLookupListener}.
+     */
+    void addPropertiesLookupListener(PropertiesLookupListener propertiesLookupListener);
 
 }

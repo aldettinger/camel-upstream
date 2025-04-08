@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.camel.Exchange;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.support.DefaultExchange;
 import org.apache.camel.test.AvailablePortFinder;
 import org.apache.camel.test.junit5.CamelTestSupport;
@@ -37,7 +38,6 @@ import org.apache.chemistry.opencmis.client.api.Repository;
 import org.apache.chemistry.opencmis.client.api.Session;
 import org.apache.chemistry.opencmis.client.api.SessionFactory;
 import org.apache.chemistry.opencmis.client.runtime.SessionFactoryImpl;
-import org.apache.chemistry.opencmis.commons.PropertyIds;
 import org.apache.chemistry.opencmis.commons.SessionParameter;
 import org.apache.chemistry.opencmis.commons.data.ContentStream;
 import org.apache.chemistry.opencmis.commons.enums.BindingType;
@@ -80,11 +80,11 @@ public class CMISTestSupport extends CamelTestSupport {
         Folder rootFolder = session.getRootFolder();
         ItemIterable<CmisObject> children = rootFolder.getChildren();
         for (CmisObject cmisObject : children) {
-            if (CamelCMISConstants.CMIS_FOLDER.equals(cmisObject.getPropertyValue(PropertyIds.OBJECT_TYPE_ID))) {
+            if (CamelCMISConstants.CMIS_FOLDER.equals(cmisObject.getPropertyValue(CamelCMISConstants.OBJECT_TYPE_ID))) {
                 List<String> notDeltedIdList = ((Folder) cmisObject)
                         .deleteTree(true, UnfileObject.DELETE, true);
                 if (notDeltedIdList != null && notDeltedIdList.size() > 0) {
-                    throw new RuntimeException("Cannot empty repo");
+                    throw new RuntimeCamelException("Cannot empty repo");
                 }
             } else {
                 cmisObject.delete(true);
@@ -129,8 +129,8 @@ public class CMISTestSupport extends CamelTestSupport {
 
     protected Folder createChildFolderWithName(Folder parent, String childName) {
         Map<String, String> newFolderProps = new HashMap<>();
-        newFolderProps.put(PropertyIds.OBJECT_TYPE_ID, CamelCMISConstants.CMIS_FOLDER);
-        newFolderProps.put(PropertyIds.NAME, childName);
+        newFolderProps.put(CamelCMISConstants.OBJECT_TYPE_ID, CamelCMISConstants.CMIS_FOLDER);
+        newFolderProps.put(CamelCMISConstants.NAME, childName);
         return parent.createFolder(newFolderProps);
     }
 
@@ -142,8 +142,8 @@ public class CMISTestSupport extends CamelTestSupport {
                 .createContentStream(fileName, buf.length, "text/plain; charset=UTF-8", input);
 
         Map<String, Object> properties = new HashMap<>();
-        properties.put(PropertyIds.OBJECT_TYPE_ID, CamelCMISConstants.CMIS_DOCUMENT);
-        properties.put(PropertyIds.NAME, fileName);
+        properties.put(CamelCMISConstants.OBJECT_TYPE_ID, CamelCMISConstants.CMIS_DOCUMENT);
+        properties.put(CamelCMISConstants.NAME, fileName);
         return newFolder.createDocument(properties, contentStream, VersioningState.NONE);
     }
 

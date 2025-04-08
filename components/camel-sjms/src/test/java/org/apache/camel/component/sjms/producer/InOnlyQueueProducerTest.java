@@ -93,11 +93,11 @@ public class InOnlyQueueProducerTest extends JmsTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             public void configure() {
                 from("direct:start")
-                        .to("sjms:queue:" + TEST_DESTINATION_NAME);
+                        .to("sjms:queue:" + TEST_DESTINATION_NAME + "?deliveryMode=1");
 
                 from("direct:finish")
                         .to("log:test.log.1?showBody=true", "mock:result");

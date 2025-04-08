@@ -36,6 +36,7 @@ import org.apache.camel.AsyncProcessor;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangePattern;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.Expression;
 import org.apache.camel.ExpressionEvaluationException;
 import org.apache.camel.ExtendedCamelContext;
@@ -213,9 +214,9 @@ public class MethodInfo {
                     for (Annotation a : method.getAnnotations()) {
                         // favour existing annotation so only add if not exists
                         Class<?> at = a.annotationType();
-                        if (!annotations.containsKey(at)) {
-                            annotations.put(at, a);
-                        }
+
+                        annotations.putIfAbsent(at, a);
+
                         aep |= at == Pattern.class || at == InOnly.class || at == InOut.class;
                     }
                 }
@@ -300,10 +301,10 @@ public class MethodInfo {
                     if (!ServiceHelper.isStarted(dynamicRouter)) {
                         ServiceHelper.startService(dynamicRouter);
                     }
-                    // use a expression which invokes the method to be used by dynamic router
+                    // use an expression which invokes the method to be used by dynamic router
                     Expression expression = new DynamicRouterExpression(pojo);
                     expression.init(camelContext);
-                    exchange.setProperty(Exchange.EVALUATE_EXPRESSION_RESULT, expression);
+                    exchange.setProperty(ExchangePropertyKey.EVALUATE_EXPRESSION_RESULT, expression);
                     return dynamicRouter.process(exchange, callback);
                 }
 
@@ -331,14 +332,14 @@ public class MethodInfo {
                     if (!ServiceHelper.isStarted(recipientList)) {
                         ServiceHelper.startService(recipientList);
                     }
-                    exchange.setProperty(Exchange.EVALUATE_EXPRESSION_RESULT, result);
+                    exchange.setProperty(ExchangePropertyKey.EVALUATE_EXPRESSION_RESULT, result);
                     return recipientList.process(exchange, callback);
                 }
                 if (routingSlip != null) {
                     if (!ServiceHelper.isStarted(routingSlip)) {
                         ServiceHelper.startService(routingSlip);
                     }
-                    exchange.setProperty(Exchange.EVALUATE_EXPRESSION_RESULT, result);
+                    exchange.setProperty(ExchangePropertyKey.EVALUATE_EXPRESSION_RESULT, result);
                     return routingSlip.process(exchange, callback);
                 }
 
@@ -393,7 +394,7 @@ public class MethodInfo {
             old = exchange.getIn();
         }
 
-        // create a new message container so we do not drag specialized message objects along
+        // create a new message container, so we do not drag specialized message objects along
         // but that is only needed if the old message is a specialized message
         boolean copyNeeded = !(old.getClass().equals(DefaultMessage.class));
 
@@ -568,7 +569,7 @@ public class MethodInfo {
 
             // if there was an explicit method name to invoke, then we should support using
             // any provided parameter values in the method name
-            String methodName = exchange.getIn().getHeader(Exchange.BEAN_METHOD_NAME, String.class);
+            String methodName = exchange.getIn().getHeader(BeanConstants.BEAN_METHOD_NAME, String.class);
             // the parameter values is between the parenthesis
             String methodParameters = StringHelper.betweenOuterPair(methodName, '(', ')');
             // use an iterator to walk the parameter values
@@ -634,15 +635,13 @@ public class MethodInfo {
         /**
          * Evaluate using parameter values where the values can be provided in the method name syntax.
          * <p/>
-         * This methods returns accordingly:
+         * This method returns accordingly:
          * <ul>
          * <li><tt>null</tt> - if not a parameter value</li>
          * <li><tt>Void.TYPE</tt> - if an explicit null, forcing Camel to pass in <tt>null</tt> for that given
          * parameter</li>
          * <li>a non <tt>null</tt> value - if the parameter was a parameter value, and to be used</li>
          * </ul>
-         *
-         * @since 2.9
          */
         private Object evaluateParameterValue(Exchange exchange, int index, Object parameterValue, Class<?> parameterType) {
             Object answer = null;
@@ -658,7 +657,7 @@ public class MethodInfo {
                     // as this method is only for evaluating parameter values
                     Boolean isClass = BeanHelper.isAssignableToExpectedType(exchange.getContext().getClassResolver(), exp,
                             parameterType);
-                    // the method will return a non null value if exp is a class
+                    // the method will return a non-null value if exp is a class
                     if (isClass != null) {
                         return null;
                     }
@@ -695,9 +694,9 @@ public class MethodInfo {
                         valid = parameterValue instanceof String;
                         if (!valid) {
                             // the parameter value was not already valid, but since the simple language have evaluated the expression
-                            // which may change the parameterValue, so we have to check it again to see if its now valid
+                            // which may change the parameterValue, so we have to check it again to see if it is now valid
                             exp = exchange.getContext().getTypeConverter().tryConvertTo(String.class, parameterValue);
-                            // re validate if the parameter was not valid the first time
+                            // re-validate if the parameter was not valid the first time
                             valid = BeanHelper.isValidParameterValue(exp);
                         }
                     }
@@ -709,7 +708,7 @@ public class MethodInfo {
                         parameterValue = StringHelper.removeLeadingAndEndingQuotes((String) parameterValue);
                     }
                     try {
-                        // its a valid parameter value, so convert it to the expected type of the parameter
+                        // it is a valid parameter value, so convert it to the expected type of the parameter
                         answer = exchange.getContext().getTypeConverter().mandatoryConvertTo(parameterType, exchange,
                                 parameterValue);
                         if (LOG.isTraceEnabled()) {

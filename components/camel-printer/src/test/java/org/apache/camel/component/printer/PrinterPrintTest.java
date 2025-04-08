@@ -45,6 +45,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -56,6 +58,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+@DisabledOnOs(OS.AIX)
 public class PrinterPrintTest extends CamelTestSupport {
     Class<?> printServiceLookupServicesClass = PrintServiceLookup.class.getDeclaredClasses()[0];
     Object printServiceLookup;
@@ -66,7 +69,7 @@ public class PrinterPrintTest extends CamelTestSupport {
     }
 
     @AfterEach
-    public void tearDown() {
+    public void tearDown() throws Exception {
         restoreJavaPrint();
     }
 
@@ -80,7 +83,7 @@ public class PrinterPrintTest extends CamelTestSupport {
         return Boolean.getBoolean("java.awt.headless");
     }
 
-    private void sendFile() throws Exception {
+    private void sendFile() {
         template.send("direct:start", new Processor() {
             public void process(Exchange exchange) throws Exception {
                 // Read from an input stream
@@ -101,7 +104,7 @@ public class PrinterPrintTest extends CamelTestSupport {
         });
     }
 
-    private void sendGIF() throws Exception {
+    private void sendGIF() {
         template.send("direct:start", new Processor() {
             public void process(Exchange exchange) throws Exception {
                 // Read from an input stream
@@ -122,7 +125,7 @@ public class PrinterPrintTest extends CamelTestSupport {
         });
     }
 
-    private void sendJPEG() throws Exception {
+    private void sendJPEG() {
         template.send("direct:start", new Processor() {
             public void process(Exchange exchange) throws Exception {
                 // Read from an input stream
@@ -356,7 +359,7 @@ public class PrinterPrintTest extends CamelTestSupport {
     }
 
     @Test
-    public void printToMiddleTray() throws Exception {
+    public void printToMiddleTray() {
         PrinterEndpoint endpoint = new PrinterEndpoint();
         PrinterConfiguration configuration = new PrinterConfiguration();
         configuration.setHostname("localhost");
@@ -380,7 +383,7 @@ public class PrinterPrintTest extends CamelTestSupport {
     }
 
     @Test
-    public void printsWithLandscapeOrientation() throws Exception {
+    public void printsWithLandscapeOrientation() {
         PrinterEndpoint endpoint = new PrinterEndpoint();
         PrinterConfiguration configuration = new PrinterConfiguration();
         configuration.setHostname("localhost");
@@ -404,9 +407,13 @@ public class PrinterPrintTest extends CamelTestSupport {
 
     protected void setupJavaPrint() throws Exception {
         // save the current print services
-        printServiceLookup = sun.awt.AppContext.getAppContext().get(printServiceLookupServicesClass);
+        Class<?> clazz = context.getClassResolver().resolveClass("sun.awt.AppContext");
+        Object ac = clazz.getMethod("getAppContext").invoke(null);
+        printServiceLookup = clazz.getMethod("get", Object.class).invoke(ac, printServiceLookupServicesClass);
+
         // setup a new empty list of printer services
-        sun.awt.AppContext.getAppContext().put(printServiceLookupServicesClass, null);
+        clazz.getMethod("put", Object.class, Object.class).invoke(ac, printServiceLookupServicesClass, null);
+
         Method method = PrintServiceLookup.class.getDeclaredMethod("initListOfLookupServices");
         method.setAccessible(true);
         method.invoke(null);
@@ -429,9 +436,13 @@ public class PrinterPrintTest extends CamelTestSupport {
         PrintServiceLookup.registerServiceProvider(psLookup);
     }
 
-    protected void restoreJavaPrint() {
+    protected void restoreJavaPrint() throws Exception {
         // restore print services
-        sun.awt.AppContext.getAppContext().put(printServiceLookupServicesClass, printServiceLookup);
+        if (printServiceLookup != null) {
+            Class<?> clazz = context.getClassResolver().resolveClass("sun.awt.AppContext");
+            Object ac = clazz.getMethod("getAppContext").invoke(null);
+            clazz.getMethod("put", Object.class, Object.class).invoke(ac, printServiceLookupServicesClass, printServiceLookup);
+        }
     }
 
 }

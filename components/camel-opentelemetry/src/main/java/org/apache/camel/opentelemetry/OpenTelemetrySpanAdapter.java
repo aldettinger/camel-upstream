@@ -23,7 +23,6 @@ import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.baggage.BaggageBuilder;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
-import io.opentelemetry.context.Context;
 import io.opentelemetry.semconv.trace.attributes.SemanticAttributes;
 import org.apache.camel.tracing.SpanAdapter;
 import org.apache.camel.tracing.Tag;
@@ -99,6 +98,16 @@ public class OpenTelemetrySpanAdapter implements SpanAdapter {
         span.addEvent(getEventNameFromFields(fields), convertToAttributes(fields));
     }
 
+    @Override
+    public String traceId() {
+        return span.getSpanContext().getTraceId();
+    }
+
+    @Override
+    public String spanId() {
+        return span.getSpanContext().getSpanId();
+    }
+
     String getEventNameFromFields(Map<String, ?> fields) {
         Object eventValue = fields == null ? null : fields.get("event");
         if (eventValue != null) {
@@ -144,7 +153,7 @@ public class OpenTelemetrySpanAdapter implements SpanAdapter {
     public void setCorrelationContextItem(String key, String value) {
         BaggageBuilder builder = Baggage.builder();
         if (baggage != null) {
-            builder = builder.setParent(Context.current().with(baggage));
+            builder = Baggage.current().toBuilder();
         }
         baggage = builder.put(key, value).build();
     }

@@ -38,11 +38,15 @@ import org.apache.camel.LanguageTestSupport;
 import org.apache.camel.Predicate;
 import org.apache.camel.component.bean.MethodNotFoundException;
 import org.apache.camel.language.bean.RuntimeBeanExpressionException;
+import org.apache.camel.language.simple.myconverter.MyCustomDate;
 import org.apache.camel.language.simple.types.SimpleIllegalSyntaxException;
 import org.apache.camel.spi.Language;
+import org.apache.camel.spi.PropertiesComponent;
 import org.apache.camel.spi.Registry;
 import org.apache.camel.util.InetAddressUtil;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -262,6 +266,7 @@ public class SimpleTest extends LanguageTestSupport {
     }
 
     @Test
+    @ResourceLock(Resources.SYSTEM_PROPERTIES)
     public void testSimpleSystemPropertyExpressions() throws Exception {
         System.setProperty("who", "I was here");
         assertExpression("${sys.who}", "I was here");
@@ -602,6 +607,23 @@ public class SimpleTest extends LanguageTestSupport {
     }
 
     @Test
+    public void testDateWithConverterExpressions() throws Exception {
+        exchange.getIn().setHeader("birthday", new MyCustomDate(1974, Calendar.APRIL, 20));
+        exchange.setProperty("birthday", new MyCustomDate(1974, Calendar.APRIL, 20));
+        exchange.getIn().setHeader("other", new ArrayList<>());
+
+        assertExpression("${date:header.birthday:yyyyMMdd}", "19740420");
+        assertExpression("${date:exchangeProperty.birthday:yyyyMMdd}", "19740420");
+
+        try {
+            assertExpression("${date:header.other:yyyyMMdd}", "19740420");
+            fail("Should thrown an exception");
+        } catch (IllegalArgumentException e) {
+            assertEquals("Cannot find Date/long object at command: header.other", e.getMessage());
+        }
+    }
+
+    @Test
     public void testDateWithTimezone() throws Exception {
         Calendar cal = Calendar.getInstance();
         cal.setTimeZone(TimeZone.getTimeZone("GMT+8"));
@@ -637,7 +659,7 @@ public class SimpleTest extends LanguageTestSupport {
         assertExpression("${id}", exchange.getIn().getMessageId());
 
         assertEquals(1, context.getLanguageNames().size());
-        assertEquals("simple", context.getLanguageNames().get(0));
+        assertEquals("simple", context.getLanguageNames().iterator().next());
     }
 
     @Test
@@ -1946,6 +1968,40 @@ public class SimpleTest extends LanguageTestSupport {
         assertExpression(exp, "1");
         exchange.setProperty(Exchange.LOOP_INDEX, 1);
         assertExpression(exp, "99");
+    }
+
+    @Test
+    public void testMessageTimestamp() throws Exception {
+        exchange.getIn().setHeader(Exchange.MESSAGE_TIMESTAMP, 1234L);
+        assertExpression("${messageTimestamp}", 1234L);
+    }
+
+    @Test
+    public void testParenthesisReplaceAll() throws Exception {
+        exchange.getIn().setBody("Bik (Ru)");
+        assertExpression("${body.replaceAll(\"Bik \\(Ru\\)\",\"bik_ru\").replaceAll(\"b\",\"c\")}", "cik_ru");
+    }
+
+    @Test
+    public void testParenthesisReplace() throws Exception {
+        exchange.getIn().setBody("Hello (( World (((( Again");
+        assertExpression("${body.replace(\"((\", \"--\").replace(\"((((\", \"----\")}", "Hello -- World ---- Again");
+    }
+
+    @Test
+    public void testPropertiesExist() throws Exception {
+        PropertiesComponent pc = context.getPropertiesComponent();
+
+        assertExpression("${propertiesExist:myKey}", "false");
+        assertExpression("${propertiesExist:!myKey}", "true");
+        assertPredicate("${propertiesExist:myKey}", false);
+        assertPredicate("${propertiesExist:!myKey}", true);
+
+        pc.addInitialProperty("myKey", "abc");
+        assertExpression("${propertiesExist:myKey}", "true");
+        assertExpression("${propertiesExist:!myKey}", "false");
+        assertPredicate("${propertiesExist:myKey}", true);
+        assertPredicate("${propertiesExist:!myKey}", false);
     }
 
     @Override

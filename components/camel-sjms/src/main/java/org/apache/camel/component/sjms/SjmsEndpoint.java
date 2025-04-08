@@ -63,7 +63,7 @@ import org.apache.camel.util.StringHelper;
  * This component uses plain JMS API where as the jms component uses Spring JMS.
  */
 @UriEndpoint(firstVersion = "2.11.0", scheme = "sjms", title = "Simple JMS", syntax = "sjms:destinationType:destinationName",
-             category = { Category.MESSAGING })
+             category = { Category.MESSAGING }, headersClass = SjmsConstants.class)
 public class SjmsEndpoint extends DefaultEndpoint
         implements AsyncEndpoint, MultipleConsumersSupport, HeaderFilterStrategyAware {
 
@@ -318,13 +318,13 @@ public class SjmsEndpoint extends DefaultEndpoint
 
     @Override
     public Consumer createConsumer(Processor processor) throws Exception {
-        EndpointMessageListener listener = new EndpointMessageListener(this, processor);
-        configureMessageListener(listener);
-
         MessageListenerContainer container = createMessageListenerContainer(this);
+        SjmsConsumer consumer = new SjmsConsumer(this, processor, container);
+
+        EndpointMessageListener listener = new EndpointMessageListener(consumer, this, processor);
+        configureMessageListener(listener);
         container.setMessageListener(listener);
 
-        SjmsConsumer consumer = new SjmsConsumer(this, processor, container);
         configureConsumer(consumer);
         return consumer;
     }
@@ -406,11 +406,12 @@ public class SjmsEndpoint extends DefaultEndpoint
             }
         }
         template.setDestinationCreationStrategy(getDestinationCreationStrategy());
+        template.setPreserveMessageQos(isPreserveMessageQos());
 
         return template;
     }
 
-    public MessageListenerContainer createMessageListenerContainer(SjmsEndpoint endpoint) throws Exception {
+    public MessageListenerContainer createMessageListenerContainer(SjmsEndpoint endpoint) {
         SimpleMessageListenerContainer answer = new SimpleMessageListenerContainer(endpoint);
         answer.setConcurrentConsumers(concurrentConsumers);
         return answer;

@@ -42,7 +42,6 @@ import org.apache.camel.util.FileUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
@@ -123,7 +122,7 @@ public class EipDocumentationEnricherMojo extends AbstractMojo {
     protected MavenProject project;
 
     @Override
-    public void execute() throws MojoExecutionException, MojoFailureException {
+    public void execute() throws MojoExecutionException {
         if (pathToModelDir == null) {
             throw new MojoExecutionException("pathToModelDir parameter must not be null");
         }
@@ -189,7 +188,7 @@ public class EipDocumentationEnricherMojo extends AbstractMojo {
                 enriched++;
                 getLog().debug("Enriching " + elementName);
                 File file = jsonFiles.get(elementName);
-                injectAttributesDocumentation(domFinder, documentationEnricher, file, elementType, injectedTypes);
+                injectChildElementsDocumentation(domFinder, documentationEnricher, file, elementType, injectedTypes);
             } else {
                 boolean ignore = "ExpressionDefinition".equalsIgnoreCase(elementName);
                 if (!ignore) {
@@ -217,9 +216,9 @@ public class EipDocumentationEnricherMojo extends AbstractMojo {
     }
 
     /**
-     * Recursively injects documentation to complex type attributes and it's parents.
+     * Recursively injects documentation to complex type attributes and elements and it's parents.
      */
-    private void injectAttributesDocumentation(
+    private void injectChildElementsDocumentation(
             DomFinder domFinder,
             DocumentationEnricher documentationEnricher,
             File jsonFile,
@@ -233,13 +232,17 @@ public class EipDocumentationEnricherMojo extends AbstractMojo {
         injectedTypes.add(type);
         NodeList attributeElements = domFinder.findAttributesElements(type);
         if (attributeElements.getLength() > 0) {
-            documentationEnricher.enrichTypeAttributesDocumentation(getLog(), attributeElements, jsonFile);
+            documentationEnricher.enrichElementDocumentation(getLog(), attributeElements, jsonFile);
+        }
+        NodeList elementElements = domFinder.findElementsElements(type);
+        if (elementElements.getLength() > 0) {
+            documentationEnricher.enrichElementDocumentation(getLog(), elementElements, jsonFile);
         }
 
         String baseType = domFinder.findBaseType(type);
         if (baseType != null && !StringUtils.isEmpty(baseType)) {
             baseType = truncateTypeNamespace(baseType);
-            injectAttributesDocumentation(domFinder, documentationEnricher, jsonFile, baseType, injectedTypes);
+            injectChildElementsDocumentation(domFinder, documentationEnricher, jsonFile, baseType, injectedTypes);
         }
     }
 

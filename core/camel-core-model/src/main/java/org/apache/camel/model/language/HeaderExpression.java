@@ -23,7 +23,7 @@ import javax.xml.bind.annotation.XmlRootElement;
 import org.apache.camel.spi.Metadata;
 
 /**
- * Get the value of the named Camel Message header.
+ * Gets a header from the Exchange.
  */
 @Metadata(firstVersion = "1.5.0", label = "language,core", title = "Header")
 @XmlRootElement(name = "header")

@@ -30,23 +30,25 @@ public class FhirLocalContainerService implements FhirService, ContainerService<
 
     private static final Logger LOG = LoggerFactory.getLogger(FhirLocalContainerService.class);
 
-    private GenericContainer container;
+    private final GenericContainer container;
 
     public FhirLocalContainerService() {
-        String containerName = System.getProperty("fhir.container", CONTAINER_IMAGE);
-
-        initContainer(containerName);
+        this(System.getProperty(FhirProperties.FHIR_CONTAINER, CONTAINER_IMAGE));
     }
 
-    public FhirLocalContainerService(String containerName) {
-        initContainer(containerName);
+    public FhirLocalContainerService(String imageName) {
+        container = initContainer(imageName, CONTAINER_NAME);
     }
 
-    protected void initContainer(String containerName) {
-        container = new GenericContainer(containerName)
-                .withNetworkAliases(CONTAINER_NAME)
+    public FhirLocalContainerService(GenericContainer container) {
+        this.container = container;
+    }
+
+    protected GenericContainer initContainer(String imageName, String containerName) {
+        return new GenericContainer(imageName)
+                .withNetworkAliases(containerName)
                 .withExposedPorts(FhirProperties.DEFAULT_SERVICE_PORT)
-                .withEnv("HAPI_FHIR_VERSION", "DSTU3")
+                .withEnv("HAPI_FHIR_VERSION", "R4")
                 .withEnv("HAPI_REUSE_CACHED_SEARCH_RESULTS_MILLIS", "-1")
                 .waitingFor(Wait.forListeningPort())
                 .waitingFor(Wait.forHttp("/hapi-fhir-jpaserver/fhir/metadata"));

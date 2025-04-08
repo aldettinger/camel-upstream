@@ -127,7 +127,7 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
     private boolean suppressLoggingOnTimeout;
     private boolean logInflightExchangesOnTimeout = true;
 
-    private volatile boolean forceShutdown;
+    private boolean forceShutdown;
     private final AtomicBoolean timeoutOccurred = new AtomicBoolean();
     private volatile Future<?> currentShutdownTaskFuture;
 
@@ -230,7 +230,9 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
             timeoutOccurred.set(true);
 
             // timeout then cancel the task
-            currentShutdownTaskFuture.cancel(true);
+            if (currentShutdownTaskFuture != null) {
+                currentShutdownTaskFuture.cancel(true);
+            }
 
             // signal we are forcing shutdown now, since timeout occurred
             this.forceShutdown = forceShutdown;
@@ -274,13 +276,13 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
 
         if (logger.shouldLog()) {
             logger.log(String.format("Graceful shutdown of %s routes completed in %s", routesOrdered.size(),
-                    TimeUtils.printDuration(watch.taken())));
+                    TimeUtils.printDuration(watch.taken(), true)));
         }
         return true;
     }
 
     @Override
-    public boolean forceShutdown(Service service) {
+    public boolean isForceShutdown() {
         return forceShutdown;
     }
 
@@ -372,6 +374,11 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
         this.camelContext = camelContext;
     }
 
+    /**
+     * Future for the current shutdown task, when a task is in progress.
+     * <p/>
+     * Important: This API is only for advanced use-cases.
+     */
     public Future<?> getCurrentShutdownTaskFuture() {
         return currentShutdownTaskFuture;
     }
@@ -388,9 +395,8 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
             // it has completed its current task
             ShutdownRunningTask current = order.getRoute().getShutdownRunningTask();
             if (current != ShutdownRunningTask.CompleteCurrentTaskOnly) {
-                LOG.debug("Changing shutdownRunningTask from {} to " + ShutdownRunningTask.CompleteCurrentTaskOnly
-                          + " on route {} to shutdown faster",
-                        current, order.getRoute().getId());
+                LOG.debug("Changing shutdownRunningTask from {} to {} on route {} to shutdown faster",
+                        ShutdownRunningTask.CompleteCurrentTaskOnly, current, order.getRoute().getId());
                 order.getRoute().setShutdownRunningTask(ShutdownRunningTask.CompleteCurrentTaskOnly);
             }
 
@@ -639,8 +645,8 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
                     // we will stop it later, but for now it must run to be able to help all inflight messages
                     // be safely completed
                     deferredConsumers.add(new ShutdownDeferredConsumer(order.getRoute(), consumer));
-                    LOG.debug("Route: " + order.getRoute().getId()
-                              + (suspendOnly ? " shutdown deferred." : " suspension deferred."));
+                    LOG.debug("Route: {} {}", order.getRoute().getId(),
+                            suspendOnly ? "shutdown deferred." : "suspension deferred.");
                 }
             }
 
@@ -714,7 +720,7 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
                 Consumer consumer = deferred.getConsumer();
                 if (consumer instanceof ShutdownAware) {
                     LOG.trace("Route: {} preparing to shutdown.", deferred.getRoute().getId());
-                    boolean forced = context.getShutdownStrategy().forceShutdown(consumer);
+                    boolean forced = context.getShutdownStrategy().isForceShutdown();
                     boolean suppress = context.getShutdownStrategy().isSuppressLoggingOnTimeout();
                     prepareShutdown(consumer, suspendOnly, forced, false, suppress);
                     LOG.debug("Route: {} preparing to shutdown complete.", deferred.getRoute().getId());
@@ -748,7 +754,7 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
             // now the route consumers has been shutdown, then prepare route services for shutdown
             for (RouteStartupOrder order : routes) {
                 for (Service service : order.getServices()) {
-                    boolean forced = context.getShutdownStrategy().forceShutdown(service);
+                    boolean forced = context.getShutdownStrategy().isForceShutdown();
                     boolean suppress = context.getShutdownStrategy().isSuppressLoggingOnTimeout();
                     prepareShutdown(service, suspendOnly, forced, true, suppress);
                 }

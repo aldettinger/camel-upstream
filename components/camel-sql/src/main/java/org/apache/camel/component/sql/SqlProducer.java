@@ -43,6 +43,8 @@ public class SqlProducer extends DefaultProducer {
 
     private static final Logger LOG = LoggerFactory.getLogger(SqlProducer.class);
 
+    private static final Object EMPTY_RESULT = new Object();
+
     private final String query;
     private String resolvedQuery;
     private final JdbcTemplate jdbcTemplate;
@@ -129,14 +131,10 @@ public class SqlProducer extends DefaultProducer {
         } else {
             data = processInternal(exchange, statementCreator, sql, preparedQuery, shouldRetrieveGeneratedKeys);
         }
-        exchange.getOut().getHeaders().putAll(exchange.getIn().getHeaders());
-        if (getEndpoint().isNoop() || getEndpoint().getOutputHeader() != null || data == null) {
-            exchange.getOut().setBody(exchange.getIn().getBody());
-        }
         if (getEndpoint().getOutputHeader() != null) {
-            exchange.getOut().setHeader(getEndpoint().getOutputHeader(), data);
+            exchange.getIn().setHeader(getEndpoint().getOutputHeader(), data == EMPTY_RESULT ? null : data);
         } else if (data != null && !getEndpoint().isNoop()) {
-            exchange.getOut().setBody(data);
+            exchange.getIn().setBody(data == EMPTY_RESULT ? null : data);
         }
     }
 
@@ -175,26 +173,28 @@ public class SqlProducer extends DefaultProducer {
                                 data = getEndpoint().queryForObject(rs);
                                 if (data != null) {
                                     rowCount = 1;
+                                } else {
+                                    // need to mark special when no data
+                                    data = EMPTY_RESULT;
                                 }
                             } else {
                                 throw new IllegalArgumentException("Invalid outputType=" + outputType);
                             }
-                            exchange.getOut().setHeader(SqlConstants.SQL_ROW_COUNT, rowCount);
+                            exchange.getIn().setHeader(SqlConstants.SQL_ROW_COUNT, rowCount);
                         } else {
-                            exchange.getOut().setHeader(SqlConstants.SQL_UPDATE_COUNT, ps.getUpdateCount());
-                            exchange.getOut().setBody(exchange.getIn().getBody());
+                            exchange.getIn().setHeader(SqlConstants.SQL_UPDATE_COUNT, ps.getUpdateCount());
                         }
                     }
 
                     if (shouldRetrieveGeneratedKeys) {
                         if (isResultSet) {
                             // we won't return generated keys for SELECT statements
-                            exchange.getOut().setHeader(SqlConstants.SQL_GENERATED_KEYS_DATA, Collections.EMPTY_LIST);
-                            exchange.getOut().setHeader(SqlConstants.SQL_GENERATED_KEYS_ROW_COUNT, 0);
+                            exchange.getIn().setHeader(SqlConstants.SQL_GENERATED_KEYS_DATA, Collections.EMPTY_LIST);
+                            exchange.getIn().setHeader(SqlConstants.SQL_GENERATED_KEYS_ROW_COUNT, 0);
                         } else {
                             List<?> generatedKeys = getEndpoint().queryForList(ps.getGeneratedKeys(), false);
-                            exchange.getOut().setHeader(SqlConstants.SQL_GENERATED_KEYS_DATA, generatedKeys);
-                            exchange.getOut().setHeader(SqlConstants.SQL_GENERATED_KEYS_ROW_COUNT, generatedKeys.size());
+                            exchange.getIn().setHeader(SqlConstants.SQL_GENERATED_KEYS_DATA, generatedKeys);
+                            exchange.getIn().setHeader(SqlConstants.SQL_GENERATED_KEYS_ROW_COUNT, generatedKeys.size());
                         }
                     }
 

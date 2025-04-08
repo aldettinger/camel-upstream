@@ -1,0 +1,13 @@
+= Kotlin DSL Component
+:doctitle: Kotlin DSL
+:shortname: kotlin-dsl
+:artifactid: camel-kotlin-dsl
+:description: Camel DSL with Kotlin
+:since: 3.9
+:supportlevel: Experimental
+//Manually maintained attributes
+:group: DSL
+
+*Since Camel {since}*
+
+See xref:manual:ROOT:dsl.adoc[DSL]

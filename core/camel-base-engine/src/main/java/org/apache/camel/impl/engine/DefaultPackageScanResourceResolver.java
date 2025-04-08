@@ -26,7 +26,6 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLDecoder;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -38,14 +37,15 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
 
 import org.apache.camel.CamelContextAware;
+import org.apache.camel.ExtendedCamelContext;
 import org.apache.camel.NonManagedService;
 import org.apache.camel.spi.PackageScanResourceResolver;
 import org.apache.camel.spi.Resource;
+import org.apache.camel.spi.ResourceLoader;
 import org.apache.camel.support.ResourceHelper;
 import org.apache.camel.util.AntPathMatcher;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.camel.util.function.ThrowingSupplier;
 
 /**
  * Default implement of {@link org.apache.camel.spi.PackageScanResourceResolver}
@@ -84,15 +84,11 @@ public class DefaultPackageScanResourceResolver extends BasePackageScanResolver
                 findInClasspath(root, resources, subPattern);
             }
         } else {
+            final ExtendedCamelContext ecc = getCamelContext().adapt(ExtendedCamelContext.class);
+            final ResourceLoader loader = ecc.getResourceLoader();
+
             // its a single resource so load it directly
-            resources.add(new DefaultResource(
-                    location,
-                    new ThrowingSupplier<InputStream, IOException>() {
-                        @Override
-                        public InputStream get() throws IOException {
-                            return ResourceHelper.resolveMandatoryResourceAsInputStream(getCamelContext(), location);
-                        }
-                    }));
+            resources.add(loader.resolveResource(location));
         }
     }
 
@@ -102,16 +98,11 @@ public class DefaultPackageScanResourceResolver extends BasePackageScanResolver
             String subPattern)
             throws Exception {
 
-        for (Path path : ResourceHelper.findInFileSystem(dir.toPath(), subPattern)) {
+        final ExtendedCamelContext ecc = getCamelContext().adapt(ExtendedCamelContext.class);
+        final ResourceLoader loader = ecc.getResourceLoader();
 
-            resources.add(new DefaultResource(
-                    path.toString(),
-                    new ThrowingSupplier<InputStream, IOException>() {
-                        @Override
-                        public InputStream get() throws IOException {
-                            return Files.newInputStream(path);
-                        }
-                    }));
+        for (Path path : ResourceHelper.findInFileSystem(dir.toPath(), subPattern)) {
+            resources.add(loader.resolveResource("file:" + path.toString()));
         }
     }
 
@@ -236,15 +227,37 @@ public class DefaultPackageScanResourceResolver extends BasePackageScanResolver
      * Finds matching classes within a jar files that contains a folder structure matching the package structure. If the
      * File is not a JarFile or does not exist a warning will be logged, but no error will be raised.
      *
-     * @param stream  the inputstream of the jar file to be examined for classes
-     * @param urlPath the url of the jar file to be examined for classes
+     * @param packageName the root package name
+     * @param subPattern  optional pattern to use for matching resource names
+     * @param stream      the inputstream of the jar file to be examined for classes
+     * @param urlPath     the url of the jar file to be examined for classes
+     * @param resources   the list to add loaded resources
      */
-    private void loadImplementationsInJar(
+    protected void loadImplementationsInJar(
             String packageName,
             String subPattern,
             InputStream stream,
             String urlPath,
             Set<Resource> resources) {
+
+        List<String> entries = doLoadImplementationsInJar(packageName, stream, urlPath);
+        for (String name : entries) {
+            String shortName = name.substring(packageName.length());
+            boolean match = PATH_MATCHER.match(subPattern, shortName);
+            log.debug("Found resource: {} matching pattern: {} -> {}", shortName, subPattern, match);
+            if (match) {
+                final ExtendedCamelContext ecc = getCamelContext().adapt(ExtendedCamelContext.class);
+                final ResourceLoader loader = ecc.getResourceLoader();
+
+                resources.add(loader.resolveResource(name));
+            }
+        }
+    }
+
+    protected List<String> doLoadImplementationsInJar(
+            String packageName,
+            InputStream stream,
+            String urlPath) {
 
         List<String> entries = new ArrayList<>();
 
@@ -271,21 +284,7 @@ public class DefaultPackageScanResourceResolver extends BasePackageScanResolver
             IOHelper.close(jarStream, urlPath, log);
         }
 
-        for (String name : entries) {
-            String shortName = name.substring(packageName.length());
-            boolean match = PATH_MATCHER.match(subPattern, shortName);
-            log.debug("Found resource: {} matching pattern: {} -> {}", shortName, subPattern, match);
-            if (match) {
-                resources.add(new DefaultResource(
-                        name,
-                        new ThrowingSupplier<InputStream, IOException>() {
-                            @Override
-                            public InputStream get() throws IOException {
-                                return getCamelContext().getClassResolver().loadResourceAsStream(name);
-                            }
-                        }));
-            }
-        }
+        return entries;
     }
 
     /**
@@ -324,14 +323,10 @@ public class DefaultPackageScanResourceResolver extends BasePackageScanResolver
                 boolean match = PATH_MATCHER.match(subPattern, name);
                 log.debug("Found resource: {} matching pattern: {} -> {}", name, subPattern, match);
                 if (match) {
-                    resources.add(new DefaultResource(
-                            name,
-                            new ThrowingSupplier<InputStream, IOException>() {
-                                @Override
-                                public InputStream get() throws IOException {
-                                    return new FileInputStream(file);
-                                }
-                            }));
+                    final ExtendedCamelContext ecc = getCamelContext().adapt(ExtendedCamelContext.class);
+                    final ResourceLoader loader = ecc.getResourceLoader();
+
+                    resources.add(loader.resolveResource("file:" + file.getPath()));
                 }
             }
         }

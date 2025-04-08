@@ -241,11 +241,11 @@ public class ResteasyCamelServlet extends HttpServletDispatcher implements HttpR
         // Maybe send request to camel also for some logging or something
         exchange.getIn().setHeader(ResteasyConstants.RESTEASY_HTTP_REQUEST, httpServletRequest);
 
-        String httpPath = (String) exchange.getIn().getHeader(Exchange.HTTP_PATH);
+        String httpPath = (String) exchange.getIn().getHeader(ResteasyConstants.HTTP_PATH);
         // here we just remove the CamelServletContextPath part from the HTTP_PATH
         if (contextPath != null
                 && httpPath.startsWith(contextPath)) {
-            exchange.getIn().setHeader(Exchange.HTTP_PATH,
+            exchange.getIn().setHeader(ResteasyConstants.HTTP_PATH,
                     httpPath.substring(contextPath.length()));
         }
 
@@ -293,6 +293,7 @@ public class ResteasyCamelServlet extends HttpServletDispatcher implements HttpR
     /**
      * Destroy ResteasyCamelServlet and delete registry created by it
      */
+    @Override
     public void destroy() {
         DefaultHttpRegistry.removeHttpRegistry(getServletName());
         if (httpRegistry != null) {
@@ -341,9 +342,9 @@ public class ResteasyCamelServlet extends HttpServletDispatcher implements HttpR
         HttpConsumer answer = consumers.get(path);
 
         if (answer == null) {
-            for (String key : consumers.keySet()) {
-                if (consumers.get(key).getEndpoint().isMatchOnUriPrefix() && path.startsWith(key)) {
-                    answer = consumers.get(key);
+            for (Map.Entry<String, HttpConsumer> consumerEntry : consumers.entrySet()) {
+                if (consumerEntry.getValue().getEndpoint().isMatchOnUriPrefix() && path.startsWith(consumerEntry.getKey())) {
+                    answer = consumerEntry.getValue();
                     break;
                 }
             }
@@ -351,6 +352,7 @@ public class ResteasyCamelServlet extends HttpServletDispatcher implements HttpR
         return answer;
     }
 
+    @Override
     public String getServletName() {
         return servletName;
     }

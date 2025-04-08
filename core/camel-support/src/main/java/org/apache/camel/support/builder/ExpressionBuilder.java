@@ -24,6 +24,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -31,6 +32,7 @@ import java.util.regex.Pattern;
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelExecutionException;
 import org.apache.camel.Exchange;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.Expression;
 import org.apache.camel.InvalidPayloadException;
 import org.apache.camel.Message;
@@ -184,6 +186,7 @@ public class ExpressionBuilder {
      */
     public static Expression headersExpression() {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return exchange.getIn().getHeaders();
             }
@@ -203,6 +206,7 @@ public class ExpressionBuilder {
      */
     public static Expression exchangePatternExpression() {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return exchange.getPattern();
             }
@@ -222,10 +226,11 @@ public class ExpressionBuilder {
      */
     public static Expression exchangeExceptionExpression() {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 Exception exception = exchange.getException();
                 if (exception == null) {
-                    exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
+                    exception = exchange.getProperty(ExchangePropertyKey.EXCEPTION_CAUGHT, Exception.class);
                 }
                 return exception;
             }
@@ -248,10 +253,11 @@ public class ExpressionBuilder {
      */
     public static Expression exchangeExceptionExpression(final Class<Exception> type) {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 Exception exception = exchange.getException(type);
                 if (exception == null) {
-                    exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
+                    exception = exchange.getProperty(ExchangePropertyKey.EXCEPTION_CAUGHT, Exception.class);
                     return ObjectHelper.getException(type, exception);
                 }
                 return exception;
@@ -273,6 +279,7 @@ public class ExpressionBuilder {
         return new ExpressionAdapter() {
             private TypeConverter typeConverter;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 return typeConverter;
             }
@@ -298,6 +305,7 @@ public class ExpressionBuilder {
         return new ExpressionAdapter() {
             private Registry registry;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 return registry;
             }
@@ -339,7 +347,11 @@ public class ExpressionBuilder {
             @Override
             public Object evaluate(Exchange exchange) {
                 String text = ref.evaluate(exchange, String.class);
-                return registry.lookupByName(text);
+                if (text != null) {
+                    return registry.lookupByName(text);
+                } else {
+                    return null;
+                }
             }
 
             @Override
@@ -364,6 +376,7 @@ public class ExpressionBuilder {
         return new ExpressionAdapter() {
             private CamelContext context;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 return context;
             }
@@ -389,6 +402,7 @@ public class ExpressionBuilder {
         return new ConstantExpressionAdapter() {
             private String name;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 return name;
             }
@@ -413,10 +427,11 @@ public class ExpressionBuilder {
      */
     public static Expression exchangeExceptionMessageExpression() {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 Exception exception = exchange.getException();
                 if (exception == null) {
-                    exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
+                    exception = exchange.getProperty(ExchangePropertyKey.EXCEPTION_CAUGHT, Exception.class);
                 }
                 return exception != null ? exception.getMessage() : null;
             }
@@ -435,10 +450,11 @@ public class ExpressionBuilder {
      */
     public static Expression exchangeExceptionStackTraceExpression() {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 Exception exception = exchange.getException();
                 if (exception == null) {
-                    exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
+                    exception = exchange.getProperty(ExchangePropertyKey.EXCEPTION_CAUGHT, Exception.class);
                 }
                 if (exception != null) {
                     StringWriter sw = new StringWriter();
@@ -501,6 +517,7 @@ public class ExpressionBuilder {
      */
     public static Expression exchangePropertiesExpression() {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return exchange.getProperties();
             }
@@ -521,6 +538,7 @@ public class ExpressionBuilder {
         return new ExpressionAdapter() {
             private Map<String, String> globalOptions;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 return globalOptions;
             }
@@ -703,6 +721,7 @@ public class ExpressionBuilder {
      */
     public static Expression constantExpression(final Object value) {
         return new ConstantExpressionAdapter()  {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return value;
             }
@@ -737,6 +756,7 @@ public class ExpressionBuilder {
                 exp.init(context);
             }
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 return exp.evaluate(exchange, Object.class);
             }
@@ -759,6 +779,7 @@ public class ExpressionBuilder {
             private Expression expr;
             private Predicate pred;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 return expr.evaluate(exchange, Object.class);
             }
@@ -793,6 +814,7 @@ public class ExpressionBuilder {
      */
     public static Expression bodyExpression() {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return exchange.getIn().getBody();
             }
@@ -809,6 +831,7 @@ public class ExpressionBuilder {
      */
     public static Expression bodyExpression(final Function<Object, Object> function) {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return function.apply(
                     exchange.getIn().getBody()
@@ -827,6 +850,7 @@ public class ExpressionBuilder {
      */
     public static Expression bodyExpression(final BiFunction<Object, Map<String, Object>, Object> function) {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return function.apply(
                     exchange.getIn().getBody(),
@@ -846,6 +870,7 @@ public class ExpressionBuilder {
      */
     public static <T> Expression bodyExpression(final Class<T> bodyType, final Function<T, Object> function) {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return function.apply(
                     exchange.getIn().getBody(bodyType)
@@ -864,6 +889,7 @@ public class ExpressionBuilder {
      */
     public static <T> Expression bodyExpression(final Class<T> bodyType, final BiFunction<T, Map<String, Object>, Object> function) {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return function.apply(
                     exchange.getIn().getBody(bodyType),
@@ -884,6 +910,7 @@ public class ExpressionBuilder {
      */
     public static <T> Expression bodyExpression(final Class<T> type) {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return exchange.getIn().getBody(type);
             }
@@ -985,7 +1012,7 @@ public class ExpressionBuilder {
         return new ExpressionAdapter() {
             @Override
             public Object evaluate(Exchange exchange) {
-                return exchange.getProperty(Exchange.STEP_ID);
+                return exchange.getProperty(ExchangePropertyKey.STEP_ID);
             }
 
             @Override
@@ -1326,6 +1353,7 @@ public class ExpressionBuilder {
         return new ExpressionAdapter() {
             private Expression groupExp;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 // evaluate expression as iterator
                 Iterator<?> it = expression.evaluate(exchange, Iterator.class);
@@ -1366,6 +1394,7 @@ public class ExpressionBuilder {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static Expression sortExpression(final Expression expression, final Comparator comparator) {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 List<?> list = expression.evaluate(exchange, List.class);
                 list.sort(comparator);
@@ -1392,6 +1421,7 @@ public class ExpressionBuilder {
                                              final String regex, final String replacement) {
         final Pattern pattern = Pattern.compile(regex);
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 String text = expression.evaluate(exchange, String.class);
                 if (text == null) {
@@ -1449,6 +1479,7 @@ public class ExpressionBuilder {
      */
     public static Expression append(final Expression left, final Expression right) {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return left.evaluate(exchange, String.class) + right.evaluate(exchange, String.class);
             }
@@ -1471,6 +1502,7 @@ public class ExpressionBuilder {
      */
     public static Expression prepend(final Expression left, final Expression right) {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return right.evaluate(exchange, String.class) + left.evaluate(exchange, String.class);
             }
@@ -1512,6 +1544,7 @@ public class ExpressionBuilder {
 
             private Collection<Object> col;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 StringBuilder buffer = new StringBuilder();
                 if (col != null) {
@@ -1578,6 +1611,7 @@ public class ExpressionBuilder {
      */
     public static Expression messageIdExpression() {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return exchange.getIn().getMessageId();
             }
@@ -1590,10 +1624,28 @@ public class ExpressionBuilder {
     }
 
     /**
+     * Returns an Expression for the inbound message timestamp
+     */
+    public static Expression messageTimestampExpression() {
+        return new ExpressionAdapter() {
+            @Override
+            public Object evaluate(Exchange exchange) {
+                return exchange.getIn().getMessageTimestamp();
+            }
+
+            @Override
+            public String toString() {
+                return "messageTimestamp";
+            }
+        };
+    }
+
+    /**
      * Returns an Expression for the exchange id
      */
     public static Expression exchangeIdExpression() {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return exchange.getExchangeId();
             }
@@ -1610,6 +1662,7 @@ public class ExpressionBuilder {
      */
     public static Expression routeIdExpression() {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 return ExchangeHelper.getRouteId(exchange);
             }
@@ -1627,6 +1680,7 @@ public class ExpressionBuilder {
                 private Expression exp;
                 private Language language;
 
+                @Override
                 public Object evaluate(Exchange exchange) {
                     return exp.evaluate(exchange, Object.class);
                 }
@@ -1653,6 +1707,7 @@ public class ExpressionBuilder {
             private Expression exp;
             private Language language;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 // bean is able to evaluate method name if it contains nested functions
                 // so we should not eager evaluate expression as a string
@@ -1678,6 +1733,7 @@ public class ExpressionBuilder {
             private Language language;
             private Expression exp;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 return exp.evaluate(exchange, Object.class);
             }
@@ -1695,11 +1751,35 @@ public class ExpressionBuilder {
         };
     }
 
+    public static Expression beanExpression(final Expression expression, final String method) {
+        return new ExpressionAdapter() {
+            private Language language;
+
+            @Override
+            public Object evaluate(Exchange exchange) {
+                Object bean = expression.evaluate(exchange, Object.class);
+                Expression exp = language.createExpression(null, new Object[]{bean, method});
+                exp.init(exchange.getContext());
+                return exp.evaluate(exchange, Object.class);
+            }
+
+            @Override
+            public void init(CamelContext context) {
+                this.language = context.resolveLanguage("bean");
+            }
+
+            public String toString() {
+                return "bean(" + expression + ", " + method + ")";
+            }
+        };
+    }
+
     public static Expression propertiesComponentExpression(final String key, final String defaultValue) {
         return new ExpressionAdapter() {
             private Expression exp;
             private PropertiesComponent pc;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 String text = exp.evaluate(exchange, String.class);
                 try {
@@ -1724,6 +1804,32 @@ public class ExpressionBuilder {
             @Override
             public String toString() {
                 return "properties(" + key + ")";
+            }
+        };
+    }
+
+    public static Expression propertiesComponentExist(final String key, final boolean negate) {
+        return new ExpressionAdapter() {
+            private PropertiesComponent pc;
+
+            @Override
+            public Object evaluate(Exchange exchange) {
+                Optional<String> result = pc.resolveProperty(key);
+                boolean answer = result.isPresent();
+                if (negate) {
+                    answer = !answer;
+                }
+                return answer;
+            }
+
+            @Override
+            public void init(CamelContext context) {
+                pc = context.getPropertiesComponent();
+            }
+
+            @Override
+            public String toString() {
+                return "propertiesExist(" + key + ")";
             }
         };
     }
@@ -1761,6 +1867,7 @@ public class ExpressionBuilder {
             private Language language;
             private Expression exp;
 
+            @Override
             public Object evaluate(Exchange exchange) {
                 return exp.evaluate(exchange, Object.class);
             }
@@ -1784,12 +1891,13 @@ public class ExpressionBuilder {
      */
     public static Expression bodyOneLine() {
         return new ExpressionAdapter() {
+            @Override
             public Object evaluate(Exchange exchange) {
                 String body = exchange.getIn().getBody(String.class);
                 if (body == null) {
                     return null;
                 }
-                body = StringHelper.replaceAll(body, System.lineSeparator(), "");
+                body = body.replace(System.lineSeparator(), "");
                 return body;
             }
 

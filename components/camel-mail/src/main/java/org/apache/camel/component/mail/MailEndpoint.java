@@ -37,7 +37,7 @@ import org.apache.camel.support.ScheduledPollEndpoint;
  */
 @UriEndpoint(firstVersion = "1.0.0", scheme = "imap,imaps,pop3,pop3s,smtp,smtps", title = "IMAP,IMAPS,POP3,POP3S,SMTP,SMTPS",
              syntax = "imap:host:port", alternativeSyntax = "imap:username:password@host:port",
-             category = { Category.MAIL })
+             category = { Category.MAIL }, headersClass = MailConstants.class)
 public class MailEndpoint extends ScheduledPollEndpoint implements HeaderFilterStrategyAware {
 
     @UriParam(defaultValue = "" + MailConsumer.DEFAULT_CONSUMER_DELAY, javaType = "java.time.Duration",
@@ -97,7 +97,7 @@ public class MailEndpoint extends ScheduledPollEndpoint implements HeaderFilterS
     /**
      * Creates a producer using the given sender
      */
-    public Producer createProducer(JavaMailSender sender) throws Exception {
+    public Producer createProducer(JavaMailSender sender) {
         return new MailProducer(this, sender);
     }
 
@@ -139,7 +139,8 @@ public class MailEndpoint extends ScheduledPollEndpoint implements HeaderFilterS
     public MailBinding getBinding() {
         if (binding == null) {
             boolean decode = getConfiguration() != null && getConfiguration().isDecodeFilename();
-            binding = new MailBinding(headerFilterStrategy, contentTypeResolver, decode);
+            boolean mapMailMessage = getConfiguration() != null && getConfiguration().isMapMailMessage();
+            binding = new MailBinding(headerFilterStrategy, contentTypeResolver, decode, mapMailMessage);
         }
         return binding;
     }

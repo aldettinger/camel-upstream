@@ -26,10 +26,10 @@ import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.fhir.api.ExtraParameters;
 import org.apache.camel.component.fhir.internal.FhirApiCollection;
 import org.apache.camel.component.fhir.internal.FhirTransactionApiMethod;
-import org.hl7.fhir.dstu3.model.Bundle;
-import org.hl7.fhir.dstu3.model.HumanName;
-import org.hl7.fhir.dstu3.model.Patient;
 import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.r4.model.Bundle;
+import org.hl7.fhir.r4.model.HumanName;
+import org.hl7.fhir.r4.model.Patient;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,7 +49,7 @@ public class FhirTransactionIT extends AbstractFhirTestSupport {
             = FhirApiCollection.getCollection().getApiName(FhirTransactionApiMethod.class).getName();
 
     @Test
-    public void testWithBundle() throws Exception {
+    public void testWithBundle() {
         // using org.hl7.fhir.instance.model.api.IBaseBundle message body for single parameter "bundle"
         Bundle result = requestBody("direct://WITH_BUNDLE", createTransactionBundle());
 
@@ -59,7 +59,7 @@ public class FhirTransactionIT extends AbstractFhirTestSupport {
     }
 
     @Test
-    public void testWithStringBundle() throws Exception {
+    public void testWithStringBundle() {
         Bundle transactionBundle = createTransactionBundle();
         String stringBundle = fhirContext.newJsonParser().encodeResourceToString(transactionBundle);
 
@@ -72,7 +72,7 @@ public class FhirTransactionIT extends AbstractFhirTestSupport {
     }
 
     @Test
-    public void testWithResources() throws Exception {
+    public void testWithResources() {
         Patient oscar = new Patient().addName(new HumanName().addGiven("Oscar").setFamily("Peterson"));
         Patient bobbyHebb = new Patient().addName(new HumanName().addGiven("Bobby").setFamily("Hebb"));
         List<IBaseResource> patients = new ArrayList<>(2);
@@ -88,7 +88,7 @@ public class FhirTransactionIT extends AbstractFhirTestSupport {
     }
 
     @Test
-    public void testWithResourcesSummaryEnum() throws Exception {
+    public void testWithResourcesSummaryEnum() {
         Patient oscar = new Patient().addName(new HumanName().addGiven("Oscar").setFamily("Peterson"));
         Patient bobbyHebb = new Patient().addName(new HumanName().addGiven("Bobby").setFamily("Hebb"));
         List<IBaseResource> patients = new ArrayList<>(2);
@@ -106,7 +106,7 @@ public class FhirTransactionIT extends AbstractFhirTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             public void configure() {
                 // test route for withBundle

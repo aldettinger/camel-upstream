@@ -27,16 +27,16 @@ import com.arangodb.ArangoDatabase;
 import com.arangodb.ArangoEdgeCollection;
 import com.arangodb.ArangoGraph;
 import com.arangodb.ArangoVertexCollection;
+import com.arangodb.DbName;
 import com.arangodb.entity.BaseDocument;
 import com.arangodb.entity.BaseEdgeDocument;
 import com.arangodb.model.AqlQueryOptions;
 import org.apache.camel.Exchange;
 import org.apache.camel.InvalidPayloadException;
 import org.apache.camel.Processor;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.support.DefaultProducer;
 import org.apache.camel.support.MessageHelper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.apache.camel.component.arangodb.ArangoDbConstants.AQL_QUERY;
 import static org.apache.camel.component.arangodb.ArangoDbConstants.AQL_QUERY_BIND_PARAMETERS;
@@ -48,7 +48,6 @@ import static org.apache.camel.component.arangodb.ArangoDbConstants.MULTI_UPDATE
 import static org.apache.camel.component.arangodb.ArangoDbConstants.RESULT_CLASS_TYPE;
 
 public class ArangoDbProducer extends DefaultProducer {
-    private static final Logger LOG = LoggerFactory.getLogger(ArangoDbProducer.class);
     private final ArangoDbEndpoint endpoint;
     private final Map<ArangoDbOperation, Processor> operations = new HashMap<>();
 
@@ -106,7 +105,7 @@ public class ArangoDbProducer extends DefaultProducer {
         if (processor != null) {
             processor.process(exchange);
         } else {
-            throw new RuntimeException("Operation not supported. Value: " + operation);
+            throw new RuntimeCamelException("Operation not supported. Value: " + operation);
         }
     }
 
@@ -126,7 +125,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 Object obj = exchange.getMessage().getMandatoryBody();
                 return collection.insertDocument(obj);
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -143,7 +142,7 @@ public class ArangoDbProducer extends DefaultProducer {
 
                 return collection.getDocument(key, resultClassType);
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -166,7 +165,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 Object document = exchange.getMessage().getMandatoryBody();
                 return collection.updateDocument(key, document);
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -187,7 +186,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 String singleKey = exchange.getMessage().getMandatoryBody(String.class);
                 return collection.deleteDocument(singleKey);
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -199,7 +198,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 Object vertexDocument = exchange.getMessage().getMandatoryBody();
                 return vertexCollection.insertVertex(vertexDocument);
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -212,7 +211,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 Object vertexDocument = exchange.getMessage().getMandatoryBody();
                 return vertexCollection.updateVertex(key, vertexDocument);
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -225,7 +224,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 vertexCollection.deleteVertex(singleKey);
                 return true;
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -241,7 +240,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 resultClassType = resultClassType != null ? resultClassType : BaseDocument.class;
                 return vertexCollection.getVertex(key, resultClassType);
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -253,7 +252,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 Object edgeDocument = exchange.getMessage().getMandatoryBody();
                 return edgeCollection.insertEdge(edgeDocument);
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -266,7 +265,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 Object edgeDocument = exchange.getMessage().getMandatoryBody();
                 return edgeCollection.updateEdge(key, edgeDocument);
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -279,7 +278,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 edgeCollection.deleteEdge(singleKey);
                 return true;
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -295,7 +294,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 resultClassType = resultClassType != null ? resultClassType : BaseEdgeDocument.class;
                 return edgeCollection.getEdge(key, resultClassType);
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -303,7 +302,7 @@ public class ArangoDbProducer extends DefaultProducer {
     private Function<Exchange, Object> aqlQuery() {
         return exchange -> {
             try {
-                ArangoDatabase database = endpoint.getArango().db(endpoint.getConfiguration().getDatabase());
+                ArangoDatabase database = endpoint.getArango().db(DbName.of(endpoint.getConfiguration().getDatabase()));
 
                 // AQL query
                 String query = (String) exchange.getMessage().getHeader(AQL_QUERY);
@@ -326,7 +325,7 @@ public class ArangoDbProducer extends DefaultProducer {
                 ArangoCursor<?> cursor = database.query(query, bindParameters, queryOptions, resultClassType);
                 return cursor == null ? null : cursor.asListRemaining();
             } catch (InvalidPayloadException e) {
-                throw new RuntimeException("Invalid payload for command", e);
+                throw new RuntimeCamelException("Invalid payload for command", e);
             }
         };
     }
@@ -339,7 +338,7 @@ public class ArangoDbProducer extends DefaultProducer {
         String collection = endpoint.getConfiguration().getDocumentCollection();
 
         // return collection
-        return endpoint.getArango().db(database).collection(collection);
+        return endpoint.getArango().db(DbName.of(database)).collection(collection);
     }
 
     /**
@@ -349,7 +348,7 @@ public class ArangoDbProducer extends DefaultProducer {
         String database = endpoint.getConfiguration().getDatabase();
         String graph = endpoint.getConfiguration().getGraph();
         // return vertex collection collection
-        return endpoint.getArango().db(database).graph(graph);
+        return endpoint.getArango().db(DbName.of(database)).graph(graph);
     }
 
     /**

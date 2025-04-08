@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 /**
  * A processor which adds a tag on the active {@link io.opentracing.Span} with an {@link org.apache.camel.Expression}
  */
+@Deprecated
 public class TagProcessor extends AsyncProcessorSupport implements Traceable, IdAware, RouteIdAware {
 
     private static final Logger LOG = LoggerFactory.getLogger(TagProcessor.class);
@@ -52,12 +53,14 @@ public class TagProcessor extends AsyncProcessorSupport implements Traceable, Id
     public boolean process(Exchange exchange, AsyncCallback callback) {
         try {
             OpenTracingSpanAdapter camelSpan = (OpenTracingSpanAdapter) ActiveSpanManager.getSpan(exchange);
-            Span span = camelSpan.getOpenTracingSpan();
-            if (span != null) {
-                String tag = expression.evaluate(exchange, String.class);
-                span.setTag(tagName, tag);
-            } else {
-                LOG.warn("OpenTracing: could not find managed span for exchange={}", exchange);
+            if (camelSpan != null) {
+                Span span = camelSpan.getOpenTracingSpan();
+                if (span != null) {
+                    String tag = expression.evaluate(exchange, String.class);
+                    span.setTag(tagName, tag);
+                } else {
+                    LOG.warn("OpenTracing: cannot find managed span for exchange={}", exchange);
+                }
             }
         } catch (Exception e) {
             exchange.setException(e);

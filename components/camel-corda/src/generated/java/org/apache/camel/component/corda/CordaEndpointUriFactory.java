@@ -19,28 +19,30 @@ public class CordaEndpointUriFactory extends org.apache.camel.support.component.
 
     private static final Set<String> PROPERTY_NAMES;
     private static final Set<String> SECRET_PROPERTY_NAMES;
+    private static final Set<String> MULTI_VALUE_PREFIXES;
     static {
         Set<String> props = new HashSet<>(15);
+        props.add("bridgeErrorHandler");
         props.add("contractStateClass");
+        props.add("exceptionHandler");
+        props.add("exchangePattern");
+        props.add("flowLogicArguments");
+        props.add("flowLogicClass");
+        props.add("lazyStartProducer");
+        props.add("node");
+        props.add("operation");
+        props.add("pageSpecification");
+        props.add("password");
         props.add("processSnapshot");
         props.add("queryCriteria");
-        props.add("flowLogicClass");
-        props.add("exchangePattern");
         props.add("sort");
-        props.add("node");
-        props.add("lazyStartProducer");
-        props.add("password");
-        props.add("bridgeErrorHandler");
-        props.add("pageSpecification");
-        props.add("exceptionHandler");
-        props.add("flowLogicArguments");
-        props.add("operation");
         props.add("username");
         PROPERTY_NAMES = Collections.unmodifiableSet(props);
         Set<String> secretProps = new HashSet<>(2);
         secretProps.add("password");
         secretProps.add("username");
         SECRET_PROPERTY_NAMES = Collections.unmodifiableSet(secretProps);
+        MULTI_VALUE_PREFIXES = Collections.emptySet();
     }
 
     @Override
@@ -68,6 +70,11 @@ public class CordaEndpointUriFactory extends org.apache.camel.support.component.
     @Override
     public Set<String> secretPropertyNames() {
         return SECRET_PROPERTY_NAMES;
+    }
+
+    @Override
+    public Set<String> multiValuePrefixes() {
+        return MULTI_VALUE_PREFIXES;
     }
 
     @Override

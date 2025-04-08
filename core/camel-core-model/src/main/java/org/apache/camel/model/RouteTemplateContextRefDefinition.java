@@ -33,10 +33,15 @@ import org.apache.camel.spi.Metadata;
 @XmlRootElement(name = "routeTemplateContextRef")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class RouteTemplateContextRefDefinition {
+
     @XmlAttribute(required = true)
     private String ref;
 
     public RouteTemplateContextRefDefinition() {
+    }
+
+    public RouteTemplateContextRefDefinition(String ref) {
+        this.ref = ref;
     }
 
     @Override

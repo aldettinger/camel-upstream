@@ -38,10 +38,21 @@ public class InOnlyConsumerQueueTest extends JmsTestSupport {
         mock.assertIsSatisfied();
     }
 
+    @Test
+    public void testTwoSynchronous() throws Exception {
+        MockEndpoint mock = getMockEndpoint(MOCK_RESULT);
+        mock.expectedBodiesReceived("Hello World", "Bye World");
+
+        template.sendBody(SJMS_QUEUE_NAME, "Hello World");
+        template.sendBody(SJMS_QUEUE_NAME, "Bye World");
+
+        mock.assertIsSatisfied();
+    }
+
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
-            public void configure() throws Exception {
+            public void configure() {
                 from(SJMS_QUEUE_NAME)
                         .to(MOCK_RESULT);
             }

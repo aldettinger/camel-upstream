@@ -36,8 +36,8 @@ import org.apache.johnzon.mapper.reflection.JohnzonParameterizedType;
 /**
  * Marshal POJOs to JSON and back using <a href="http://johnzon.apache.org/">Johnzon</a>
  */
-@Dataformat("json-johnzon")
-@Metadata(includeProperties = "unmarshalTypeName,objectMapper,prettyPrint")
+@Dataformat("johnzon")
+@Metadata(includeProperties = "unmarshalType,unmarshalTypeName,objectMapper,prettyPrint")
 public class JohnzonDataFormat extends ServiceSupport implements DataFormat, DataFormatName, CamelContextAware {
 
     private CamelContext camelContext;
@@ -107,7 +107,7 @@ public class JohnzonDataFormat extends ServiceSupport implements DataFormat, Dat
 
     @Override
     public String getDataFormatName() {
-        return "json-johnzon";
+        return "johnzon";
     }
 
     public Mapper getObjectMapper() {

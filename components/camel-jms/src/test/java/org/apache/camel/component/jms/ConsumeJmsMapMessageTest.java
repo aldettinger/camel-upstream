@@ -66,7 +66,7 @@ public class ConsumeJmsMapMessageTest extends CamelTestSupport {
         Exchange exchange = endpoint.getReceivedExchanges().get(0);
         // This should be a JMS Exchange
         assertNotNull(ExchangeHelper.getBinding(exchange, JmsBinding.class));
-        JmsMessage in = (JmsMessage) exchange.getIn();
+        JmsMessage in = exchange.getIn(JmsMessage.class);
         assertNotNull(in);
 
         Map<?, ?> map = exchange.getIn().getBody(Map.class);
@@ -113,9 +113,9 @@ public class ConsumeJmsMapMessageTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
-            public void configure() throws Exception {
+            public void configure() {
                 from("activemq:test.map").to("mock:result");
                 from("direct:test").to("activemq:test.map");
             }

@@ -25,6 +25,8 @@ import org.apache.abdera.model.Entry;
 import org.apache.abdera.model.Feed;
 import org.apache.camel.component.feed.EntryFilter;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -32,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 /**
  * Unit test for UpdatedDateFilter
  */
+@DisabledOnOs(OS.AIX)
 public class UpdatedDateFilterTest {
 
     @Test
@@ -50,7 +53,7 @@ public class UpdatedDateFilterTest {
         // must reverse backwards
         for (int i = entries.size() - 1; i > 0; i--) {
             Entry entry = entries.get(i);
-            boolean valid = filter.isValidEntry(null, doc, entry);
+            boolean valid = filter.isValidEntry(entry);
             // only the 3 last should be true
             if (i > 3) {
                 assertEquals(false, valid, "not valid");

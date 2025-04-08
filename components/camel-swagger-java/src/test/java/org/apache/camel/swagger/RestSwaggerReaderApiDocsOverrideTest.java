@@ -42,10 +42,10 @@ public class RestSwaggerReaderApiDocsOverrideTest extends CamelTestSupport {
     private DummyRestConsumerFactory factory = new DummyRestConsumerFactory();
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 rest("/hello").apiDocs(false).consumes("application/json").produces("application/json").get("/hi/{name}")
                         .description("Saying hi").param().name("name")
                         .type(RestParamType.path).dataType("string").description("Who is it").endParam().to("log:hi")
@@ -69,7 +69,7 @@ public class RestSwaggerReaderApiDocsOverrideTest extends CamelTestSupport {
         RestSwaggerReader reader = new RestSwaggerReader();
 
         Swagger swagger
-                = reader.read(context.getRestDefinitions(), null, config, context.getName(), new DefaultClassResolver());
+                = reader.read(context, context.getRestDefinitions(), config, context.getName(), new DefaultClassResolver());
         assertNotNull(swagger);
 
         ObjectMapper mapper = new ObjectMapper();

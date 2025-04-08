@@ -1,11 +1,12 @@
-[[csimple-joor-other]]
 = CSimple jOOR Component
-:docTitle: CSimple jOOR
-:artifactId: camel-csimple-joor
+:doctitle: CSimple jOOR
+:shortname: csimple-joor
+:artifactid: camel-csimple-joor
 :description: jOOR compiler for csimple language
 :since: 3.7
-:supportLevel: Stable
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/others/csimple-joor.adoc[opts=optional]
+:supportlevel: Stable
+//Manually maintained attributes
+:camel-spring-boot-name: csimple-joor
 
 *Since Camel {since}*
 
@@ -44,3 +45,5 @@ the download page for the latest versions).
   <version>x.x.x</version>
 </dependency>
 ---------------------------------------
+
+include::spring-boot:partial$starter.adoc[]

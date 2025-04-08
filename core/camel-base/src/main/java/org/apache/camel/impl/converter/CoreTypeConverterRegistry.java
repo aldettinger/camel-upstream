@@ -33,7 +33,6 @@ import org.apache.camel.TypeConversionException;
 import org.apache.camel.TypeConverter;
 import org.apache.camel.TypeConverterExists;
 import org.apache.camel.TypeConverterExistsException;
-import org.apache.camel.TypeConverters;
 import org.apache.camel.converter.ObjectConverter;
 import org.apache.camel.spi.BulkTypeConverters;
 import org.apache.camel.spi.CamelLogger;
@@ -74,8 +73,8 @@ public class CoreTypeConverterRegistry extends ServiceSupport implements TypeCon
     protected final LongAdder hitCounter = new LongAdder();
     protected final LongAdder failedCounter = new LongAdder();
 
-    protected TypeConverterExists typeConverterExists = TypeConverterExists.Override;
-    protected LoggingLevel typeConverterExistsLoggingLevel = LoggingLevel.WARN;
+    protected TypeConverterExists typeConverterExists = TypeConverterExists.Ignore;
+    protected LoggingLevel typeConverterExistsLoggingLevel = LoggingLevel.DEBUG;
 
     // to keep track of number of converters in the bulked classes
     private int sumBulkTypeConverters;
@@ -154,7 +153,7 @@ public class CoreTypeConverterRegistry extends ServiceSupport implements TypeCon
                             new IllegalArgumentException("Cannot convert type: " + value.getClass().getName() + " to boolean"));
                 }
                 return (T) answer;
-            } else if (type == Boolean.class && (value instanceof String)) {
+            } else if (type == Boolean.class && value instanceof String) {
                 // String -> Boolean
                 String str = (String) value;
                 // must be 4 or 5 in length
@@ -224,7 +223,7 @@ public class CoreTypeConverterRegistry extends ServiceSupport implements TypeCon
                             new IllegalArgumentException("Cannot convert type: " + value.getClass().getName() + " to boolean"));
                 }
                 return (T) answer;
-            } else if (type == Boolean.class && (value instanceof String)) {
+            } else if (type == Boolean.class && value instanceof String) {
                 // String -> Boolean
                 String str = (String) value;
                 // must be 4 or 5 in length
@@ -298,7 +297,7 @@ public class CoreTypeConverterRegistry extends ServiceSupport implements TypeCon
                             new IllegalArgumentException("Cannot convert type: " + value.getClass().getName() + " to boolean"));
                 }
                 return (T) answer;
-            } else if (type == Boolean.class && (value instanceof String)) {
+            } else if (type == Boolean.class && value instanceof String) {
                 // String -> Boolean
                 String str = (String) value;
                 // must be 4 or 5 in length
@@ -351,11 +350,15 @@ public class CoreTypeConverterRegistry extends ServiceSupport implements TypeCon
     protected Object doConvertTo(
             final Class<?> type, final Exchange exchange, final Object value,
             final boolean mandatory, final boolean tryConvert) {
+
+        boolean statisticsEnabled = !tryConvert && statistics.isStatisticsEnabled(); // we only capture if not try-convert in use
+
         Object answer;
         try {
             answer = doConvertTo(type, exchange, value, tryConvert);
         } catch (Exception e) {
-            if (statistics.isStatisticsEnabled()) {
+            // only record if not try
+            if (statisticsEnabled) {
                 failedCounter.increment();
             }
             if (tryConvert) {
@@ -374,12 +377,12 @@ public class CoreTypeConverterRegistry extends ServiceSupport implements TypeCon
         }
         if (answer == TypeConverter.MISS_VALUE) {
             // Could not find suitable conversion
-            if (statistics.isStatisticsEnabled()) {
+            if (statisticsEnabled) {
                 missCounter.increment();
             }
             return null;
         } else {
-            if (statistics.isStatisticsEnabled()) {
+            if (statisticsEnabled) {
                 hitCounter.increment();
             }
             return answer;
@@ -391,7 +394,7 @@ public class CoreTypeConverterRegistry extends ServiceSupport implements TypeCon
             final boolean tryConvert)
             throws Exception {
         boolean trace = LOG.isTraceEnabled();
-        boolean statisticsEnabled = statistics.isStatisticsEnabled();
+        boolean statisticsEnabled = !tryConvert && statistics.isStatisticsEnabled(); // we only capture if not try-convert in use
 
         if (trace) {
             LOG.trace("Finding type converter to convert {} -> {} with value: {}",
@@ -455,11 +458,9 @@ public class CoreTypeConverterRegistry extends ServiceSupport implements TypeCon
                         type);
             }
             Object rc;
-            if (tryConvert) {
-                rc = bulk.convertTo(value.getClass(), type, exchange, value);
-            } else {
-                rc = bulk.convertTo(value.getClass(), type, exchange, value);
-            }
+
+            rc = bulk.convertTo(value.getClass(), type, exchange, value);
+
             if (rc != null) {
                 return rc;
             }
@@ -580,9 +581,15 @@ public class CoreTypeConverterRegistry extends ServiceSupport implements TypeCon
     public void addTypeConverter(Class<?> toType, Class<?> fromType, TypeConverter typeConverter) {
         LOG.trace("Adding type converter: {}", typeConverter);
         TypeConverter converter = typeMappings.get(toType, fromType);
+
+        if (converter == MISS_CONVERTER) {
+            // we have previously attempted to convert but missed so add this converter
+            typeMappings.put(toType, fromType, typeConverter);
+            return;
+        }
+
         // only override it if its different
         // as race conditions can lead to many threads trying to promote the same fallback converter
-
         if (typeConverter != converter) {
 
             // add the converter unless we should ignore
@@ -615,7 +622,7 @@ public class CoreTypeConverterRegistry extends ServiceSupport implements TypeCon
     }
 
     @Override
-    public void addTypeConverters(TypeConverters typeConverters) {
+    public void addTypeConverters(Object typeConverters) {
         throw new UnsupportedOperationException();
     }
 

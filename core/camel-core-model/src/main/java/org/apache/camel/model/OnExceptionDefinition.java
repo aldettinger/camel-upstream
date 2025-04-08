@@ -33,7 +33,6 @@ import org.apache.camel.LoggingLevel;
 import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.ExpressionBuilder;
-import org.apache.camel.processor.errorhandler.RedeliveryPolicy;
 import org.apache.camel.spi.AsPredicate;
 import org.apache.camel.spi.Metadata;
 import org.apache.camel.support.ExpressionToPredicateAdapter;
@@ -46,34 +45,7 @@ import org.apache.camel.util.ObjectHelper;
 @XmlRootElement(name = "onException")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class OnExceptionDefinition extends OutputDefinition<OnExceptionDefinition> {
-    @XmlElement(name = "exception", required = true)
-    private List<String> exceptions = new ArrayList<>();
-    @XmlElement(name = "onWhen")
-    @AsPredicate
-    private WhenDefinition onWhen;
-    @XmlElement(name = "retryWhile")
-    @AsPredicate
-    private ExpressionSubElementDefinition retryWhile;
-    @XmlElement(name = "redeliveryPolicy")
-    private RedeliveryPolicyDefinition redeliveryPolicyType;
-    @XmlAttribute(name = "redeliveryPolicyRef")
-    private String redeliveryPolicyRef;
-    @XmlElement(name = "handled")
-    @AsPredicate
-    private ExpressionSubElementDefinition handled;
-    @XmlElement(name = "continued")
-    @AsPredicate
-    private ExpressionSubElementDefinition continued;
-    @XmlAttribute(name = "onRedeliveryRef")
-    private String onRedeliveryRef;
-    @XmlAttribute(name = "onExceptionOccurredRef")
-    private String onExceptionOccurredRef;
-    @XmlAttribute(name = "useOriginalMessage")
-    @Metadata(javaType = "java.lang.Boolean")
-    private String useOriginalMessage;
-    @XmlAttribute(name = "useOriginalBody")
-    @Metadata(javaType = "java.lang.Boolean")
-    private String useOriginalBody;
+
     @XmlTransient
     private Predicate handledPolicy;
     @XmlTransient
@@ -86,6 +58,40 @@ public class OnExceptionDefinition extends OutputDefinition<OnExceptionDefinitio
     private Processor onExceptionOccurred;
     @XmlTransient
     private boolean routeScoped = true;
+
+    @XmlElement(name = "exception", required = true)
+    private List<String> exceptions = new ArrayList<>();
+    @XmlElement(name = "onWhen")
+    @AsPredicate
+    private WhenDefinition onWhen;
+    @XmlElement(name = "retryWhile")
+    @AsPredicate
+    @Metadata(label = "advanced")
+    private ExpressionSubElementDefinition retryWhile;
+    @XmlElement(name = "redeliveryPolicy")
+    private RedeliveryPolicyDefinition redeliveryPolicyType;
+    @XmlAttribute(name = "redeliveryPolicyRef")
+    @Metadata(label = "advanced")
+    private String redeliveryPolicyRef;
+    @XmlElement(name = "handled")
+    @AsPredicate
+    private ExpressionSubElementDefinition handled;
+    @XmlElement(name = "continued")
+    @AsPredicate
+    @Metadata(label = "advanced")
+    private ExpressionSubElementDefinition continued;
+    @XmlAttribute(name = "onRedeliveryRef")
+    @Metadata(label = "advanced")
+    private String onRedeliveryRef;
+    @XmlAttribute(name = "onExceptionOccurredRef")
+    @Metadata(label = "advanced")
+    private String onExceptionOccurredRef;
+    @XmlAttribute(name = "useOriginalMessage")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
+    private String useOriginalMessage;
+    @XmlAttribute(name = "useOriginalBody")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
+    private String useOriginalBody;
 
     public OnExceptionDefinition() {
     }
@@ -365,9 +371,8 @@ public class OnExceptionDefinition extends OutputDefinition<OnExceptionDefinitio
     }
 
     /**
-     * Allow synchronous delayed redelivery.
+     * Allow asynchronous delayed redelivery.
      *
-     * @see    RedeliveryPolicy#setAsyncDelayedRedelivery(boolean)
      * @return the builder
      */
     public OnExceptionDefinition asyncDelayedRedelivery() {
@@ -376,7 +381,7 @@ public class OnExceptionDefinition extends OutputDefinition<OnExceptionDefinitio
     }
 
     /**
-     * Sets the logging level to use when retries has exhausted
+     * Sets the logging level to use when retries have been exhausted
      *
      * @param  retriesExhaustedLogLevel the logging level
      * @return                          the builder
@@ -624,7 +629,7 @@ public class OnExceptionDefinition extends OutputDefinition<OnExceptionDefinitio
     }
 
     /**
-     * Sets a reference to a {@link RedeliveryPolicy} to lookup in the {@link org.apache.camel.spi.Registry} to be used.
+     * Sets a reference to a redelivery policy to lookup in the {@link org.apache.camel.spi.Registry} to be used.
      *
      * @param  redeliveryPolicyRef reference to use for lookup
      * @return                     the builder
@@ -668,7 +673,7 @@ public class OnExceptionDefinition extends OutputDefinition<OnExceptionDefinitio
      * are connected using internal endpoints such as direct or seda. When messages is passed via external endpoints
      * such as JMS or HTTP then the consumer will create a new unit of work, with the message it received as input as
      * the original input. Also some EIP patterns such as splitter, multicast, will create a new unit of work boundary
-     * for the messages in their sub-route (eg the splitted message); however these EIPs have an option named
+     * for the messages in their sub-route (eg the split message); however these EIPs have an option named
      * <tt>shareUnitOfWork</tt> which allows to combine with the parent unit of work in regard to error handling and
      * therefore use the parent original message.
      * <p/>
@@ -705,7 +710,7 @@ public class OnExceptionDefinition extends OutputDefinition<OnExceptionDefinitio
      * are connected using internal endpoints such as direct or seda. When messages is passed via external endpoints
      * such as JMS or HTTP then the consumer will create a new unit of work, with the message it received as input as
      * the original input. Also some EIP patterns such as splitter, multicast, will create a new unit of work boundary
-     * for the messages in their sub-route (eg the splitted message); however these EIPs have an option named
+     * for the messages in their sub-route (eg the split message); however these EIPs have an option named
      * <tt>shareUnitOfWork</tt> which allows to combine with the parent unit of work in regard to error handling and
      * therefore use the parent original message.
      * <p/>

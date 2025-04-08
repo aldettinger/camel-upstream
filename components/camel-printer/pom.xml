@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>components</artifactId>
-        <version>3.9.0-SNAPSHOT</version>
+        <version>3.18.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>camel-printer</artifactId>
@@ -79,20 +79,22 @@
             </plugin>
         </plugins>
     </build>
-
-    <!-- skip tests on AIX -->
     <profiles>
         <profile>
-            <id>aix</id>
+            <id>jdk17-build</id>
             <activation>
-                <os>
-                    <family>AIX</family>
-                </os>
+                <jdk>[17,)</jdk>
             </activation>
-            <properties>
-                <skipTests>true</skipTests>
-            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <argLine>--add-opens java.desktop/sun.awt=ALL-UNNAMED --add-opens java.desktop/javax.print=ALL-UNNAMED</argLine>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
-
 </project>

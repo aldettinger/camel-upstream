@@ -26,9 +26,12 @@ import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.test.junit5.params.Test;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 import static org.apache.camel.test.junit5.TestSupport.deleteDirectory;
 
+@DisabledOnOs({ OS.AIX, OS.OTHER })
 public class LevelDBAggregateRecoverWithSedaTest extends LevelDBTestSupport {
 
     private static Map<SerializerType, AtomicInteger> counters = new ConcurrentHashMap();
@@ -70,10 +73,10 @@ public class LevelDBAggregateRecoverWithSedaTest extends LevelDBTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 // enable recovery
                 LevelDBAggregationRepository repo = getRepo();
                 repo.setUseRecovery(true);
@@ -93,7 +96,7 @@ public class LevelDBAggregateRecoverWithSedaTest extends LevelDBTestSupport {
                         .delay(1000)
                         // simulate errors the first two times
                         .process(new Processor() {
-                            public void process(Exchange exchange) throws Exception {
+                            public void process(Exchange exchange) {
                                 int count = getCounter(getSerializerType()).incrementAndGet();
                                 if (count <= 2) {
                                     throw new IllegalArgumentException("Damn");

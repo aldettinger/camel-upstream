@@ -22,6 +22,7 @@ import org.apache.camel.model.language.ConstantExpression;
 import org.apache.camel.model.language.ExchangePropertyExpression;
 import org.apache.camel.model.language.HeaderExpression;
 import org.apache.camel.model.language.JoorExpression;
+import org.apache.camel.model.language.JqExpression;
 import org.apache.camel.model.language.JsonPathExpression;
 import org.apache.camel.model.language.LanguageExpression;
 import org.apache.camel.model.language.MethodCallExpression;
@@ -146,6 +147,30 @@ public final class Builder {
     /**
      * Returns a constant expression
      */
+    public static ValueBuilder constant(String value, Class<?> resultType) {
+        ConstantExpression exp = new ConstantExpression(value);
+        exp.setResultType(resultType);
+        return new ValueBuilder(exp);
+    }
+
+    /**
+     * Returns a constant expression
+     */
+    public static ValueBuilder constant(Object value, boolean trim) {
+        Expression exp;
+        if (value instanceof String) {
+            ConstantExpression ce = new ConstantExpression((String) value);
+            ce.setTrim(trim ? "true" : "false");
+            exp = ce;
+        } else {
+            exp = ExpressionBuilder.constantExpression(value);
+        }
+        return new ValueBuilder(exp);
+    }
+
+    /**
+     * Returns a constant expression
+     */
     public static ValueBuilder language(String language, String expression) {
         Expression exp = new LanguageExpression(language, expression);
         return new ValueBuilder(exp);
@@ -198,6 +223,23 @@ public final class Builder {
      */
     public static ValueBuilder joor(String value, Class<?> resultType) {
         JoorExpression exp = new JoorExpression(value);
+        exp.setResultType(resultType);
+        return new ValueBuilder(exp);
+    }
+
+    /**
+     * Returns a JQ expression value builder
+     */
+    public static ValueBuilder jq(String value) {
+        JqExpression exp = new JqExpression(value);
+        return new ValueBuilder(exp);
+    }
+
+    /**
+     * Returns a JQ expression value builder
+     */
+    public static ValueBuilder jq(String value, Class<?> resultType) {
+        JqExpression exp = new JqExpression(value);
         exp.setResultType(resultType);
         return new ValueBuilder(exp);
     }

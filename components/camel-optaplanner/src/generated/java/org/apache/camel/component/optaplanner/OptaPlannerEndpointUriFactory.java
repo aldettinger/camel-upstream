@@ -19,20 +19,22 @@ public class OptaPlannerEndpointUriFactory extends org.apache.camel.support.comp
 
     private static final Set<String> PROPERTY_NAMES;
     private static final Set<String> SECRET_PROPERTY_NAMES;
+    private static final Set<String> MULTI_VALUE_PREFIXES;
     static {
         Set<String> props = new HashSet<>(10);
         props.add("async");
-        props.add("lazyStartProducer");
         props.add("bridgeErrorHandler");
-        props.add("threadPoolSize");
         props.add("configFile");
-        props.add("exchangePattern");
-        props.add("useSolverManager");
-        props.add("solverId");
-        props.add("problemId");
         props.add("exceptionHandler");
+        props.add("exchangePattern");
+        props.add("lazyStartProducer");
+        props.add("problemId");
+        props.add("solverId");
+        props.add("threadPoolSize");
+        props.add("useSolverManager");
         PROPERTY_NAMES = Collections.unmodifiableSet(props);
         SECRET_PROPERTY_NAMES = Collections.emptySet();
+        MULTI_VALUE_PREFIXES = Collections.emptySet();
     }
 
     @Override
@@ -60,6 +62,11 @@ public class OptaPlannerEndpointUriFactory extends org.apache.camel.support.comp
     @Override
     public Set<String> secretPropertyNames() {
         return SECRET_PROPERTY_NAMES;
+    }
+
+    @Override
+    public Set<String> multiValuePrefixes() {
+        return MULTI_VALUE_PREFIXES;
     }
 
     @Override

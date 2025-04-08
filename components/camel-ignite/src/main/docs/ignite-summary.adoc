@@ -1,7 +1,9 @@
 = Ignite endpoints Component
 //attributes written by hand, not generated
-:docTitle: Ignite
+:doctitle: Ignite
 :since: 2.17
+:shortname: ignite
+:artifactid: camel-ignite
 
 *Since Camel {since}*
 
@@ -10,11 +12,11 @@ https://ignite.apache.org/[Apache Ignite] In-Memory Data Fabric is a high-perfor
 image::apache-ignite.png[]
 
 
-== {docTitle} components
+== {doctitle} components
 
 See the following for usage of each component:
 
-indexDescriptionList::[attributes='group={docTitle}',descAttribute=description]
+indexDescriptionList::[attributes='group={doctitle}',descriptionformat=description]
 
 == Installation
 
@@ -107,4 +109,6 @@ When installing on Apache Karaf:
 Please refer to the OSGi section in the Ignite documentation for more information.
 
 
-include::camel-spring-boot::page$ignite-starter.adoc[]
+:camel-spring-boot-name: ignite
+
+include::spring-boot:partial$starter.adoc[]

@@ -29,12 +29,14 @@ import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriPath;
 import org.apache.camel.support.DefaultEndpoint;
 import org.apache.commons.validator.routines.DomainValidator;
+import org.apache.commons.validator.routines.InetAddressValidator;
 
 /**
  * The splunk component allows to publish events in Splunk using the HTTP Event Collector.
  */
 @UriEndpoint(firstVersion = "3.3.0", scheme = "splunk-hec", title = "Splunk HEC", producerOnly = true,
-             syntax = "splunk-hec:splunkURL/token", category = { Category.LOG, Category.MONITORING })
+             syntax = "splunk-hec:splunkURL/token", category = { Category.LOG, Category.MONITORING },
+             headersClass = SplunkHECConstants.class)
 public class SplunkHECEndpoint extends DefaultEndpoint {
 
     private static final Pattern URI_PARSER
@@ -56,14 +58,20 @@ public class SplunkHECEndpoint extends DefaultEndpoint {
         super(uri, component);
         this.configuration = configuration;
         Matcher match = URI_PARSER.matcher(uri);
-        if (!match.matches() || !DomainValidator.getInstance(true).isValid(match.group(1))) {
+        if (!match.matches()) {
             throw new IllegalArgumentException("Invalid URI: " + uri);
         }
+        String hostname = match.group(1);
         int port = Integer.parseInt(match.group(2));
+
+        if (!DomainValidator.getInstance(true).isValid(hostname)
+                && !InetAddressValidator.getInstance().isValidInet4Address(hostname)) {
+            throw new IllegalArgumentException("Invalid hostname: " + hostname);
+        }
         if (port < 1 || port > 65535) {
             throw new IllegalArgumentException("Invalid port: " + port);
         }
-        splunkURL = match.group(1) + ":" + port;
+        splunkURL = hostname + ":" + port;
         token = match.group(3);
     }
 

@@ -187,15 +187,16 @@ public final class IntrospectionSupport {
         String name = method.getName();
         Class<?> type = method.getReturnType();
         int parameterCount = method.getParameterCount();
+        Class<?> self = method.getDeclaringClass();
 
         // is it a setXXX method
         boolean validName = name.startsWith("set") && name.length() >= 4 && Character.isUpperCase(name.charAt(3));
         if (validName && parameterCount == 1) {
             // a setXXX can also be a builder pattern so check for its return type is itself
-            return type.equals(Void.TYPE) || allowBuilderPattern && method.getDeclaringClass().isAssignableFrom(type);
+            return type.equals(Void.TYPE) || allowBuilderPattern && ObjectHelper.isSubclass(self, type);
         }
         // or if its a builder method
-        if (allowBuilderPattern && parameterCount == 1 && method.getDeclaringClass().isAssignableFrom(type)) {
+        if (allowBuilderPattern && parameterCount == 1 && ObjectHelper.isSubclass(self, type)) {
             return true;
         }
 
@@ -654,7 +655,7 @@ public final class IntrospectionSupport {
             if (obj instanceof Map) {
                 Map map = (Map) obj;
                 if (context != null && refName != null && value == null) {
-                    String s = StringHelper.replaceAll(refName, "#", "");
+                    String s = refName.replace("#", "");
                     value = CamelContextHelper.lookup(context, s);
                 }
                 map.put(lookupKey, value);
@@ -662,7 +663,7 @@ public final class IntrospectionSupport {
             } else if (obj instanceof List) {
                 List list = (List) obj;
                 if (context != null && refName != null && value == null) {
-                    String s = StringHelper.replaceAll(refName, "#", "");
+                    String s = refName.replace("#", "");
                     value = CamelContextHelper.lookup(context, s);
                 }
                 if (isNotEmpty(lookupKey)) {
@@ -692,7 +693,7 @@ public final class IntrospectionSupport {
                 return true;
             } else if (obj.getClass().isArray() && lookupKey != null) {
                 if (context != null && refName != null && value == null) {
-                    String s = StringHelper.replaceAll(refName, "#", "");
+                    String s = refName.replace("#", "");
                     value = CamelContextHelper.lookup(context, s);
                 }
                 int idx = Integer.parseInt(lookupKey);
@@ -748,7 +749,7 @@ public final class IntrospectionSupport {
             Object ref = value;
             // try and lookup the reference based on the method
             if (context != null && refName != null && ref == null) {
-                String s = StringHelper.replaceAll(refName, "#", "");
+                String s = refName.replace("#", "");
                 ref = CamelContextHelper.lookup(context, s);
                 if (ref == null) {
                     // try the next method if nothing was found
@@ -830,10 +831,9 @@ public final class IntrospectionSupport {
             } catch (IllegalArgumentException e) {
                 typeConversionFailed = e;
             }
-            if (LOG.isTraceEnabled()) {
-                LOG.trace("Setter \"{}\" with parameter type \"{}\" could not be used for type conversions of {}",
-                        new Object[] { setter, parameterType, ref });
-            }
+
+            LOG.trace("Setter \"{}\" with parameter type \"{}\" could not be used for type conversions of {}",
+                    setter, parameterType, ref);
         }
 
         if (typeConversionFailed != null && !isPropertyPlaceholder(context, value)) {

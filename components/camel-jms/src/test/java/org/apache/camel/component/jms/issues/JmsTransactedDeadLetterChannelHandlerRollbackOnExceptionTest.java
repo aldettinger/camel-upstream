@@ -21,6 +21,7 @@ import javax.jms.ConnectionFactory;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Handler;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.jms.CamelJmsTestHelper;
 import org.apache.camel.component.jms.JmsComponent;
@@ -34,8 +35,8 @@ public class JmsTransactedDeadLetterChannelHandlerRollbackOnExceptionTest extend
 
     public static class BadErrorHandler {
         @Handler
-        public void onException(Exchange exchange, Exception exception) throws Exception {
-            throw new RuntimeException("error in errorhandler");
+        public void onException(Exchange exchange, Exception exception) {
+            throw new RuntimeCamelException("error in errorhandler");
         }
     }
 
@@ -46,10 +47,10 @@ public class JmsTransactedDeadLetterChannelHandlerRollbackOnExceptionTest extend
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 // we use DLC to handle the exception but if it throw a new exception
                 // then the DLC handles that too (the transaction will always commit)
                 errorHandler(deadLetterChannel("bean:" + BadErrorHandler.class.getName())
@@ -58,13 +59,13 @@ public class JmsTransactedDeadLetterChannelHandlerRollbackOnExceptionTest extend
 
                 from(testingEndpoint)
                         .log("Incoming JMS message ${body}")
-                        .throwException(new RuntimeException("bad error"));
+                        .throwException(new RuntimeCamelException("bad error"));
             }
         };
     }
 
     @Test
-    public void shouldNotLoseMessagesOnExceptionInErrorHandler() throws Exception {
+    public void shouldNotLoseMessagesOnExceptionInErrorHandler() {
         template.sendBody(testingEndpoint, "Hello World");
 
         // as we handle new exception, then the exception is ignored

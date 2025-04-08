@@ -46,12 +46,7 @@ public class DefaultHttpRegistry implements HttpRegistry {
      * Lookup or create a new registry if none exists with the given name
      */
     public static synchronized HttpRegistry getHttpRegistry(String name) {
-        HttpRegistry answer = registries.get(name);
-        if (answer == null) {
-            answer = new DefaultHttpRegistry();
-            registries.put(name, answer);
-        }
-        return answer;
+        return registries.computeIfAbsent(name, k -> new DefaultHttpRegistry());
     }
 
     /**
@@ -92,10 +87,6 @@ public class DefaultHttpRegistry implements HttpRegistry {
         CamelServlet camelServlet = provider;
         camelServlet.setServletName((String) properties.get("servlet-name"));
         register(camelServlet);
-    }
-
-    public void unregister(HttpRegistryProvider provider, Map<String, Object> properties) {
-        unregister(provider);
     }
 
     @Override

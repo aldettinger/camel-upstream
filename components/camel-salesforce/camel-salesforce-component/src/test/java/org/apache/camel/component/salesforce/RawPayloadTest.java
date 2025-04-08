@@ -37,11 +37,12 @@ import org.eclipse.jetty.http.HttpHeader;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@Standalone
+@Tag("standalone")
 @Parameterized
 public class RawPayloadTest extends AbstractSalesforceTestBase {
 
@@ -69,7 +70,7 @@ public class RawPayloadTest extends AbstractSalesforceTestBase {
         // create the component
         SalesforceComponent component = new SalesforceComponent();
         final SalesforceEndpointConfig config = new SalesforceEndpointConfig();
-        config.setApiVersion(System.getProperty("apiVersion", salesforceApiVersionToUse()));
+        config.setApiVersion(System.getProperty("apiVersion", SalesforceEndpointConfig.DEFAULT_VERSION));
         component.setConfig(config);
 
         SalesforceLoginConfig dummyLoginConfig = new SalesforceLoginConfig();

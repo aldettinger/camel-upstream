@@ -79,7 +79,7 @@ public class ConsumeJmsBytesMessageTest extends CamelTestSupport {
         Exchange exchange = endpoint.getReceivedExchanges().get(0);
         // This should be a JMS Exchange
         assertNotNull(ExchangeHelper.getBinding(exchange, JmsBinding.class));
-        JmsMessage in = (JmsMessage) exchange.getIn();
+        JmsMessage in = exchange.getIn(JmsMessage.class);
         assertNotNull(in);
 
         byte[] bytes = exchange.getIn().getBody(byte[].class);
@@ -110,9 +110,9 @@ public class ConsumeJmsBytesMessageTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
-            public void configure() throws Exception {
+            public void configure() {
                 from("activemq:test.bytes").to("mock:result");
                 from("direct:test").to("activemq:test.bytes");
             }

@@ -30,12 +30,15 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.camel.AsyncCallback;
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangePattern;
+import org.apache.camel.ExtendedExchange;
+import org.apache.camel.Message;
 import org.apache.camel.http.common.CamelServlet;
 import org.apache.camel.http.common.HttpCommonEndpoint;
 import org.apache.camel.http.common.HttpConstants;
 import org.apache.camel.http.common.HttpConsumer;
 import org.apache.camel.http.common.HttpHelper;
 import org.apache.camel.http.common.HttpMessage;
+import org.apache.camel.spi.UnitOfWork;
 import org.apache.camel.support.ObjectHelper;
 import org.apache.camel.util.UnsafeUriCharactersEncoder;
 import org.eclipse.jetty.continuation.Continuation;
@@ -181,7 +184,9 @@ public class CamelContinuationServlet extends CamelServlet {
             }
 
             // a new request so create an exchange
-            final Exchange exchange = consumer.getEndpoint().createExchange(ExchangePattern.InOut);
+            // must be prototype scoped (not pooled) so we create the exchange via endpoint
+            final Exchange exchange = consumer.createExchange(false);
+            exchange.setPattern(ExchangePattern.InOut);
 
             if (consumer.getEndpoint().isBridgeEndpoint()) {
                 exchange.setProperty(Exchange.SKIP_GZIP_ENCODING, Boolean.TRUE);
@@ -193,10 +198,17 @@ public class CamelContinuationServlet extends CamelServlet {
 
             HttpHelper.setCharsetFromContentType(request.getContentType(), exchange);
 
-            exchange.setIn(new HttpMessage(exchange, consumer.getEndpoint(), request, response));
+            // reuse existing http message if pooled
+            Message msg = exchange.getIn();
+            if (msg instanceof HttpMessage) {
+                HttpMessage hm = (HttpMessage) msg;
+                hm.init(exchange, endpoint, request, response);
+            } else {
+                exchange.setIn(new HttpMessage(exchange, endpoint, request, response));
+            }
             // set context path as header
             String contextPath = consumer.getEndpoint().getPath();
-            exchange.getIn().setHeader("CamelServletContextPath", contextPath);
+            exchange.getIn().setHeader(JettyHttpConstants.SERVLET_CONTEXT_PATH, contextPath);
 
             updateHttpPath(exchange, contextPath);
 
@@ -206,11 +218,18 @@ public class CamelContinuationServlet extends CamelServlet {
             continuation.setAttribute(EXCHANGE_ATTRIBUTE_ID, exchange.getExchangeId());
 
             // we want to handle the UoW
-            try {
-                consumer.createUoW(exchange);
-            } catch (Exception e) {
-                log.error("Error processing request", e);
-                throw new ServletException(e);
+            UnitOfWork uow = exchange.getUnitOfWork();
+            if (uow == null) {
+                try {
+                    consumer.createUoW(exchange);
+                } catch (Exception e) {
+                    log.error("Error processing request", e);
+                    throw new ServletException(e);
+                }
+            } else if (uow.onPrepare(exchange)) {
+                // need to re-attach uow
+                ExtendedExchange ee = (ExtendedExchange) exchange;
+                ee.setUnitOfWork(uow);
             }
 
             // must suspend before we process the exchange
@@ -236,6 +255,7 @@ public class CamelContinuationServlet extends CamelServlet {
                         continuation.resume();
                     } else {
                         log.warn("Cannot resume expired continuation of exchangeId: {}", exchange.getExchangeId());
+                        consumer.releaseExchange(exchange, false);
                     }
                 }
             });
@@ -268,17 +288,18 @@ public class CamelContinuationServlet extends CamelServlet {
             throw new ServletException(e);
         } finally {
             consumer.doneUoW(result);
+            consumer.releaseExchange(result, false);
         }
     }
 
     private void updateHttpPath(Exchange exchange, String contextPath) {
-        String httpPath = (String) exchange.getIn().getHeader(Exchange.HTTP_PATH);
+        String httpPath = (String) exchange.getIn().getHeader(JettyHttpConstants.HTTP_PATH);
         // encode context path in case it contains unsafe chars, because HTTP_PATH isn't decoded at this moment
         String encodedContextPath = UnsafeUriCharactersEncoder.encodeHttpURI(contextPath);
 
         // here we just remove the CamelServletContextPath part from the HTTP_PATH
         if (contextPath != null && httpPath.startsWith(encodedContextPath)) {
-            exchange.getIn().setHeader(Exchange.HTTP_PATH, httpPath.substring(encodedContextPath.length()));
+            exchange.getIn().setHeader(JettyHttpConstants.HTTP_PATH, httpPath.substring(encodedContextPath.length()));
         }
     }
 

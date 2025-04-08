@@ -41,8 +41,14 @@ import org.apache.camel.spi.Metadata;
 @XmlAccessorType(XmlAccessType.FIELD)
 public class OnCompletionDefinition extends OutputDefinition<OnCompletionDefinition>
         implements ExecutorServiceAwareDefinition<OnCompletionDefinition> {
+
+    @XmlTransient
+    private ExecutorService executorServiceBean;
+    @XmlTransient
+    private boolean routeScoped = true;
+
     @XmlAttribute
-    @Metadata(javaType = "org.apache.camel.model.OnCompletionMode", defaultValue = "AfterConsumer",
+    @Metadata(label = "advanced", javaType = "org.apache.camel.model.OnCompletionMode", defaultValue = "AfterConsumer",
               enums = "AfterConsumer,BeforeConsumer")
     private String mode;
     @XmlAttribute
@@ -51,21 +57,18 @@ public class OnCompletionDefinition extends OutputDefinition<OnCompletionDefinit
     @XmlAttribute
     @Metadata(javaType = "java.lang.Boolean")
     private String onFailureOnly;
+    @XmlAttribute
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
+    private String parallelProcessing;
+    @XmlAttribute
+    @Metadata(label = "advanced", javaType = "java.util.concurrent.ExecutorService")
+    private String executorService;
+    @XmlAttribute(name = "useOriginalMessage")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
+    private String useOriginalMessage;
     @XmlElement(name = "onWhen")
     @AsPredicate
     private WhenDefinition onWhen;
-    @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
-    private String parallelProcessing;
-    @XmlAttribute
-    private String executorServiceRef;
-    @XmlAttribute(name = "useOriginalMessage")
-    @Metadata(javaType = "java.lang.Boolean")
-    private String useOriginalMessage;
-    @XmlTransient
-    private ExecutorService executorService;
-    @XmlTransient
-    private boolean routeScoped = true;
 
     public OnCompletionDefinition() {
     }
@@ -111,15 +114,16 @@ public class OnCompletionDefinition extends OutputDefinition<OnCompletionDefinit
     }
 
     /**
-     * Removes all existing {@link org.apache.camel.model.OnCompletionDefinition} from the definition.
+     * Removes all existing global {@link org.apache.camel.model.OnCompletionDefinition} from the definition.
      * <p/>
-     * This is used to let route scoped <tt>onCompletion</tt> overrule any global <tt>onCompletion</tt>. Hence we remove
-     * all existing as they are global.
+     * This is used to let route scoped <tt>onCompletion</tt> overrule any global <tt>onCompletion</tt>. Do not remove
+     * an existing route-scoped because it is now possible (CAMEL-16374) to have several.
      *
      * @param definition the parent definition that is the route
      */
     public void removeAllOnCompletionDefinition(ProcessorDefinition<?> definition) {
-        definition.getOutputs().removeIf(out -> out instanceof OnCompletionDefinition);
+        definition.getOutputs().removeIf(out -> out instanceof OnCompletionDefinition &&
+                !((OnCompletionDefinition) out).isRouteScoped());
     }
 
     @Override
@@ -225,7 +229,7 @@ public class OnCompletionDefinition extends OutputDefinition<OnCompletionDefinit
      */
     @Override
     public OnCompletionDefinition executorService(ExecutorService executorService) {
-        setExecutorService(executorService);
+        this.executorServiceBean = executorService;
         return this;
     }
 
@@ -234,8 +238,8 @@ public class OnCompletionDefinition extends OutputDefinition<OnCompletionDefinit
      * processing is automatic implied, and you do not have to enable that option as well.
      */
     @Override
-    public OnCompletionDefinition executorServiceRef(String executorServiceRef) {
-        setExecutorServiceRef(executorServiceRef);
+    public OnCompletionDefinition executorService(String executorService) {
+        setExecutorService(executorService);
         return this;
     }
 
@@ -272,6 +276,16 @@ public class OnCompletionDefinition extends OutputDefinition<OnCompletionDefinit
     @Override
     public void setOutputs(List<ProcessorDefinition<?>> outputs) {
         super.setOutputs(outputs);
+    }
+
+    @Override
+    public ExecutorService getExecutorServiceBean() {
+        return executorServiceBean;
+    }
+
+    @Override
+    public String getExecutorServiceRef() {
+        return executorService;
     }
 
     public String getMode() {
@@ -311,26 +325,6 @@ public class OnCompletionDefinition extends OutputDefinition<OnCompletionDefinit
         this.onWhen = onWhen;
     }
 
-    @Override
-    public ExecutorService getExecutorService() {
-        return executorService;
-    }
-
-    @Override
-    public void setExecutorService(ExecutorService executorService) {
-        this.executorService = executorService;
-    }
-
-    @Override
-    public String getExecutorServiceRef() {
-        return executorServiceRef;
-    }
-
-    @Override
-    public void setExecutorServiceRef(String executorServiceRef) {
-        this.executorServiceRef = executorServiceRef;
-    }
-
     public String getUseOriginalMessage() {
         return useOriginalMessage;
     }
@@ -352,4 +346,11 @@ public class OnCompletionDefinition extends OutputDefinition<OnCompletionDefinit
         this.parallelProcessing = parallelProcessing;
     }
 
+    public String getExecutorService() {
+        return executorService;
+    }
+
+    public void setExecutorService(String executorService) {
+        this.executorService = executorService;
+    }
 }

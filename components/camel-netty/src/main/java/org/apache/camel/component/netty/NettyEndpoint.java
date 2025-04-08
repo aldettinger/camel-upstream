@@ -18,17 +18,17 @@ package org.apache.camel.component.netty;
 
 import java.math.BigInteger;
 import java.security.Principal;
+import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
 
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
-import javax.security.cert.X509Certificate;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.ssl.SslHandler;
 import org.apache.camel.AsyncEndpoint;
 import org.apache.camel.Category;
 import org.apache.camel.Consumer;
-import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
@@ -39,10 +39,10 @@ import org.apache.camel.support.SynchronousDelegateProducer;
 import org.apache.camel.util.ObjectHelper;
 
 /**
- * Socket level networking using TCP or UDP with the Netty 4.x.
+ * Socket level networking using TCP or UDP with Netty 4.x.
  */
-@UriEndpoint(firstVersion = "2.14.0", scheme = "netty", title = "Netty", syntax = "netty:protocol:host:port",
-             category = { Category.NETWORKING, Category.TCP, Category.UDP })
+@UriEndpoint(firstVersion = "2.14.0", scheme = "netty", title = "Netty", syntax = "netty:protocol://host:port",
+             category = { Category.NETWORKING, Category.TCP, Category.UDP }, headersClass = NettyConstants.class)
 public class NettyEndpoint extends DefaultEndpoint implements AsyncEndpoint {
     @UriParam
     private NettyConfiguration configuration;
@@ -83,13 +83,6 @@ public class NettyEndpoint extends DefaultEndpoint implements AsyncEndpoint {
         }
     }
 
-    public Exchange createExchange(ChannelHandlerContext ctx, Object message) throws Exception {
-        Exchange exchange = createExchange();
-        updateMessageHeader(exchange.getIn(), ctx);
-        NettyPayloadHelper.setIn(exchange, message);
-        return exchange;
-    }
-
     @Override
     public NettyComponent getComponent() {
         return (NettyComponent) super.getComponent();
@@ -119,7 +112,7 @@ public class NettyEndpoint extends DefaultEndpoint implements AsyncEndpoint {
         return sslSession;
     }
 
-    protected void updateMessageHeader(Message in, ChannelHandlerContext ctx) {
+    public void updateMessageHeader(Message in, ChannelHandlerContext ctx) {
         in.setHeader(NettyConstants.NETTY_CHANNEL_HANDLER_CONTEXT, ctx);
         in.setHeader(NettyConstants.NETTY_REMOTE_ADDRESS, ctx.channel().remoteAddress());
         in.setHeader(NettyConstants.NETTY_LOCAL_ADDRESS, ctx.channel().localAddress());
@@ -146,9 +139,13 @@ public class NettyEndpoint extends DefaultEndpoint implements AsyncEndpoint {
      */
     protected void enrichWithClientCertInformation(SSLSession sslSession, Message message) {
         try {
-            X509Certificate[] certificates = sslSession.getPeerCertificateChain();
+
+            Certificate[] certificates = sslSession.getPeerCertificates();
             if (certificates != null && certificates.length > 0) {
-                X509Certificate cert = certificates[0];
+                if (!(certificates[0] instanceof X509Certificate)) {
+                    return;
+                }
+                X509Certificate cert = (X509Certificate) certificates[0];
 
                 Principal subject = cert.getSubjectDN();
                 if (subject != null) {

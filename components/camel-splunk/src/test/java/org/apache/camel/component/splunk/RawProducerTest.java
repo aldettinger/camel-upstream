@@ -66,6 +66,7 @@ public class RawProducerTest extends SplunkMockTestSupport {
         when(service.getIndexes()).thenReturn(indexColl);
         when(service.getInputs()).thenReturn(inputCollection);
         when(input.attach()).thenReturn(socket);
+        when(input.getHost()).thenReturn("localhost");
         when(inputCollection.get(anyString())).thenReturn(input);
         when(indexColl.get(anyString())).thenReturn(index);
         when(index.attach(isA(Args.class))).thenReturn(socket);
@@ -100,7 +101,7 @@ public class RawProducerTest extends SplunkMockTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             public void configure() {
                 from("direct:stream").to(

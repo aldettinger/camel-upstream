@@ -60,6 +60,7 @@ import org.apache.camel.management.mbean.ManagedCamelContext;
 import org.apache.camel.management.mbean.ManagedConsumerCache;
 import org.apache.camel.management.mbean.ManagedEndpoint;
 import org.apache.camel.management.mbean.ManagedEndpointRegistry;
+import org.apache.camel.management.mbean.ManagedExchangeFactoryManager;
 import org.apache.camel.management.mbean.ManagedInflightRepository;
 import org.apache.camel.management.mbean.ManagedProducerCache;
 import org.apache.camel.management.mbean.ManagedRestRegistry;
@@ -86,6 +87,7 @@ import org.apache.camel.spi.ConsumerCache;
 import org.apache.camel.spi.DataFormat;
 import org.apache.camel.spi.EndpointRegistry;
 import org.apache.camel.spi.EventNotifier;
+import org.apache.camel.spi.ExchangeFactoryManager;
 import org.apache.camel.spi.InflightRepository;
 import org.apache.camel.spi.InternalProcessor;
 import org.apache.camel.spi.LifecycleStrategy;
@@ -202,9 +204,9 @@ public class JmxManagementLifecycleStrategy extends ServiceSupport implements Li
                                                                  + " Make sure to use unique names on CamelContext when using multiple CamelContexts in the same MBeanServer.",
                                 context);
                     } else {
-                        LOG.warn("This CamelContext(" + context.getName() + ") will be registered using the name: "
-                                 + managementName
-                                 + " due to clash with an existing name already registered in MBeanServer.");
+                        LOG.warn("This CamelContext({}) will be registered using the name: {} due to clash with an "
+                                 + "existing name already registered in MBeanServer.",
+                                context.getName(), managementName);
                     }
                 }
             }
@@ -537,6 +539,8 @@ public class JmxManagementLifecycleStrategy extends ServiceSupport implements Li
             answer = new ManagedConsumerCache(context, (ConsumerCache) service);
         } else if (service instanceof ProducerCache) {
             answer = new ManagedProducerCache(context, (ProducerCache) service);
+        } else if (service instanceof ExchangeFactoryManager) {
+            answer = new ManagedExchangeFactoryManager(context, (ExchangeFactoryManager) service);
         } else if (service instanceof EndpointRegistry) {
             answer = new ManagedEndpointRegistry(context, (EndpointRegistry) service);
         } else if (service instanceof BeanIntrospection) {
@@ -825,6 +829,11 @@ public class JmxManagementLifecycleStrategy extends ServiceSupport implements Li
      * Should the given processor be registered.
      */
     protected boolean registerProcessor(ProcessorDefinition<?> processor) {
+
+        //skip processors according the ManagementMBeansLevel
+        if (!getManagementStrategy().getManagementAgent().getMBeansLevel().isProcessors()) {
+            return false;
+        }
         // skip on exception
         if (processor instanceof OnExceptionDefinition) {
             return false;
@@ -909,6 +918,11 @@ public class JmxManagementLifecycleStrategy extends ServiceSupport implements Li
         }
 
         LOG.trace("Checking whether to register {} from route: {}", service, route);
+
+        //skip route according the ManagementMBeansLevel
+        if (!getManagementStrategy().getManagementAgent().getMBeansLevel().isRoutes()) {
+            return false;
+        }
 
         ManagementAgent agent = getManagementStrategy().getManagementAgent();
         if (agent == null) {

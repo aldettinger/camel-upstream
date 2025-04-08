@@ -56,7 +56,7 @@ public class JmsJMSReplyToEndpointUsingInOutTest extends CamelTestSupport {
             JmsTemplate jms = new JmsTemplate(amq.getConfiguration().getConnectionFactory());
 
             final TextMessage msg = (TextMessage) jms.receive("nameRequestor");
-            assertEquals(msg.getText(), "What's your name");
+            assertEquals("What's your name", msg.getText());
 
             // there should be a JMSReplyTo so we know where to send the reply
             final Destination replyTo = msg.getJMSReplyTo();
@@ -86,10 +86,10 @@ public class JmsJMSReplyToEndpointUsingInOutTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
 
-            public void configure() throws Exception {
+            public void configure() {
                 from("activemq:queue:hello")
                         .process(exchange -> exchange.getMessage().setBody("What's your name"))
                         // use in out to get a reply as well

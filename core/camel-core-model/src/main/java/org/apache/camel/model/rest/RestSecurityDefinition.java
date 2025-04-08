@@ -24,7 +24,7 @@ import javax.xml.bind.annotation.XmlTransient;
 import org.apache.camel.spi.Metadata;
 
 /**
- * To specify the rest security definitions using Swagger.
+ * To specify the rest security definitions.
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 public abstract class RestSecurityDefinition {
@@ -35,7 +35,6 @@ public abstract class RestSecurityDefinition {
     @XmlAttribute(required = true)
     @Metadata(required = true)
     private String key;
-
     @XmlAttribute
     private String description;
 

@@ -19,13 +19,15 @@ package org.apache.camel.impl.engine;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
+import java.util.concurrent.atomic.LongAdder;
 
 import org.apache.camel.StaticService;
 import org.apache.camel.api.management.ManagedAttribute;
 import org.apache.camel.api.management.ManagedResource;
 import org.apache.camel.spi.ReactiveExecutor;
+import org.apache.camel.spi.annotations.EagerClassloaded;
 import org.apache.camel.support.service.ServiceSupport;
+import org.apache.camel.util.concurrent.NamedThreadLocal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,22 +35,21 @@ import org.slf4j.LoggerFactory;
  * Default {@link ReactiveExecutor}.
  */
 @ManagedResource(description = "Managed ReactiveExecutor")
+@EagerClassloaded
 public class DefaultReactiveExecutor extends ServiceSupport implements ReactiveExecutor, StaticService {
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultReactiveExecutor.class);
 
-    private final ThreadLocal<Worker> workers = ThreadLocal.withInitial(new Supplier<Worker>() {
-        @Override
-        public Worker get() {
-            int number = createdWorkers.incrementAndGet();
-            return new Worker(number, DefaultReactiveExecutor.this);
-        }
-    });
-
     // use for statistics so we have insights at runtime
+    private boolean statisticsEnabled;
     private final AtomicInteger createdWorkers = new AtomicInteger();
-    private final AtomicInteger runningWorkers = new AtomicInteger();
-    private final AtomicInteger pendingTasks = new AtomicInteger();
+    private final LongAdder runningWorkers = new LongAdder();
+    private final LongAdder pendingTasks = new LongAdder();
+
+    private final NamedThreadLocal<Worker> workers = new NamedThreadLocal<>("CamelReactiveWorker", () -> {
+        int number = createdWorkers.incrementAndGet();
+        return new Worker(number, DefaultReactiveExecutor.this);
+    });
 
     @Override
     public void schedule(Runnable runnable) {
@@ -66,8 +67,27 @@ public class DefaultReactiveExecutor extends ServiceSupport implements ReactiveE
     }
 
     @Override
+    public void scheduleQueue(Runnable runnable) {
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("ScheduleQueue: {}", runnable);
+        }
+        workers.get().queue.add(runnable);
+    }
+
+    @Override
     public boolean executeFromQueue() {
         return workers.get().executeFromQueue();
+    }
+
+    @Override
+    @ManagedAttribute(description = "Whether statistics is enabled")
+    public boolean isStatisticsEnabled() {
+        return statisticsEnabled;
+    }
+
+    @Override
+    public void setStatisticsEnabled(boolean statisticsEnabled) {
+        this.statisticsEnabled = statisticsEnabled;
     }
 
     @ManagedAttribute(description = "Number of created workers")
@@ -77,26 +97,38 @@ public class DefaultReactiveExecutor extends ServiceSupport implements ReactiveE
 
     @ManagedAttribute(description = "Number of running workers")
     public int getRunningWorkers() {
-        return runningWorkers.get();
+        return runningWorkers.intValue();
     }
 
     @ManagedAttribute(description = "Number of pending tasks")
     public int getPendingTasks() {
-        return pendingTasks.get();
+        return pendingTasks.intValue();
+    }
+
+    public static void onClassloaded(Logger log) {
+        log.trace("Loaded DefaultReactiveExecutor");
+        Worker dummy = new Worker(-1, null);
+        log.trace("Loaded {}", dummy.getClass().getName());
     }
 
     @Override
     protected void doStop() throws Exception {
-        if (LOG.isDebugEnabled()) {
+        if (LOG.isDebugEnabled() && statisticsEnabled) {
             LOG.debug("Stopping DefaultReactiveExecutor [createdWorkers: {}, runningWorkers: {}, pendingTasks: {}]",
                     getCreatedWorkers(), getRunningWorkers(), getPendingTasks());
         }
+    }
+
+    @Override
+    protected void doShutdown() throws Exception {
+        workers.remove();
     }
 
     private static class Worker {
 
         private final int number;
         private final DefaultReactiveExecutor executor;
+        private final boolean stats;
         private volatile Deque<Runnable> queue = new ArrayDeque<>();
         private volatile Deque<Deque<Runnable>> back;
         private volatile boolean running;
@@ -104,6 +136,7 @@ public class DefaultReactiveExecutor extends ServiceSupport implements ReactiveE
         public Worker(int number, DefaultReactiveExecutor executor) {
             this.number = number;
             this.executor = executor;
+            this.stats = executor != null && executor.isStatisticsEnabled();
         }
 
         void schedule(Runnable runnable, boolean first, boolean main, boolean sync) {
@@ -121,14 +154,20 @@ public class DefaultReactiveExecutor extends ServiceSupport implements ReactiveE
             }
             if (first) {
                 queue.addFirst(runnable);
-                executor.pendingTasks.incrementAndGet();
+                if (stats) {
+                    executor.pendingTasks.increment();
+                }
             } else {
                 queue.addLast(runnable);
-                executor.pendingTasks.incrementAndGet();
+                if (stats) {
+                    executor.pendingTasks.increment();
+                }
             }
             if (!running || sync) {
                 running = true;
-                executor.runningWorkers.incrementAndGet();
+                if (stats) {
+                    executor.runningWorkers.increment();
+                }
                 try {
                     for (;;) {
                         final Runnable polled = queue.pollFirst();
@@ -141,9 +180,11 @@ public class DefaultReactiveExecutor extends ServiceSupport implements ReactiveE
                             }
                         }
                         try {
-                            executor.pendingTasks.decrementAndGet();
+                            if (stats) {
+                                executor.pendingTasks.decrement();
+                            }
                             if (LOG.isTraceEnabled()) {
-                                LOG.trace("Worker #{} running: {}", number, runnable);
+                                LOG.trace("Worker #{} running: {}", number, polled);
                             }
                             polled.run();
                         } catch (Throwable t) {
@@ -153,7 +194,9 @@ public class DefaultReactiveExecutor extends ServiceSupport implements ReactiveE
                     }
                 } finally {
                     running = false;
-                    executor.runningWorkers.decrementAndGet();
+                    if (stats) {
+                        executor.runningWorkers.decrement();
+                    }
                 }
             } else {
                 if (LOG.isTraceEnabled()) {
@@ -168,7 +211,9 @@ public class DefaultReactiveExecutor extends ServiceSupport implements ReactiveE
                 return false;
             }
             try {
-                executor.pendingTasks.decrementAndGet();
+                if (stats) {
+                    executor.pendingTasks.decrement();
+                }
                 if (LOG.isTraceEnabled()) {
                     LOG.trace("Running: {}", polled);
                 }

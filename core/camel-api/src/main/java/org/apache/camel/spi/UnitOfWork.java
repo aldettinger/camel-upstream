@@ -23,13 +23,12 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.Route;
-import org.apache.camel.Service;
 
 /**
  * An object representing the unit of work processing an {@link Exchange} which allows the use of
  * {@link Synchronization} hooks. This object might map one-to-one with a transaction in JPA or Spring; or might not.
  */
-public interface UnitOfWork extends Service {
+public interface UnitOfWork {
 
     String MDC_BREADCRUMB_ID = "camel.breadcrumbId";
     String MDC_EXCHANGE_ID = "camel.exchangeId";
@@ -39,6 +38,21 @@ public interface UnitOfWork extends Service {
     String MDC_STEP_ID = "camel.stepId";
     String MDC_CAMEL_CONTEXT_ID = "camel.contextId";
     String MDC_TRANSACTION_KEY = "camel.transactionKey";
+
+    /**
+     * Clears the unit of work from user data, so it may be reused.
+     * <p/>
+     * <b>Important:</b> This API is NOT intended for Camel end users, but used internally by Camel itself.
+     */
+    void reset();
+
+    /**
+     * Prepares this unit of work with the given input {@link Exchange}
+     *
+     * @param  exchange the exchange
+     * @return          true if the unit of work was created and prepared, false if already prepared
+     */
+    boolean onPrepare(Exchange exchange);
 
     /**
      * Adds a synchronization hook
@@ -114,7 +128,7 @@ public interface UnitOfWork extends Service {
      * {@link org.apache.camel.RuntimeConfiguration#isAllowUseOriginalMessage()} is enabled. If its disabled an
      * <tt>IllegalStateException</tt> is thrown.
      *
-     * @return the original IN {@link Message}, or <tt>null</tt> if using original message is disabled.
+     * @return the original IN {@link Message}
      */
     Message getOriginalInMessage();
 
@@ -182,7 +196,7 @@ public interface UnitOfWork extends Service {
     boolean isBeforeAfterProcess();
 
     /**
-     * Strategy for work to be execute before processing.
+     * Strategy for work to be executed before processing.
      * <p/>
      * For example the MDCUnitOfWork leverages this to ensure MDC is handled correctly during routing exchanges using
      * the asynchronous routing engine.

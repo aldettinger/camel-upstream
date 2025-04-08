@@ -38,16 +38,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class TempReplyToIssueTest extends CamelTestSupport {
 
     @Test
-    public void testReplyToIssue() throws Exception {
+    public void testReplyToIssue() {
         String out = template.requestBody("activemq:queue:test.queue", "World", String.class);
         // we should receive that fixed reply
         assertEquals("Hello Moon", out);
     }
 
-    public String handleMessage(@Header("JMSReplyTo")
-    final Destination jmsReplyTo,
-            @Header("JMSCorrelationID")
-            final String id,
+    public String handleMessage(
+            @Header("JMSReplyTo") final Destination jmsReplyTo,
+            @Header("JMSCorrelationID") final String id,
             @Body String body, Exchange exchange)
             throws Exception {
         assertNotNull(jmsReplyTo);
@@ -82,10 +81,10 @@ public class TempReplyToIssueTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("activemq:queue:test.queue").bean(TempReplyToIssueTest.class, "handleMessage");
             }
         };

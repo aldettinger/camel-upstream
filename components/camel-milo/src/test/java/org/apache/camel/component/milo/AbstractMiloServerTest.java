@@ -21,12 +21,18 @@ import java.security.GeneralSecurityException;
 import java.util.function.Consumer;
 
 import org.apache.camel.CamelContext;
+import org.apache.camel.Exchange;
+import org.apache.camel.Predicate;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.component.milo.server.MiloServerComponent;
 import org.apache.camel.component.mock.AssertionClause;
 import org.apache.camel.test.AvailablePortFinder;
 import org.apache.camel.test.junit5.CamelTestSupport;
 import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
+import org.opentest4j.AssertionFailedError;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,6 +41,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public abstract class AbstractMiloServerTest extends CamelTestSupport {
+
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractMiloServerTest.class);
 
     private int serverPort;
 
@@ -75,7 +83,7 @@ public abstract class AbstractMiloServerTest extends CamelTestSupport {
             final AssertionClause clause, final Class<T> bodyClass,
             final Consumer<T> valueConsumer) {
         clause.predicate(exchange -> {
-            final T body = exchange.getIn().getBody(bodyClass);
+            final T body = exchange.getMessage().getBody(bodyClass);
             valueConsumer.accept(body);
             return true;
         });
@@ -127,7 +135,7 @@ public abstract class AbstractMiloServerTest extends CamelTestSupport {
             loader.setKeyPassword("test");
             return loader.load();
         } catch (final GeneralSecurityException | IOException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeCamelException(e);
         }
 
     }
@@ -150,6 +158,19 @@ public abstract class AbstractMiloServerTest extends CamelTestSupport {
             }
         }
         return false;
+    }
+
+    protected Predicate assertPredicate(Consumer<Exchange> consumer) {
+
+        return exchange -> {
+            try {
+                consumer.accept(exchange);
+                return true;
+            } catch (AssertionFailedError error) {
+                LOG.error("Assertion error: " + error.getMessage(), error);
+                return false;
+            }
+        };
     }
 
 }

@@ -31,14 +31,14 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 public class JdbcMessageIdRepository extends AbstractJdbcMessageIdRepository {
 
-    private static final String DEFAULT_TABLENAME = "CAMEL_MESSAGEPROCESSED";
+    protected static final String DEFAULT_TABLENAME = "CAMEL_MESSAGEPROCESSED";
 
     private boolean createTableIfNotExists = true;
     private String tableName;
 
     private String tableExistsString = "SELECT 1 FROM CAMEL_MESSAGEPROCESSED WHERE 1 = 0";
-    private String createString
-            = "CREATE TABLE CAMEL_MESSAGEPROCESSED (processorName VARCHAR(255), messageId VARCHAR(100), createdAt TIMESTAMP)";
+    private String createString = "CREATE TABLE CAMEL_MESSAGEPROCESSED (processorName VARCHAR(255), messageId VARCHAR(100), "
+                                  + "createdAt TIMESTAMP, PRIMARY KEY (processorName, messageId))";
     private String queryString = "SELECT COUNT(*) FROM CAMEL_MESSAGEPROCESSED WHERE processorName = ? AND messageId = ?";
     private String insertString = "INSERT INTO CAMEL_MESSAGEPROCESSED (processorName, messageId, createdAt) VALUES (?, ?, ?)";
     private String deleteString = "DELETE FROM CAMEL_MESSAGEPROCESSED WHERE processorName = ? AND messageId = ?";
@@ -79,6 +79,7 @@ public class JdbcMessageIdRepository extends AbstractJdbcMessageIdRepository {
         super.doStart();
 
         transactionTemplate.execute(new TransactionCallback<Boolean>() {
+            @Override
             public Boolean doInTransaction(TransactionStatus status) {
                 try {
                     // we will receive an exception if the table doesn't exists or we cannot access it
@@ -94,7 +95,7 @@ public class JdbcMessageIdRepository extends AbstractJdbcMessageIdRepository {
                             // we will fail if we cannot create it
                             log.error(
                                     "Can't create table for JdbcMessageIdRepository with query '{}' because of: {}. This may be a permissions problem. Please create this table and try again.",
-                                    getCreateString(), e.getMessage());
+                                    getCreateString(), dae.getMessage());
                             throw dae;
                         }
                     } else {

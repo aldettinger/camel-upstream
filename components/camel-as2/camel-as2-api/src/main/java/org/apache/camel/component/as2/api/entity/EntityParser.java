@@ -21,13 +21,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
+import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 
-import org.apache.camel.component.as2.api.AS2Charset;
 import org.apache.camel.component.as2.api.AS2Header;
 import org.apache.camel.component.as2.api.AS2MimeType;
 import org.apache.camel.component.as2.api.io.AS2SessionInputBuffer;
@@ -213,7 +214,8 @@ public final class EntityParser {
                 throw new HttpException("Failed to find Content-Type header in enveloped entity");
             }
 
-            MimeEntity entity = parseEntityBody(inbuffer, null, entityContentType, entityContentTransferEncoding, headers);
+            MimeEntity entity = parseEntityBody(inbuffer, null, entityContentType, entityContentTransferEncoding, "", headers);
+            Objects.requireNonNull(entity, "Trying to parse entity body resulted in a null MimeEntity");
             entity.removeAllHeaders();
             entity.setHeaders(headers);
 
@@ -379,7 +381,7 @@ public final class EntityParser {
 
         try {
 
-            applicationEDIEntity = parseEDIEntityBody(inBuffer, null, contentType, contentTransferEncoding);
+            applicationEDIEntity = parseEDIEntityBody(inBuffer, null, contentType, contentTransferEncoding, "");
             applicationEDIEntity.setMainBody(true);
 
             EntityUtils.setMessageEntity(message, applicationEDIEntity);
@@ -441,7 +443,7 @@ public final class EntityParser {
                 ContentType contentType = ContentType.parse(contentTypeStr);
 
                 // Determine Charset
-                String charsetName = AS2Charset.US_ASCII;
+                String charsetName = StandardCharsets.US_ASCII.name();
                 Charset charset = contentType.getCharset();
                 if (charset != null) {
                     charsetName = charset.name();
@@ -505,7 +507,7 @@ public final class EntityParser {
         try {
 
             if (charsetName == null) {
-                charsetName = AS2Charset.US_ASCII;
+                charsetName = StandardCharsets.US_ASCII.name();
             }
             Charset charset = Charset.forName(charsetName);
             CharsetDecoder charsetDecoder = charset.newDecoder();
@@ -540,7 +542,7 @@ public final class EntityParser {
             }
 
             MimeEntity signedEntity = parseEntityBody(inbuffer, boundary, signedEntityContentType,
-                    signedEntityContentTransferEncoding, headers);
+                    signedEntityContentTransferEncoding, "", headers);
             signedEntity.removeAllHeaders();
             signedEntity.setHeaders(headers);
             multipartSignedEntity.addPart(signedEntity);
@@ -612,7 +614,7 @@ public final class EntityParser {
         try {
 
             if (charsetName == null) {
-                charsetName = AS2Charset.US_ASCII;
+                charsetName = StandardCharsets.US_ASCII.name();
             }
             Charset charset = Charset.forName(charsetName);
             CharsetDecoder charsetDecoder = charset.newDecoder();
@@ -653,7 +655,7 @@ public final class EntityParser {
             }
 
             String textReportCharsetName = textReportContentType.getCharset() == null
-                    ? AS2Charset.US_ASCII : textReportContentType.getCharset().name();
+                    ? StandardCharsets.US_ASCII.name() : textReportContentType.getCharset().name();
             TextPlainEntity textReportEntity
                     = parseTextPlainEntityBody(inbuffer, boundary, textReportCharsetName, textReportContentTransferEncoding);
             textReportEntity.setHeaders(headers);
@@ -691,11 +693,10 @@ public final class EntityParser {
             }
 
             String dispositionNotificationCharsetName = dispositionNotificationContentType.getCharset() == null
-                    ? AS2Charset.US_ASCII : dispositionNotificationContentType.getCharset().name();
+                    ? StandardCharsets.US_ASCII.name() : dispositionNotificationContentType.getCharset().name();
             AS2MessageDispositionNotificationEntity messageDispositionNotificationEntity
                     = parseMessageDispositionNotificationEntityBody(
-                            inbuffer, boundary, dispositionNotificationCharsetName,
-                            dispositionNotificationContentTransferEncoding);
+                            inbuffer, boundary, dispositionNotificationCharsetName);
             messageDispositionNotificationEntity.setHeaders(headers);
             dispositionNotificationMultipartReportEntity.addPart(messageDispositionNotificationEntity);
 
@@ -725,7 +726,7 @@ public final class EntityParser {
         try {
 
             if (charsetName == null) {
-                charsetName = AS2Charset.US_ASCII;
+                charsetName = StandardCharsets.US_ASCII.name();
             }
             Charset charset = Charset.forName(charsetName);
             CharsetDecoder charsetDecoder = charset.newDecoder();
@@ -749,15 +750,14 @@ public final class EntityParser {
     public static AS2MessageDispositionNotificationEntity parseMessageDispositionNotificationEntityBody(
             AS2SessionInputBuffer inbuffer,
             String boundary,
-            String charsetName,
-            String contentTransferEncoding)
+            String charsetName)
             throws ParseException {
         CharsetDecoder previousDecoder = inbuffer.getCharsetDecoder();
 
         try {
 
             if (charsetName == null) {
-                charsetName = AS2Charset.US_ASCII;
+                charsetName = StandardCharsets.US_ASCII.name();
             }
             Charset charset = Charset.forName(charsetName);
             CharsetDecoder charsetDecoder = charset.newDecoder();
@@ -786,6 +786,7 @@ public final class EntityParser {
             String boundary,
             ContentType entityContentType,
             String contentTransferEncoding,
+            String filename,
             Header[] headers)
             throws ParseException {
         CharsetDecoder previousDecoder = inbuffer.getCharsetDecoder();
@@ -793,7 +794,7 @@ public final class EntityParser {
         try {
             Charset charset = entityContentType.getCharset();
             if (charset == null) {
-                charset = Charset.forName(AS2Charset.US_ASCII);
+                charset = StandardCharsets.US_ASCII;
             }
             CharsetDecoder charsetDecoder = charset.newDecoder();
 
@@ -804,7 +805,7 @@ public final class EntityParser {
                 case AS2MimeType.APPLICATION_EDIFACT:
                 case AS2MimeType.APPLICATION_EDI_X12:
                 case AS2MimeType.APPLICATION_EDI_CONSENT:
-                    entity = parseEDIEntityBody(inbuffer, boundary, entityContentType, contentTransferEncoding);
+                    entity = parseEDIEntityBody(inbuffer, boundary, entityContentType, contentTransferEncoding, filename);
                     break;
                 case AS2MimeType.MULTIPART_SIGNED:
                     String multipartSignedBoundary = AS2HeaderUtils.getParameterValue(headers,
@@ -815,8 +816,7 @@ public final class EntityParser {
                     skipToBoundary(inbuffer, boundary);
                     break;
                 case AS2MimeType.MESSAGE_DISPOSITION_NOTIFICATION:
-                    entity = parseMessageDispositionNotificationEntityBody(inbuffer, boundary, charset.name(),
-                            contentTransferEncoding);
+                    entity = parseMessageDispositionNotificationEntityBody(inbuffer, boundary, charset.name());
                     break;
                 case AS2MimeType.MULTIPART_REPORT:
                     String multipartReportBoundary = AS2HeaderUtils.getParameterValue(headers,
@@ -866,14 +866,15 @@ public final class EntityParser {
             AS2SessionInputBuffer inbuffer,
             String boundary,
             ContentType ediMessageContentType,
-            String contentTransferEncoding)
+            String contentTransferEncoding,
+            String filename)
             throws ParseException {
         CharsetDecoder previousDecoder = inbuffer.getCharsetDecoder();
 
         try {
             Charset charset = ediMessageContentType.getCharset();
             if (charset == null) {
-                charset = Charset.forName(AS2Charset.US_ASCII);
+                charset = StandardCharsets.US_ASCII;
             }
             CharsetDecoder charsetDecoder = charset.newDecoder();
 
@@ -884,7 +885,7 @@ public final class EntityParser {
                 ediMessageBodyPartContent = EntityUtils.decode(ediMessageBodyPartContent, charset, contentTransferEncoding);
             }
             ApplicationEDIEntity applicationEDIEntity = EntityUtils.createEDIEntity(ediMessageBodyPartContent,
-                    ediMessageContentType, contentTransferEncoding, false);
+                    ediMessageContentType, contentTransferEncoding, false, filename);
 
             return applicationEDIEntity;
         } catch (Exception e) {
@@ -908,7 +909,7 @@ public final class EntityParser {
         try {
             Charset charset = contentType.getCharset();
             if (charset == null) {
-                charset = Charset.forName(AS2Charset.US_ASCII);
+                charset = StandardCharsets.US_ASCII;
             }
             CharsetDecoder charsetDecoder = charset.newDecoder();
 
@@ -943,7 +944,7 @@ public final class EntityParser {
         try {
             Charset charset = contentType.getCharset();
             if (charset == null) {
-                charset = Charset.forName(AS2Charset.US_ASCII);
+                charset = StandardCharsets.US_ASCII;
             }
             CharsetDecoder charsetDecoder = charset.newDecoder();
 
@@ -977,7 +978,7 @@ public final class EntityParser {
         try {
             Charset charset = contentType.getCharset();
             if (charset == null) {
-                charset = Charset.forName(AS2Charset.US_ASCII);
+                charset = StandardCharsets.US_ASCII;
             }
             CharsetDecoder charsetDecoder = charset.newDecoder();
 

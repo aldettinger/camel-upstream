@@ -3,8 +3,11 @@
     "kind": "model",
     "name": "secureRandomParameters",
     "title": "Secure Random Parameters",
+    "description": "Cryptographically strong random number generator",
     "deprecated": false,
+    "label": "security,configuration",
     "javaType": "org.apache.camel.spring.xml.SecureRandomParametersFactoryBean",
+    "abstract": false,
     "input": false,
     "output": false
   },

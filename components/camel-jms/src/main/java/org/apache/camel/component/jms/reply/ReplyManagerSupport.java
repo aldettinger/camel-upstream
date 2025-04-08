@@ -16,6 +16,7 @@
  */
 package org.apache.camel.component.jms.reply;
 
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -30,12 +31,16 @@ import org.apache.camel.AsyncCallback;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangeTimedOutException;
+import org.apache.camel.component.jms.JmsConstants;
 import org.apache.camel.component.jms.JmsEndpoint;
 import org.apache.camel.component.jms.JmsMessage;
 import org.apache.camel.component.jms.JmsMessageHelper;
 import org.apache.camel.support.ExchangeHelper;
 import org.apache.camel.support.service.ServiceHelper;
 import org.apache.camel.support.service.ServiceSupport;
+import org.apache.camel.support.task.ForegroundTask;
+import org.apache.camel.support.task.Tasks;
+import org.apache.camel.support.task.budget.Budgets;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -184,7 +189,7 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
                     Session session = holder.getSession();
                     JmsMessage response = new JmsMessage(exchange, message, session, endpoint.getBinding());
                     // the JmsBinding is designed to be "pull-based": it will populate the Camel message on demand
-                    // therefore, we link Exchange and OUT message before continuing, so that the JmsBinding has full access 
+                    // therefore, we link Exchange and OUT message before continuing, so that the JmsBinding has full access
                     // to everything it may need, and can populate headers, properties, etc. accordingly (solves CAMEL-6218).
                     exchange.setOut(response);
                     Object body = response.getBody();
@@ -201,7 +206,7 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
                     // restore correlation id in case the remote server messed with it
                     if (holder.getOriginalCorrelationId() != null) {
                         JmsMessageHelper.setCorrelationId(message, holder.getOriginalCorrelationId());
-                        exchange.getOut().setHeader("JMSCorrelationID", holder.getOriginalCorrelationId());
+                        exchange.getOut().setHeader(JmsConstants.JMS_HEADER_CORRELATION_ID, holder.getOriginalCorrelationId());
                     }
                 }
             } finally {
@@ -230,33 +235,21 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
             log.warn("Early reply received with correlationID [{}] -> {}", correlationID, message);
         }
 
-        ReplyHandler answer = null;
-
         // wait up until configured values
-        boolean done = false;
-        int counter = 0;
-        while (!done && counter++ < endpoint.getConfiguration().getWaitForProvisionCorrelationToBeUpdatedCounter()) {
-            log.trace("Early reply not found handler at attempt {}. Waiting a bit longer.", counter);
-            try {
-                Thread.sleep(endpoint.getConfiguration().getWaitForProvisionCorrelationToBeUpdatedThreadSleepingTime());
-            } catch (InterruptedException e) {
-                // ignore
-            }
+        long interval = endpoint.getConfiguration().getWaitForProvisionCorrelationToBeUpdatedThreadSleepingTime();
+        ForegroundTask task = Tasks.foregroundTask().withBudget(Budgets.iterationBudget()
+                .withMaxIterations(endpoint.getConfiguration().getWaitForProvisionCorrelationToBeUpdatedCounter())
+                .withInterval(Duration.ofMillis(interval))
+                .build())
+                .build();
 
-            // try again
-            answer = correlation.get(correlationID);
-            done = answer != null;
+        return task.run(() -> getReplyHandler(correlationID), answer -> answer != null).orElse(null);
+    }
 
-            if (answer != null) {
-                if (log.isTraceEnabled()) {
-                    log.trace(
-                            "Early reply with correlationID [{}] has been matched after {} attempts and can be processed using handler: {}",
-                            correlationID, counter, answer);
-                }
-            }
-        }
+    private ReplyHandler getReplyHandler(String correlationID) {
+        log.trace("Early reply not found handler. Waiting a bit longer.");
 
-        return answer;
+        return correlation.get(correlationID);
     }
 
     @Override
@@ -277,7 +270,7 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
         listenerContainer.afterPropertiesSet();
         log.debug("Starting reply listener container on endpoint: {}", endpoint);
 
-        endpoint.onListenerContainerStarting(listenerContainer);
+        endpoint.onListenerContainerStarting();
         listenerContainer.start();
     }
 
@@ -291,7 +284,7 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
                 listenerContainer.stop();
                 listenerContainer.destroy();
             } finally {
-                endpoint.onListenerContainerStopped(listenerContainer);
+                endpoint.onListenerContainerStopped();
                 listenerContainer = null;
             }
         }

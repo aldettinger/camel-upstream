@@ -39,7 +39,6 @@ import org.apache.camel.component.salesforce.api.dto.analytics.reports.ReportIns
 import org.apache.camel.component.salesforce.api.dto.analytics.reports.ReportMetadata;
 import org.apache.camel.component.salesforce.api.dto.analytics.reports.SyncReportResults;
 import org.apache.camel.component.salesforce.api.utils.JsonUtils;
-import org.apache.camel.component.salesforce.internal.PayloadFormat;
 import org.apache.camel.component.salesforce.internal.SalesforceSession;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.api.Response;
@@ -260,7 +259,7 @@ public class DefaultAnalyticsApiClient extends AbstractClientBase implements Ana
         try {
             if (responseContent != null) {
                 // unmarshal RestError
-                final List<RestError> errors = readErrorsFrom(responseContent, PayloadFormat.JSON, objectMapper, null);
+                final List<RestError> errors = readErrorsFrom(responseContent, objectMapper);
 
                 if (statusCode == HttpStatus.NOT_FOUND_404) {
                     return new NoSuchSObjectException(errors);
@@ -301,7 +300,7 @@ public class DefaultAnalyticsApiClient extends AbstractClientBase implements Ana
     private void marshalRequest(Object input, Request request) throws SalesforceException {
         try {
             request.content(new BytesContentProvider(objectMapper.writeValueAsBytes(input)));
-        } catch (Throwable e) {
+        } catch (Exception e) {
             throw new SalesforceException(
                     String.format("Error marshaling request for {%s:%s} : %s", request.getMethod(), request.getURI(),
                             e.getMessage()),
@@ -314,7 +313,7 @@ public class DefaultAnalyticsApiClient extends AbstractClientBase implements Ana
 
         try {
             return objectMapper.readValue(response, responseTypeReference);
-        } catch (Throwable e) {
+        } catch (Exception e) {
             throw new SalesforceException(
                     String.format("Error unmarshaling response {%s:%s} : %s", request.getMethod(), request.getURI(),
                             e.getMessage()),
@@ -330,7 +329,7 @@ public class DefaultAnalyticsApiClient extends AbstractClientBase implements Ana
 
         try {
             return objectMapper.readValue(response, responseClass);
-        } catch (Throwable e) {
+        } catch (Exception e) {
             throw new SalesforceException(
                     String.format("Error unmarshaling response {%s:%s} : %s", request.getMethod(), request.getURI(),
                             e.getMessage()),

@@ -29,9 +29,9 @@ import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.spi.Metadata;
 
 /**
- * Routes messages based on dynamic rules
+ * Route messages based on dynamic rules
  */
-@Metadata(label = "eip,endpoint,routing")
+@Metadata(label = "eip,routing")
 @XmlRootElement(name = "dynamicRouter")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class DynamicRouterDefinition<Type extends ProcessorDefinition<Type>> extends ExpressionNode {
@@ -42,9 +42,10 @@ public class DynamicRouterDefinition<Type extends ProcessorDefinition<Type>> ext
     @Metadata(defaultValue = ",")
     private String uriDelimiter;
     @XmlAttribute
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String ignoreInvalidEndpoints;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Integer")
+    @Metadata(label = "advanced", javaType = "java.lang.Integer")
     private String cacheSize;
 
     public DynamicRouterDefinition() {

@@ -107,8 +107,25 @@ public class VertXReactiveExecutor extends ServiceSupport implements CamelContex
     }
 
     @Override
+    public void scheduleQueue(Runnable runnable) {
+        // not supported so schedule sync
+        scheduleSync(runnable);
+    }
+
+    @Override
     public boolean executeFromQueue() {
         // not supported so return false
+        return false;
+    }
+
+    @Override
+    public void setStatisticsEnabled(boolean statisticsEnabled) {
+        // not in use
+    }
+
+    @Override
+    public boolean isStatisticsEnabled() {
+        // not in use
         return false;
     }
 

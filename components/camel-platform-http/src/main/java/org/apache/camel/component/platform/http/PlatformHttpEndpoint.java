@@ -43,33 +43,29 @@ public class PlatformHttpEndpoint extends DefaultEndpoint implements AsyncEndpoi
     @UriPath(description = "The path under which this endpoint serves the HTTP requests")
     @Metadata(required = true)
     private final String path;
-
     @UriParam(label = "consumer", defaultValue = "false",
               description = "Whether or not the consumer should try to find a target consumer "
                             + "by matching the URI prefix if no exact match is found.")
     private boolean matchOnUriPrefix;
-
     @UriParam(label = "consumer", description = "A comma separated list of HTTP methods to serve, e.g. GET,POST ."
                                                 + " If no methods are specified, all methods will be served.")
     private String httpMethodRestrict;
-
     @UriParam(label = "consumer", description = "The content type this endpoint accepts as an input, such as"
                                                 + " application/xml or application/json. <code>null</code> or <code>&#42;/&#42;</code> mean no restriction.")
     private String consumes;
-
     @UriParam(label = "consumer", description = "The content type this endpoint produces, such as"
                                                 + " application/xml or application/json.")
     private String produces;
-
+    @UriParam(label = "consumer", defaultValue = "true",
+              description = "If enabled and an Exchange failed processing on the consumer side the response's body won't contain the exception's stack trace.")
+    private boolean muteException = true;
     @UriParam(label = "consumer,advanced", description = "A comma or whitespace separated list of file extensions."
                                                          + " Uploads having these extensions will be stored locally."
                                                          + " Null value or asterisk (*) will allow all files.")
     private String fileNameExtWhitelist;
-
     @UriParam(label = "advanced", description = "An HTTP Server engine implementation to serve the requests of this"
                                                 + " endpoint.")
     private PlatformHttpEngine platformHttpEngine;
-
     @UriParam(label = "advanced",
               description = "To use a custom HeaderFilterStrategy to filter headers to and from Camel message.")
     private HeaderFilterStrategy headerFilterStrategy = new PlatformHttpHeaderFilterStrategy();
@@ -80,13 +76,18 @@ public class PlatformHttpEndpoint extends DefaultEndpoint implements AsyncEndpoi
     }
 
     @Override
+    public PlatformHttpComponent getComponent() {
+        return (PlatformHttpComponent) super.getComponent();
+    }
+
+    @Override
     public Producer createProducer() throws Exception {
         throw new UnsupportedOperationException("Producer is not supported");
     }
 
     @Override
     public Consumer createConsumer(Processor processor) throws Exception {
-        return new DefaultConsumer(this, processor) {
+        Consumer consumer = new DefaultConsumer(this, processor) {
             private Consumer delegatedConsumer;
 
             @Override
@@ -105,11 +106,13 @@ public class PlatformHttpEndpoint extends DefaultEndpoint implements AsyncEndpoi
             protected void doStart() throws Exception {
                 super.doStart();
                 ServiceHelper.startService(delegatedConsumer);
+                getComponent().addHttpEndpoint(getPath(), httpMethodRestrict);
             }
 
             @Override
             protected void doStop() throws Exception {
                 super.doStop();
+                getComponent().removeHttpEndpoint(getPath());
                 ServiceHelper.stopAndShutdownServices(delegatedConsumer);
             }
 
@@ -125,6 +128,8 @@ public class PlatformHttpEndpoint extends DefaultEndpoint implements AsyncEndpoi
                 super.doSuspend();
             }
         };
+        configureConsumer(consumer);
+        return consumer;
     }
 
     @Override
@@ -189,9 +194,17 @@ public class PlatformHttpEndpoint extends DefaultEndpoint implements AsyncEndpoi
         this.produces = produces;
     }
 
+    public boolean isMuteException() {
+        return muteException;
+    }
+
+    public void setMuteException(boolean muteException) {
+        this.muteException = muteException;
+    }
+
     PlatformHttpEngine getOrCreateEngine() {
         return platformHttpEngine != null
                 ? platformHttpEngine
-                : ((PlatformHttpComponent) getComponent()).getOrCreateEngine();
+                : getComponent().getOrCreateEngine();
     }
 }

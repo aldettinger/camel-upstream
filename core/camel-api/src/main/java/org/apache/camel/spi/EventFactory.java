@@ -30,6 +30,16 @@ import org.apache.camel.Route;
 public interface EventFactory {
 
     /**
+     * Whether to include timestamp for each event, when the event occurred. This is by default false.
+     */
+    boolean isTimestampEnabled();
+
+    /**
+     * Whether to include timestamp for each event, when the event occurred.
+     */
+    void setTimestampEnabled(boolean timestampEnabled);
+
+    /**
      * Creates an {@link CamelEvent} for Camel is initializing.
      *
      * @param  context camel context
@@ -194,6 +204,16 @@ public interface EventFactory {
      * @return       the created event
      */
     CamelEvent createRouteRemovedEvent(Route route);
+
+    /**
+     * Creates an {@link CamelEvent} for {@link Route} has been reloaded successfully.
+     *
+     * @param  route the route
+     * @param  index the route index in this batch
+     * @param  total total number of routes being reloaded in this batch
+     * @return       the reloaded event
+     */
+    CamelEvent createRouteReloaded(Route route, int index, int total);
 
     /**
      * Creates an {@link CamelEvent} when an {@link org.apache.camel.Exchange} has been created

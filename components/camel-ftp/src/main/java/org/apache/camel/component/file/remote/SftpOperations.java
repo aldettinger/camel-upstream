@@ -26,13 +26,13 @@ import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
-import java.util.ArrayList;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Vector;
 import java.util.regex.Pattern;
 
 import com.jcraft.jsch.ChannelSftp;
@@ -54,6 +54,9 @@ import org.apache.camel.component.file.GenericFileEndpoint;
 import org.apache.camel.component.file.GenericFileExist;
 import org.apache.camel.component.file.GenericFileOperationFailedException;
 import org.apache.camel.support.ResourceHelper;
+import org.apache.camel.support.task.BlockingTask;
+import org.apache.camel.support.task.Tasks;
+import org.apache.camel.support.task.budget.Budgets;
 import org.apache.camel.util.FileUtil;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
@@ -78,6 +81,15 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
     private SftpEndpoint endpoint;
     private ChannelSftp channel;
     private Session session;
+
+    private static class TaskPayload {
+        final RemoteFileConfiguration configuration;
+        private Exception exception;
+
+        public TaskPayload(RemoteFileConfiguration configuration) {
+            this.configuration = configuration;
+        }
+    }
 
     public SftpOperations() {
     }
@@ -110,70 +122,68 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
             return true;
         }
 
-        boolean connected = false;
-        int attempt = 0;
+        BlockingTask task = Tasks
+                .foregroundTask()
+                .withBudget(Budgets.iterationBudget()
+                        .withMaxIterations(Budgets.atLeastOnce(endpoint.getMaximumReconnectAttempts()))
+                        .withInterval(Duration.ofMillis(endpoint.getReconnectDelay()))
+                        .build())
+                .build();
 
-        while (!connected) {
-            try {
-                if (LOG.isTraceEnabled() && attempt > 0) {
-                    LOG.trace("Reconnect attempt #{} connecting to + {}", attempt, configuration.remoteServerInformation());
-                }
+        TaskPayload payload = new TaskPayload(configuration);
 
-                if (channel == null || !channel.isConnected()) {
-                    if (session == null || !session.isConnected()) {
-                        LOG.trace("Session isn't connected, trying to recreate and connect.");
-                        session = createSession(configuration);
-                        if (endpoint.getConfiguration().getConnectTimeout() > 0) {
-                            LOG.trace("Connecting use connectTimeout: {} ...", endpoint.getConfiguration().getConnectTimeout());
-                            session.connect(endpoint.getConfiguration().getConnectTimeout());
-                        } else {
-                            LOG.trace("Connecting ...");
-                            session.connect();
-                        }
-                    }
-
-                    LOG.trace("Channel isn't connected, trying to recreate and connect.");
-                    channel = (ChannelSftp) session.openChannel("sftp");
-
-                    if (endpoint.getConfiguration().getConnectTimeout() > 0) {
-                        LOG.trace("Connecting use connectTimeout: {} ...", endpoint.getConfiguration().getConnectTimeout());
-                        channel.connect(endpoint.getConfiguration().getConnectTimeout());
-                    } else {
-                        LOG.trace("Connecting ...");
-                        channel.connect();
-                    }
-                    LOG.debug("Connected to {}", configuration.remoteServerInformation());
-                }
-
-                // yes we could connect
-                connected = true;
-            } catch (Exception e) {
-                // check if we are interrupted so we can break out
-                if (Thread.currentThread().isInterrupted()) {
-                    throw new GenericFileOperationFailedException(
-                            "Interrupted during connecting", new InterruptedException("Interrupted during connecting"));
-                }
-
-                GenericFileOperationFailedException failed = new GenericFileOperationFailedException(
-                        "Cannot connect to " + configuration.remoteServerInformation(), e);
-                LOG.trace("Cannot connect due: {}", failed.getMessage());
-                attempt++;
-                if (attempt > endpoint.getMaximumReconnectAttempts()) {
-                    throw failed;
-                }
-                if (endpoint.getReconnectDelay() > 0) {
-                    try {
-                        Thread.sleep(endpoint.getReconnectDelay());
-                    } catch (InterruptedException ie) {
-                        // we could potentially also be interrupted during sleep
-                        Thread.currentThread().interrupt();
-                        throw new GenericFileOperationFailedException("Interrupted during sleeping", ie);
-                    }
-                }
-            }
+        if (!task.run(this::tryConnect, payload)) {
+            throw new GenericFileOperationFailedException(
+                    "Cannot connect to " + configuration.remoteServerInformation(),
+                    payload.exception);
         }
 
         configureBulkRequests();
+
+        return true;
+    }
+
+    private boolean tryConnect(TaskPayload payload) {
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("Reconnect attempt to {}", payload.configuration.remoteServerInformation());
+        }
+
+        try {
+            if (channel == null || !channel.isConnected()) {
+                if (session == null || !session.isConnected()) {
+                    LOG.trace("Session isn't connected, trying to recreate and connect.");
+
+                    session = createSession(payload.configuration);
+
+                    if (endpoint.getConfiguration().getConnectTimeout() > 0) {
+                        LOG.trace("Connecting use connectTimeout: {} ...", endpoint.getConfiguration().getConnectTimeout());
+                        session.connect(endpoint.getConfiguration().getConnectTimeout());
+                    } else {
+                        LOG.trace("Connecting ...");
+                        session.connect();
+                    }
+                }
+
+                LOG.trace("Channel isn't connected, trying to recreate and connect.");
+                channel = (ChannelSftp) session.openChannel("sftp");
+
+                if (endpoint.getConfiguration().getConnectTimeout() > 0) {
+                    LOG.trace("Connecting use connectTimeout: {} ...", endpoint.getConfiguration().getConnectTimeout());
+                    channel.connect(endpoint.getConfiguration().getConnectTimeout());
+                } else {
+                    LOG.trace("Connecting ...");
+                    channel.connect();
+                }
+
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Connected to {}", payload.configuration.remoteServerInformation());
+                }
+            }
+        } catch (JSchException e) {
+            payload.exception = e;
+
+            return false;
+        }
 
         return true;
     }
@@ -208,6 +218,11 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
             ciphers.put("cipher.s2c", sftpConfig.getCiphers());
             ciphers.put("cipher.c2s", sftpConfig.getCiphers());
             JSch.setConfig(ciphers);
+        }
+
+        if (isNotEmpty(sftpConfig.getKeyExchangeProtocols())) {
+            LOG.debug("Using KEX: {}", sftpConfig.getKeyExchangeProtocols());
+            JSch.setConfig("kex", sftpConfig.getKeyExchangeProtocols());
         }
 
         if (isNotEmpty(sftpConfig.getPrivateKeyFile())) {
@@ -295,7 +310,7 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
         final Session session = jsch.getSession(configuration.getUsername(), configuration.getHost(), configuration.getPort());
 
         if (isNotEmpty(sftpConfig.getStrictHostKeyChecking())) {
-            LOG.debug("Using StrickHostKeyChecking: {}", sftpConfig.getStrictHostKeyChecking());
+            LOG.debug("Using StrictHostKeyChecking: {}", sftpConfig.getStrictHostKeyChecking());
             session.setConfig("StrictHostKeyChecking", sftpConfig.getStrictHostKeyChecking());
         }
 
@@ -386,7 +401,7 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
                 }
 
                 @Override
-                public Socket createSocket(String host, int port) throws IOException, UnknownHostException {
+                public Socket createSocket(String host, int port) throws IOException {
                     return createSocketUtil(host, port, sftpConfig.getBindAddress(), session.getTimeout());
                 }
             });
@@ -488,7 +503,7 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
             channel.rm(name);
             return true;
         } catch (SftpException e) {
-            LOG.debug("Cannot delete file: {}", name, e);
+            LOG.debug("Cannot delete file {}: {}", name, e.getMessage(), e);
             throw new GenericFileOperationFailedException("Cannot delete file: " + name, e);
         }
     }
@@ -549,8 +564,11 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
                     // so create the folder one by one
                     success = buildDirectoryChunks(directory);
                 }
+
+                // after creating directory, we may set chmod on the file
+                chmodOfDirectory(directory);
             }
-        } catch (IOException | SftpException e) {
+        } catch (SftpException e) {
             throw new GenericFileOperationFailedException("Cannot build directory: " + directory, e);
         } finally {
             // change back to original directory
@@ -561,7 +579,7 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
         return success;
     }
 
-    private boolean buildDirectoryChunks(String dirName) throws IOException, SftpException {
+    private boolean buildDirectoryChunks(String dirName) throws SftpException {
         final StringBuilder sb = new StringBuilder(dirName.length());
         final String[] dirs = dirName.split("/|\\\\");
 
@@ -588,6 +606,9 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
                 } catch (SftpException e) {
                     // ignore keep trying to create the rest of the path
                 }
+
+                // after creating directory, we may set chmod on the file
+                chmodOfDirectory(directory);
             }
         }
 
@@ -700,30 +721,24 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
     }
 
     @Override
-    public synchronized List<SftpRemoteFile> listFiles() throws GenericFileOperationFailedException {
+    public synchronized SftpRemoteFile[] listFiles() throws GenericFileOperationFailedException {
         return listFiles(".");
     }
 
     @Override
-    public synchronized List<SftpRemoteFile> listFiles(String path) throws GenericFileOperationFailedException {
-        LOG.trace("listFiles({})", path);
+    public synchronized SftpRemoteFile[] listFiles(String path) throws GenericFileOperationFailedException {
+        LOG.trace("Listing remote files from path {}", path);
         if (ObjectHelper.isEmpty(path)) {
             // list current directory if file path is not given
             path = ".";
         }
 
         try {
-            final List<SftpRemoteFile> list = new ArrayList<>();
+            Vector<?> files = channel.ls(path);
 
-            @SuppressWarnings("rawtypes")
-            List files = channel.ls(path);
-            // can return either null or an empty list depending on FTP servers
-            if (files != null) {
-                for (Object file : files) {
-                    list.add(new SftpRemoteFileJCraft((ChannelSftp.LsEntry) file));
-                }
-            }
-            return list;
+            return files.stream()
+                    .map(f -> new SftpRemoteFileJCraft((ChannelSftp.LsEntry) f))
+                    .toArray(SftpRemoteFileJCraft[]::new);
         } catch (SftpException e) {
             throw new GenericFileOperationFailedException("Cannot list directory: " + path, e);
         }
@@ -745,7 +760,7 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
 
     @Override
     public synchronized void releaseRetrievedFileResources(Exchange exchange) throws GenericFileOperationFailedException {
-        InputStream is = exchange.getIn().getHeader(RemoteFileComponent.REMOTE_FILE_INPUT_STREAM, InputStream.class);
+        InputStream is = exchange.getIn().getHeader(FtpConstants.REMOTE_FILE_INPUT_STREAM, InputStream.class);
 
         if (is != null) {
             try {
@@ -786,7 +801,7 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
 
             if (endpoint.getConfiguration().isStreamDownload()) {
                 target.setBody(is);
-                exchange.getIn().setHeader(RemoteFileComponent.REMOTE_FILE_INPUT_STREAM, is);
+                exchange.getIn().setHeader(FtpConstants.REMOTE_FILE_INPUT_STREAM, is);
             } else {
                 // read the entire file into memory in the byte array
                 ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -853,9 +868,9 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
             os = new FileOutputStream(temp);
 
             // set header with the path to the local work file
-            exchange.getIn().setHeader(Exchange.FILE_LOCAL_WORK_PATH, local.getPath());
+            exchange.getIn().setHeader(FtpConstants.FILE_LOCAL_WORK_PATH, local.getPath());
         } catch (Exception e) {
-            throw new GenericFileOperationFailedException("Cannot create new local work file: " + local);
+            throw new GenericFileOperationFailedException("Cannot create new local work file: " + local, e);
         }
         String currentDir = null;
         try {
@@ -890,8 +905,8 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
             IOHelper.close(os, "retrieve: " + name, LOG);
             boolean deleted = FileUtil.deleteFile(temp);
             if (!deleted) {
-                LOG.warn("Error occurred during retrieving file: " + name
-                         + " to local directory. Cannot delete local work file: " + temp);
+                LOG.warn("Error occurred during retrieving file: {} to local directory. Cannot delete local work file: {}",
+                        name, temp);
             }
             throw new GenericFileOperationFailedException("Cannot retrieve file: " + name, e);
         } finally {
@@ -928,7 +943,7 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
 
         LOG.trace("storeFile({})", name);
 
-        boolean answer = false;
+        boolean answer;
         String currentDir = null;
         String path = FileUtil.onlyPath(name);
         String targetName = name;
@@ -1015,7 +1030,7 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
             if (LOG.isDebugEnabled()) {
                 long time = watch.taken();
                 LOG.debug("Took {} ({} millis) to store file: {} and FTP client returned: true",
-                        new Object[] { TimeUtils.printDuration(time), time, targetName });
+                        TimeUtils.printDuration(time, true), time, targetName);
             }
 
             // after storing file, we may set chmod on the file
@@ -1152,10 +1167,7 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
                 } catch (Exception e) {
                     ee[0] = e;
                     if (sockp[0] != null && sockp[0].isConnected()) {
-                        try {
-                            sockp[0].close();
-                        } catch (Exception eee) {
-                        }
+                        IOHelper.close(sockp[0]);
                     }
                     sockp[0] = null;
                 }
@@ -1196,6 +1208,24 @@ public class SftpOperations implements RemoteFileOperations<SftpRemoteFile> {
             // store client reply information after the operation
             exchange.getIn().setHeader(FtpConstants.FTP_REPLY_CODE, sftpException.id);
             exchange.getIn().setHeader(FtpConstants.FTP_REPLY_STRING, sftpException.getMessage());
+        }
+    }
+
+    /**
+     * Helper method which sets the path permissions
+     */
+    private void chmodOfDirectory(String directory) {
+
+        String chmodDirectory = endpoint.getConfiguration().getChmodDirectory();
+        if (ObjectHelper.isNotEmpty(chmodDirectory)) {
+            LOG.trace("Setting permission: {} on directory: {}", chmodDirectory, directory);
+            // parse to int using 8bit mode
+            int permissions = Integer.parseInt(chmodDirectory, 8);
+            try {
+                channel.chmod(permissions, directory);
+            } catch (SftpException e) {
+                throw new GenericFileOperationFailedException("Cannot set permission on directory: " + directory, e);
+            }
         }
     }
 }

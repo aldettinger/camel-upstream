@@ -16,9 +16,12 @@
  */
 package org.apache.camel.component.kafka;
 
+import org.apache.camel.ExtendedCamelContext;
 import org.apache.camel.Processor;
+import org.apache.camel.spi.ExchangeFactory;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -31,23 +34,36 @@ public class KafkaConsumerTest {
     private KafkaComponent component = mock(KafkaComponent.class);
     private KafkaEndpoint endpoint = mock(KafkaEndpoint.class);
     private Processor processor = mock(Processor.class);
+    private ExtendedCamelContext ecc = mock(ExtendedCamelContext.class);
+    private ExchangeFactory ef = mock(ExchangeFactory.class);
 
     @Test
-    public void consumerRequiresBootstrapServers() throws Exception {
+    public void consumerRequiresBootstrapServers() {
+        when(endpoint.getCamelContext()).thenReturn(ecc);
+        when(ecc.adapt(ExtendedCamelContext.class)).thenReturn(ecc);
+        when(ecc.getExchangeFactory()).thenReturn(ef);
+        when(ef.newExchangeFactory(any())).thenReturn(ef);
         when(endpoint.getComponent()).thenReturn(component);
         when(endpoint.getConfiguration()).thenReturn(configuration);
         when(endpoint.getConfiguration().getGroupId()).thenReturn("groupOne");
+        when(endpoint.getKafkaClientFactory()).thenReturn(clientFactory);
         when(component.getKafkaClientFactory()).thenReturn(clientFactory);
         when(clientFactory.getBrokers(any())).thenThrow(new IllegalArgumentException());
-        assertThrows(IllegalArgumentException.class,
-                () -> new KafkaConsumer(endpoint, processor).getProps());
+        final KafkaConsumer kafkaConsumer = new KafkaConsumer(endpoint, processor);
+
+        assertThrows(IllegalArgumentException.class, () -> kafkaConsumer.getProps());
     }
 
     @Test
-    public void consumerOnlyRequiresBootstrapServers() throws Exception {
+    public void consumerOnlyRequiresBootstrapServers() {
+        when(endpoint.getCamelContext()).thenReturn(ecc);
+        when(ecc.adapt(ExtendedCamelContext.class)).thenReturn(ecc);
+        when(ecc.getExchangeFactory()).thenReturn(ef);
+        when(ef.newExchangeFactory(any())).thenReturn(ef);
         when(endpoint.getComponent()).thenReturn(component);
         when(endpoint.getConfiguration()).thenReturn(configuration);
         when(endpoint.getConfiguration().getBrokers()).thenReturn("localhost:2181");
-        new KafkaConsumer(endpoint, processor);
+
+        assertDoesNotThrow(() -> new KafkaConsumer(endpoint, processor));
     }
 }

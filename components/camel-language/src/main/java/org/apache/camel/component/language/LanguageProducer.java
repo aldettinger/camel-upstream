@@ -45,9 +45,9 @@ public class LanguageProducer extends DefaultProducer {
         String script = null;
 
         // is there a custom expression in the header?
-        Expression exp = exchange.getIn().getHeader(Exchange.LANGUAGE_SCRIPT, Expression.class);
+        Expression exp = exchange.getIn().getHeader(LanguageConstants.LANGUAGE_SCRIPT, Expression.class);
         if (exp == null) {
-            script = exchange.getIn().getHeader(Exchange.LANGUAGE_SCRIPT, String.class);
+            script = exchange.getIn().getHeader(LanguageConstants.LANGUAGE_SCRIPT, String.class);
             if (script != null) {
                 // the script may be a file: so resolve it before using
                 script = getEndpoint().resolveScript(script);
@@ -123,11 +123,7 @@ public class LanguageProducer extends DefaultProducer {
 
         // set message body if transform is enabled
         if (getEndpoint().isTransform()) {
-            if (exchange.hasOut()) {
-                exchange.getOut().setBody(result);
-            } else {
-                exchange.getIn().setBody(result);
-            }
+            exchange.getMessage().setBody(result);
         }
     }
 

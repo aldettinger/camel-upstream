@@ -24,12 +24,13 @@ import javax.xml.bind.annotation.XmlRootElement;
 import org.apache.camel.spi.Metadata;
 
 /**
- * Evaluate the given expression using the specified language.
+ * Evaluates a custom language.
  */
 @Metadata(label = "language,core", title = "Language")
 @XmlRootElement(name = "language")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class LanguageExpression extends ExpressionDefinition {
+
     @XmlAttribute(required = true)
     private String language;
 

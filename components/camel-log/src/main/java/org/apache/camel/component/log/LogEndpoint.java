@@ -19,6 +19,7 @@ package org.apache.camel.component.log;
 import org.apache.camel.Category;
 import org.apache.camel.Component;
 import org.apache.camel.ExtendedCamelContext;
+import org.apache.camel.LineNumberAware;
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
@@ -37,6 +38,8 @@ import org.apache.camel.support.processor.ThroughputLogger;
 import org.apache.camel.support.service.ServiceHelper;
 import org.slf4j.Logger;
 
+import static org.apache.camel.support.LoggerHelper.getLineNumberLoggerName;
+
 /**
  * Log messages to the underlying logging mechanism.
  *
@@ -44,16 +47,18 @@ import org.slf4j.Logger;
  */
 @UriEndpoint(firstVersion = "1.1.0", scheme = "log", title = "Log",
              syntax = "log:loggerName", producerOnly = true, category = { Category.CORE, Category.MONITORING })
-public class LogEndpoint extends ProcessorEndpoint {
+public class LogEndpoint extends ProcessorEndpoint implements LineNumberAware {
 
     private volatile Processor logger;
     private Logger providedLogger;
     private ExchangeFormatter localFormatter;
+    private int lineNumber;
+    private String location;
 
     @UriPath(description = "Name of the logging category to use")
     @Metadata(required = true)
     private String loggerName;
-    @UriParam(defaultValue = "INFO", enums = "ERROR,WARN,INFO,DEBUG,TRACE,OFF")
+    @UriParam(defaultValue = "INFO", enums = "TRACE,DEBUG,INFO,WARN,ERROR,OFF")
     private String level;
     @UriParam
     private String marker;
@@ -74,8 +79,11 @@ public class LogEndpoint extends ProcessorEndpoint {
     @UriParam(label = "formatting", defaultValue = "true",
               description = "Shows the Message Exchange Pattern (or MEP for short).")
     private boolean showExchangePattern = true;
-    @UriParam(label = "formatting", description = "Show the exchange properties.")
+    @UriParam(label = "formatting",
+              description = "Show the exchange properties (only custom). Use showAllProperties to show both internal and custom properties.")
     private boolean showProperties;
+    @UriParam(label = "formatting", description = "Show all of the exchange properties (both internal and custom).")
+    private boolean showAllProperties;
     @UriParam(label = "formatting", description = "Show the message headers.")
     private boolean showHeaders;
     @UriParam(label = "formatting", defaultValue = "true",
@@ -115,6 +123,11 @@ public class LogEndpoint extends ProcessorEndpoint {
     @UriParam(label = "formatting", enums = "Default,Tab,Fixed", defaultValue = "Default",
               description = "Sets the outputs style to use.")
     private DefaultExchangeFormatter.OutputStyle style = DefaultExchangeFormatter.OutputStyle.Default;
+    @UriParam(defaultValue = "false", description = "If enabled only the body will be printed out")
+    private boolean plain;
+    @UriParam(description = "If enabled then the source location of where the log endpoint is used in Camel routes, would be used as logger name, instead"
+                            + " of the given name. However, if the source location is disabled or not possible to resolve then the existing logger name will be used.")
+    private boolean sourceLocationLoggerName;
 
     public LogEndpoint() {
     }
@@ -142,13 +155,15 @@ public class LogEndpoint extends ProcessorEndpoint {
 
             // are any options configured if not we can optimize to use shared default
             boolean changed = !showExchangePattern || !skipBodyLineSeparator || !showBody || !showBodyType || maxChars != 10000
-                    || style != DefaultExchangeFormatter.OutputStyle.Default;
-            changed |= showExchangeId || showProperties || showHeaders || showException || showCaughtException
+                    || style != DefaultExchangeFormatter.OutputStyle.Default || plain;
+            changed |= showExchangeId || showProperties || showAllProperties || showHeaders || showException
+                    || showCaughtException
                     || showStackTrace;
             changed |= showAll || multiline || showFuture || showStreams || showFiles;
 
             if (changed) {
                 DefaultExchangeFormatter def = new DefaultExchangeFormatter();
+                def.setPlain(plain);
                 def.setShowAll(showAll);
                 def.setShowBody(showBody);
                 def.setShowBodyType(showBodyType);
@@ -160,6 +175,7 @@ public class LogEndpoint extends ProcessorEndpoint {
                 def.setShowFuture(showFuture);
                 def.setShowHeaders(showHeaders);
                 def.setShowProperties(showProperties);
+                def.setShowAllProperties(showAllProperties);
                 def.setShowStackTrace(showStackTrace);
                 def.setShowStreams(showStreams);
                 def.setMaxChars(maxChars);
@@ -184,6 +200,26 @@ public class LogEndpoint extends ProcessorEndpoint {
     @Override
     protected void doStop() throws Exception {
         ServiceHelper.stopService(logger);
+    }
+
+    @Override
+    public int getLineNumber() {
+        return lineNumber;
+    }
+
+    @Override
+    public void setLineNumber(int lineNumber) {
+        this.lineNumber = lineNumber;
+    }
+
+    @Override
+    public String getLocation() {
+        return location;
+    }
+
+    @Override
+    public void setLocation(String location) {
+        this.location = location;
     }
 
     public void setLogger(Processor logger) {
@@ -219,16 +255,23 @@ public class LogEndpoint extends ProcessorEndpoint {
     /**
      * Creates the logger {@link Processor} to be used.
      */
-    protected Processor createLogger() throws Exception {
+    protected Processor createLogger() {
         Processor answer;
         // setup a new logger here
         CamelLogger camelLogger;
         LoggingLevel loggingLevel = LoggingLevel.INFO;
-        if (level != null) {
+        if (level != null && !level.equals("INFO")) {
             loggingLevel = LoggingLevel.valueOf(level);
         }
         if (providedLogger == null) {
-            camelLogger = new CamelLogger(loggerName, loggingLevel, getMarker());
+            String name = loggerName;
+            if (sourceLocationLoggerName) {
+                name = getLineNumberLoggerName(this);
+                if (name == null) {
+                    name = loggerName;
+                }
+            }
+            camelLogger = new CamelLogger(name, loggingLevel, getMarker());
         } else {
             camelLogger = new CamelLogger(providedLogger, loggingLevel, getMarker());
         }
@@ -418,6 +461,14 @@ public class LogEndpoint extends ProcessorEndpoint {
         this.showProperties = showProperties;
     }
 
+    public boolean isShowAllProperties() {
+        return showAllProperties;
+    }
+
+    public void setShowAllProperties(boolean showAllProperties) {
+        this.showAllProperties = showAllProperties;
+    }
+
     public boolean isShowHeaders() {
         return showHeaders;
     }
@@ -528,5 +579,21 @@ public class LogEndpoint extends ProcessorEndpoint {
 
     public void setStyle(DefaultExchangeFormatter.OutputStyle style) {
         this.style = style;
+    }
+
+    public boolean isPlain() {
+        return plain;
+    }
+
+    public void setPlain(boolean plain) {
+        this.plain = plain;
+    }
+
+    public boolean isSourceLocationLoggerName() {
+        return sourceLocationLoggerName;
+    }
+
+    public void setSourceLocationLoggerName(boolean sourceLocationLoggerName) {
+        this.sourceLocationLoggerName = sourceLocationLoggerName;
     }
 }

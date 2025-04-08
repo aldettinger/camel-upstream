@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>camel-salesforce-parent</artifactId>
-        <version>3.9.0-SNAPSHOT</version>
+        <version>3.18.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>camel-salesforce</artifactId>
@@ -35,7 +35,6 @@
     <properties>
         <camel.osgi.import.additional>
             javax.xml.bind*;version="[2.2,3.0)",
-            com.thoughtworks.xstream.*;version="[1.4.7,2)",
             org.eclipse.jetty.*;version="[9.4,10)",
             org.mortbay.cometd.*;version="[6.1,7)"
         </camel.osgi.import.additional>
@@ -110,8 +109,8 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>com.thoughtworks.xstream</groupId>
-            <artifactId>xstream</artifactId>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
         </dependency>
         <dependency>
             <groupId>org.cometd.java</groupId>
@@ -133,6 +132,15 @@
             <artifactId>commons-lang3</artifactId>
             <version>${commons-lang3-version}</version>
         </dependency>
+        <dependency>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.sun.xml.bind</groupId>
+            <artifactId>jaxb-impl</artifactId>
+        </dependency>
 
         <!-- logging -->
         <dependency>
@@ -145,11 +153,6 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-csv</artifactId>
             <version>${commons-csv-version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -217,6 +220,13 @@
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>mockwebserver</artifactId>
             <version>${okclient-version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- forcing okhttp v3.x related to https://issues.apache.org/jira/browse/CAMEL-16336 -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>${squareup-okhttp-version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -396,7 +406,7 @@ https://developer.salesforce.com/page/Force.com_Migration_Tool]]></message>
                             <dependency>
                                 <groupId>org.apache.ant</groupId>
                                 <artifactId>ant</artifactId>
-                                <version>1.10.9</version>
+                                <version>1.10.12</version>
                             </dependency>
                         </dependencies>
                     </plugin>
@@ -418,7 +428,8 @@ https://developer.salesforce.com/page/Force.com_Migration_Tool]]></message>
                                     <includes>
                                         <include>**/*IntegrationTest.java</include>
                                     </includes>
-                                    <excludedGroups>org.apache.camel.component.salesforce.Standalone</excludedGroups>
+                                    <excludedGroups>standalone</excludedGroups>
+                                    <forkedProcessExitTimeoutInSeconds>240</forkedProcessExitTimeoutInSeconds>
                                 </configuration>
                             </execution>
                             <execution>
@@ -433,7 +444,7 @@ https://developer.salesforce.com/page/Force.com_Migration_Tool]]></message>
                                     <includes>
                                         <include>**/*IntegrationTest.java</include>
                                     </includes>
-                                    <groups>org.apache.camel.component.salesforce.Standalone</groups>
+                                    <groups>standalone</groups>
                                 </configuration>
                             </execution>
                         </executions>

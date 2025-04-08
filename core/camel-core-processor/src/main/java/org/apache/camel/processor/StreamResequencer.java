@@ -38,6 +38,7 @@ import org.apache.camel.spi.ExceptionHandler;
 import org.apache.camel.spi.IdAware;
 import org.apache.camel.spi.RouteIdAware;
 import org.apache.camel.support.AsyncProcessorSupport;
+import org.apache.camel.support.ExchangeHelper;
 import org.apache.camel.support.LoggingExceptionHandler;
 import org.apache.camel.support.service.ServiceHelper;
 import org.apache.camel.util.ObjectHelper;
@@ -201,6 +202,16 @@ public class StreamResequencer extends AsyncProcessorSupport
     }
 
     @Override
+    protected void doBuild() throws Exception {
+        ServiceHelper.buildService(processor);
+    }
+
+    @Override
+    protected void doInit() throws Exception {
+        ServiceHelper.initService(processor);
+    }
+
+    @Override
     protected void doStart() throws Exception {
         ServiceHelper.startService(processor);
         delivery = new Delivery();
@@ -232,7 +243,7 @@ public class StreamResequencer extends AsyncProcessorSupport
             try {
                 Thread.sleep(getTimeout());
             } catch (InterruptedException e) {
-                // we was interrupted so break out
+                // we were interrupted so break out
                 exchange.setException(e);
                 callback.done(true);
                 return true;
@@ -240,7 +251,9 @@ public class StreamResequencer extends AsyncProcessorSupport
         }
 
         try {
-            engine.insert(exchange);
+            // need to make defensive copy that are put on the sequencer queue
+            Exchange copy = ExchangeHelper.createCorrelatedCopy(exchange, true);
+            engine.insert(copy);
             delivery.request();
         } catch (Exception e) {
             if (isIgnoreInvalidExchanges()) {
@@ -272,8 +285,8 @@ public class StreamResequencer extends AsyncProcessorSupport
 
     class Delivery extends Thread {
 
-        private Lock deliveryRequestLock = new ReentrantLock();
-        private Condition deliveryRequestCondition = deliveryRequestLock.newCondition();
+        private final Lock deliveryRequestLock = new ReentrantLock();
+        private final Condition deliveryRequestCondition = deliveryRequestLock.newCondition();
 
         Delivery() {
             super(camelContext.getExecutorServiceManager().resolveThreadName("Resequencer Delivery"));
@@ -295,7 +308,7 @@ public class StreamResequencer extends AsyncProcessorSupport
                 try {
                     engine.deliver();
                 } catch (Throwable t) {
-                    // a fail safe to handle all exceptions being thrown
+                    // a fail-safe to handle all exceptions being thrown
                     getExceptionHandler().handleException(t);
                 }
             }

@@ -34,8 +34,6 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.camel.test.junit5.TestSupport.createDirectory;
-import static org.apache.camel.test.junit5.TestSupport.deleteDirectory;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -62,11 +60,11 @@ public class XPathSplitChoicePerformanceTest extends CamelTestSupport {
 
     @Test
     @Disabled("Manual test")
-    public void testXPathPerformanceRoute() throws Exception {
+    public void testXPathPerformanceRoute() {
         NotifyBuilder notify = new NotifyBuilder(context).whenDone(size).create();
 
         boolean matches = notify.matches(60, TimeUnit.SECONDS);
-        LOG.info("Processed file with " + size + " elements in: " + TimeUtils.printDuration(watch.taken()));
+        LOG.info("Processed file with " + size + " elements in: " + TimeUtils.printDuration(watch.taken(), true));
 
         LOG.info("Processed " + tiny.get() + " tiny messages");
         LOG.info("Processed " + small.get() + " small messages");
@@ -82,13 +80,13 @@ public class XPathSplitChoicePerformanceTest extends CamelTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
-                from("file:target/data?noop=true")
+            public void configure() {
+                from(fileUri("?noop=true"))
                         .process(new Processor() {
-                            public void process(Exchange exchange) throws Exception {
+                            public void process(Exchange exchange) {
                                 log.info("Starting to process file");
                                 watch.restart();
                             }
@@ -97,7 +95,7 @@ public class XPathSplitChoicePerformanceTest extends CamelTestSupport {
                         .choice()
                         .when().xpath("/order/amount < 10")
                         .process(new Processor() {
-                            public void process(Exchange exchange) throws Exception {
+                            public void process(Exchange exchange) {
                                 String xml = exchange.getIn().getBody(String.class);
                                 assertTrue(xml.contains("<amount>3</amount>"), xml);
 
@@ -110,7 +108,7 @@ public class XPathSplitChoicePerformanceTest extends CamelTestSupport {
                         })
                         .when().xpath("/order/amount < 50")
                         .process(new Processor() {
-                            public void process(Exchange exchange) throws Exception {
+                            public void process(Exchange exchange) {
                                 String xml = exchange.getIn().getBody(String.class);
                                 assertTrue(xml.contains("<amount>44</amount>"), xml);
 
@@ -123,7 +121,7 @@ public class XPathSplitChoicePerformanceTest extends CamelTestSupport {
                         })
                         .when().xpath("/order/amount < 100")
                         .process(new Processor() {
-                            public void process(Exchange exchange) throws Exception {
+                            public void process(Exchange exchange) {
                                 String xml = exchange.getIn().getBody(String.class);
                                 assertTrue(xml.contains("<amount>88</amount>"), xml);
 
@@ -136,7 +134,7 @@ public class XPathSplitChoicePerformanceTest extends CamelTestSupport {
                         })
                         .otherwise()
                         .process(new Processor() {
-                            public void process(Exchange exchange) throws Exception {
+                            public void process(Exchange exchange) {
                                 String xml = exchange.getIn().getBody(String.class);
                                 assertTrue(xml.contains("<amount>123</amount>"), xml);
 
@@ -153,13 +151,12 @@ public class XPathSplitChoicePerformanceTest extends CamelTestSupport {
         };
     }
 
-    public static void createDataFile(Logger log, int size) throws Exception {
-        deleteDirectory("target/data");
-        createDirectory("target/data");
+    public void createDataFile(Logger log, int size) throws Exception {
+        deleteTestDirectory();
 
         log.info("Creating data file ...");
 
-        File file = new File("target/data/data.xml");
+        File file = testDirectory(true).resolve("data.xml").toFile();
         FileOutputStream fos = new FileOutputStream(file, true);
         fos.write("<orders>\n".getBytes());
 

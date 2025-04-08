@@ -16,6 +16,8 @@
  */
 package org.apache.camel.component.jms;
 
+import java.time.Duration;
+
 import org.apache.camel.ExchangePattern;
 import org.apache.camel.builder.RouteBuilder;
 
@@ -25,22 +27,19 @@ import org.apache.camel.builder.RouteBuilder;
 public class JmsInOutFixedReplyQueueTimeoutUseMessageIDAsCorrelationIDTest extends JmsInOutFixedReplyQueueTimeoutTest {
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
-            public void configure() throws Exception {
+            public void configure() {
                 from("direct:start")
                         .to(ExchangePattern.InOut,
                                 "activemq:queue:foo?replyTo=queue:bar&useMessageIDAsCorrelationID=true&requestTimeout=2000")
                         .to("mock:result");
 
                 from("activemq:queue:foo")
-                        .process(exchange -> {
-                            String body = exchange.getIn().getBody(String.class);
-                            if ("World".equals(body)) {
-                                log.debug("Sleeping for 4 sec to force a timeout");
-                                Thread.sleep(4000);
-                            }
-                        }).transform(body().prepend("Bye ")).to("log:reply");
+                        .choice().when(body().isEqualTo("World"))
+                            .log("Sleeping for 4 sec to force a timeout")
+                            .delay(Duration.ofSeconds(4).toMillis()).endChoice().end()
+                        .transform(body().prepend("Bye ")).to("log:reply");
             }
         };
     }

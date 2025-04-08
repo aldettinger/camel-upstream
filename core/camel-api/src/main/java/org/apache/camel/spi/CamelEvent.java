@@ -55,6 +55,7 @@ public interface CamelEvent {
         RoutesStopped,
         RouteAdded,
         RouteRemoved,
+        RouteReloaded,
         RouteStarting,
         RouteStarted,
         RouteStopping,
@@ -70,6 +71,14 @@ public interface CamelEvent {
     Type getType();
 
     Object getSource();
+
+    /**
+     * Timestamp for each event, when the event occurred. By default, the timestamp is not included and this method
+     * returns 0.
+     */
+    long getTimestamp();
+
+    void setTimestamp(long timestamp);
 
     /**
      * This interface is implemented by all events that contain an exception and is used to retrieve the exception in a
@@ -345,6 +354,23 @@ public interface CamelEvent {
         default Type getType() {
             return Type.RouteRemoved;
         }
+    }
+
+    interface RouteReloadedEvent extends RouteEvent {
+        @Override
+        default Type getType() {
+            return Type.RouteReloaded;
+        }
+
+        /**
+         * The route index in this batch (starts from 1)
+         */
+        int getIndex();
+
+        /**
+         * Total number of routes being reloaded in this batch
+         */
+        int getTotal();
     }
 
     interface RouteStartingEvent extends RouteEvent {

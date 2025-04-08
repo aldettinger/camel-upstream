@@ -18,9 +18,9 @@
  */
 
 def AGENT_LABEL = env.AGENT_LABEL ?: 'ubuntu'
-def JDK_NAME = env.JDK_NAME ?: 'jdk_1.8_latest'
+def JDK_NAME = env.JDK_NAME ?: 'jdk_11_latest'
 
-def MAVEN_PARAMS = "-U -B -e -fae -V -Dnoassembly -Dmaven.compiler.fork=true -Dsurefire.rerunFailingTestsCount=2"
+def MAVEN_PARAMS = "-B -e -fae -V -Dnoassembly -Dmaven.compiler.fork=true -Dsurefire.rerunFailingTestsCount=2"
 
 pipeline {
 
@@ -58,36 +58,32 @@ pipeline {
            }
         }
 
-        stage('Build & Deploy') {
+        stage('Build & Install') {
             when {
-                branch 'master'
+                branch 'main'
             }
             steps {
-                sh "./mvnw $MAVEN_PARAMS -Pdeploy -Dmaven.test.skip.exec=true clean deploy"
-            }
-        }
-
-        stage('Website update') {
-            when {
-                branch 'master'
-                changeset 'docs/**/*'
-            }
-
-            steps {
-                build job: 'Camel/Camel.website/master', wait: false
+                sh "./mvnw -U $MAVEN_PARAMS -Dmaven.test.skip.exec=true clean install"
             }
         }
 
         stage('Checks') {
             steps {
-                sh "./mvnw $MAVEN_PARAMS -pl :camel-buildtools install"
                 sh "./mvnw $MAVEN_PARAMS -Psourcecheck -Dcheckstyle.failOnViolation=false checkstyle:check"
+            }
+        }
+
+        stage('Code Quality Review') {
+            steps {
+                withCredentials([string(credentialsId: 'apache-camel-core', variable: 'SONAR_TOKEN')]) {
+                    sh "./mvnw $MAVEN_PARAMS -Dsonar.host.url=https://sonarcloud.io -Dsonar.java.experimental.batchModeSizeInKB=2048 -Dsonar.organization=apache -Dsonar.projectKey=apache_camel -Dsonar.branch.name=$BRANCH_NAME org.sonarsource.scanner.maven:sonar-maven-plugin:sonar"
+                }
             }
         }
 
         stage('Test') {
             steps {
-                sh "./mvnw $MAVEN_PARAMS -Dmaven.test.failure.ignore=true clean install"
+                sh "./mvnw $MAVEN_PARAMS -Dmaven.test.failure.ignore=true -Dcheckstyle.skip=true verify"
             }
             post {
                 always {

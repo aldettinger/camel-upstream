@@ -24,6 +24,7 @@ import io.opentracing.tag.Tags;
 import org.apache.camel.tracing.SpanAdapter;
 import org.apache.camel.tracing.Tag;
 
+@Deprecated
 public class OpenTracingSpanAdapter implements SpanAdapter {
 
     static EnumMap<Tag, AbstractTag> tagMap = new EnumMap<>(Tag.class);
@@ -88,6 +89,16 @@ public class OpenTracingSpanAdapter implements SpanAdapter {
     @Override
     public void log(Map<String, String> fields) {
         this.span.log(fields);
+    }
+
+    @Override
+    public String traceId() {
+        return this.span.context().toTraceId();
+    }
+
+    @Override
+    public String spanId() {
+        return this.span.context().toSpanId();
     }
 
 }

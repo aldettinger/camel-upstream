@@ -16,44 +16,34 @@
  */
 package org.apache.camel.component.paho;
 
-import org.apache.activemq.broker.BrokerService;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.test.AvailablePortFinder;
+import org.apache.camel.test.infra.activemq.services.ActiveMQEmbeddedService;
+import org.apache.camel.test.infra.activemq.services.ActiveMQEmbeddedServiceBuilder;
 import org.apache.camel.test.junit5.CamelTestSupport;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class PahoToDSendDynamicTest extends CamelTestSupport {
 
-    BrokerService broker;
+    static int mqttPort = AvailablePortFinder.getNextAvailable();
 
-    int mqttPort = AvailablePortFinder.getNextAvailable();
+    @RegisterExtension
+    public static ActiveMQEmbeddedService service = ActiveMQEmbeddedServiceBuilder
+            .bare()
+            .withPersistent(false)
+            .withMqttTransport(mqttPort)
+            .build();
 
     @Override
     protected boolean useJmx() {
         return false;
     }
 
-    @Override
-    public void doPreSetup() throws Exception {
-        super.doPreSetup();
-        broker = new BrokerService();
-        broker.setPersistent(false);
-        broker.addConnector("mqtt://localhost:" + mqttPort);
-        broker.start();
-    }
-
-    @Override
-    @AfterEach
-    public void tearDown() throws Exception {
-        super.tearDown();
-        broker.stop();
-    }
-
     @Test
-    public void testToD() throws Exception {
+    public void testToD() {
         template.sendBodyAndHeader("direct:start", "Hello bar", "where", "bar");
         template.sendBodyAndHeader("direct:start", "Hello beer", "where", "beer");
 
@@ -68,16 +58,24 @@ public class PahoToDSendDynamicTest extends CamelTestSupport {
         assertEquals("Hello beer", out);
     }
 
+    @Test
+    public void testToDSlashed() {
+        template.sendBodyAndHeader("direct:startSlashed", "Hello bar", "where", "bar");
+        String out = consumer.receiveBody("paho://bar", 2000, String.class);
+        assertEquals("Hello bar", out);
+    }
+
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 PahoComponent paho = context.getComponent("paho", PahoComponent.class);
                 paho.getConfiguration().setBrokerUrl("tcp://localhost:" + mqttPort);
 
                 // route message dynamic using toD
                 from("direct:start").toD("paho:${header.where}?retained=true");
+                from("direct:startSlashed").toD("paho://${header.where}?retained=true");
             }
         };
     }

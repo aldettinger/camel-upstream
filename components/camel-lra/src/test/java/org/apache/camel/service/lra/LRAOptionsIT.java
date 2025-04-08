@@ -21,9 +21,12 @@ import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@EnabledIfEnvironmentVariable(named = "LRA_COORDINATOR_URL", matches = ".*",
+                              disabledReason = "Coordinator URL not provided")
 public class LRAOptionsIT extends AbstractLRATestSupport {
 
     @Test
@@ -56,17 +59,17 @@ public class LRAOptionsIT extends AbstractLRATestSupport {
     }
 
     @Test
-    public void testRouteDoesNotHangOnOptionError() throws Exception {
+    public void testRouteDoesNotHangOnOptionError() {
         assertThrows(RuntimeCamelException.class,
                 () -> template.sendBody("direct:wrong-expression", "Hello"));
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
 
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
 
                 from("direct:workflow")
                         .saga()
@@ -77,7 +80,7 @@ public class LRAOptionsIT extends AbstractLRATestSupport {
                         .choice()
                         .when(body().isEqualTo("compensate"))
                         .process(ex -> {
-                            throw new RuntimeException("forced compensate");
+                            throw new RuntimeCamelException("forced compensate");
                         })
                         .end()
                         .setHeader("myname", constant("TryToOverride"))

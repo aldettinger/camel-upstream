@@ -17,7 +17,6 @@
 package org.apache.camel.parser.helper;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,7 +65,7 @@ public final class CamelJavaTreeParserHelper {
     private final CamelCatalog camelCatalog = new DefaultCamelCatalog(true);
 
     public List<CamelNodeDetails> parseCamelRouteTree(
-            JavaClassSource clazz, String baseDir, String fullyQualifiedFileName,
+            JavaClassSource clazz, String fullyQualifiedFileName,
             MethodSource<JavaClassSource> configureMethod) {
 
         // find any from which is the start of the route
@@ -118,7 +117,7 @@ public final class CamelJavaTreeParserHelper {
                 // should be set on the parent
                 parent.setRouteId(node.getRouteId());
             } else if ("end".equals(name) || "endParent".equals(name) || "endRest".equals(name)
-                    || "endDoTry".equals(name) || "endHystrix".equals(name)) {
+                    || "endDoTry".equals(name)) {
                 // parent should be grand parent
                 if (parent.getParent() != null) {
                     parent = parent.getParent();
@@ -233,7 +232,7 @@ public final class CamelJavaTreeParserHelper {
         String name = mi.getName().getIdentifier();
 
         // special for Java DSL having some endXXX
-        boolean isEnd = "end".equals(name) || "endChoice".equals(name) || "endDoTry".equals(name) || "endHystrix".equals(name)
+        boolean isEnd = "end".equals(name) || "endChoice".equals(name) || "endDoTry".equals(name)
                 || "endParent".equals(name) || "endRest".equals(name);
         boolean isRoute = "route".equals(name) || "from".equals(name) || "routeId".equals(name);
         // must be an eip model that has either input or output as we only want to track processors (also accept from)
@@ -452,16 +451,18 @@ public final class CamelJavaTreeParserHelper {
                     // include extended when we concat on 2 or more lines
                     List extended = ie.extendedOperands();
                     if (extended != null) {
+                        StringBuilder answerBuilder = new StringBuilder(answer);
                         for (Object ext : extended) {
                             String val3 = getLiteralValue(clazz, block, (Expression) ext);
                             if (numeric) {
                                 long num3 = val3 != null ? Long.parseLong(val3) : 0;
-                                long num = Long.parseLong(answer);
-                                answer = Long.toString(num + num3);
+                                long num = Long.parseLong(answerBuilder.toString());
+                                answerBuilder = new StringBuilder(Long.toString(num + num3));
                             } else {
-                                answer += val3 != null ? val3 : "";
+                                answerBuilder.append(val3 != null ? val3 : "");
                             }
                         }
+                        answer = answerBuilder.toString();
                     }
                 }
             }
@@ -489,7 +490,7 @@ public final class CamelJavaTreeParserHelper {
 
         try {
             int current = 0;
-            try (BufferedReader br = new BufferedReader(new FileReader(new File(fullyQualifiedFileName)))) {
+            try (BufferedReader br = new BufferedReader(new FileReader(fullyQualifiedFileName))) {
                 String line;
                 while ((line = br.readLine()) != null) {
                     lines++;

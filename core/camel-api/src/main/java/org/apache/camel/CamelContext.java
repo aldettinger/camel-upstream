@@ -53,6 +53,7 @@ import org.apache.camel.spi.UuidGenerator;
 import org.apache.camel.spi.Validator;
 import org.apache.camel.spi.ValidatorRegistry;
 import org.apache.camel.support.jsse.SSLContextParameters;
+import org.apache.camel.vault.VaultConfiguration;
 
 /**
  * Interface used to represent the CamelContext used to configure routes and the policies to use during message
@@ -60,8 +61,7 @@ import org.apache.camel.support.jsse.SSLContextParameters;
  * <p/>
  * The CamelContext offers the following methods {@link CamelContextLifecycle} to control the lifecycle:
  * <ul>
- * <li>{@link #start()} - to start (<b>important:</b> the start method is not blocked, see more details
- * <a href="http://camel.apache.org/running-camel-standalone-and-have-it-keep-running.html">here</a>)</li>
+ * <li>{@link #start()} - to start</li>
  * <li>{@link #stop()} - to shutdown (will stop all routes/components/endpoints etc and clear internal state/cache)</li>
  * <li>{@link #suspend()} - to pause routing messages</li>
  * <li>{@link #resume()} - to resume after a suspend</li>
@@ -323,6 +323,8 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
     /**
      * Adds a component to the context.
      *
+     * Notice the component will be auto-started if Camel is already started.
+     *
      * @param componentName the name the component is registered as
      * @param component     the component
      */
@@ -383,7 +385,7 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
      *
      * @return a readonly list with the names of the components
      */
-    List<String> getComponentNames();
+    Set<String> getComponentNames();
 
     /**
      * Removes a previously added component.
@@ -436,7 +438,8 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
     <T extends Endpoint> T getEndpoint(String name, Class<T> endpointType);
 
     /**
-     * Returns a new {@link Collection} of all of the endpoints from the {@link org.apache.camel.spi.EndpointRegistry}
+     * Returns a read-only {@link Collection} of all of the endpoints from the
+     * {@link org.apache.camel.spi.EndpointRegistry}
      *
      * @return all endpoints
      */
@@ -570,6 +573,14 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
     void addRoutes(RoutesBuilder builder) throws Exception;
 
     /**
+     * Adds the routes configurations (global configuration for all routes) from the routes builder.
+     *
+     * @param  builder   the builder which has routes configurations
+     * @throws Exception if the routes configurations could not be created for whatever reason
+     */
+    void addRoutesConfigurations(RouteConfigurationsBuilder builder) throws Exception;
+
+    /**
      * Removes the given route (the route <b>must</b> be stopped before it can be removed).
      * <p/>
      * A route which is removed will be unregistered from JMX, have its services stopped/shutdown and the route
@@ -589,13 +600,16 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
      *
      * @param  routeId   the route id
      * @return           <tt>true</tt> if the route was removed, <tt>false</tt> if the route could not be removed
-     *                   because its not stopped
+     *                   because it's not stopped
      * @throws Exception is thrown if the route could not be shutdown for whatever reason
      */
     boolean removeRoute(String routeId) throws Exception;
 
     /**
      * Adds a new route from a given route template.
+     *
+     * Camel end users should favour using {@link org.apache.camel.builder.TemplatedRouteBuilder} which is a fluent
+     * builder with more functionality than this API.
      *
      * @param  routeId         the id of the new route to add (optional)
      * @param  routeTemplateId the id of the route template (mandatory)
@@ -604,6 +618,29 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
      * @throws Exception       is thrown if error creating and adding the new route
      */
     String addRouteFromTemplate(String routeId, String routeTemplateId, Map<String, Object> parameters) throws Exception;
+
+    /**
+     * Adds a new route from a given route template.
+     *
+     * Camel end users should favour using {@link org.apache.camel.builder.TemplatedRouteBuilder} which is a fluent
+     * builder with more functionality than this API.
+     *
+     * @param  routeId              the id of the new route to add (optional)
+     * @param  routeTemplateId      the id of the route template (mandatory)
+     * @param  routeTemplateContext the route template context (mandatory)
+     * @return                      the id of the route added (for example when an id was auto assigned)
+     * @throws Exception            is thrown if error creating and adding the new route
+     */
+    String addRouteFromTemplate(String routeId, String routeTemplateId, RouteTemplateContext routeTemplateContext)
+            throws Exception;
+
+    /**
+     * Removes the route templates matching the pattern
+     *
+     * @param  pattern   pattern, such as * for all, or foo* to remove all foo templates
+     * @throws Exception is thrown if error during removing route templates
+     */
+    void removeRouteTemplates(String pattern) throws Exception;
 
     /**
      * Adds the given route policy factory
@@ -635,6 +672,20 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
      * @return the configuration, or <tt>null</tt> if none has been configured.
      */
     RestConfiguration getRestConfiguration();
+
+    /**
+     * Sets a custom {@link VaultConfiguration}
+     *
+     * @param vaultConfiguration the vault configuration
+     */
+    void setVaultConfiguration(VaultConfiguration vaultConfiguration);
+
+    /**
+     * Gets the vault configuration
+     *
+     * @return the configuration, or <tt>null</tt> if none has been configured.
+     */
+    VaultConfiguration getVaultConfiguration();
 
     /**
      * Gets the {@link org.apache.camel.spi.RestRegistry} to use
@@ -725,6 +776,9 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
 
     /**
      * Parses the given text and resolve any property placeholders - using {{key}}.
+     * <p/>
+     * <b>Important:</b> If resolving placeholders on an endpoint uri, then you SHOULD use
+     * EndpointHelper#resolveEndpointUriPropertyPlaceholders instead.
      *
      * @param  text                     the text such as an endpoint uri or the likes
      * @return                          the text with resolved property placeholders
@@ -748,11 +802,9 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
     /**
      * Gets a readonly list with the names of the languages currently registered.
      *
-     * @return     a readonly list with the names of the languages
-     * @deprecated not in use
+     * @return a readonly list with the names of the languages
      */
-    @Deprecated
-    List<String> getLanguageNames();
+    Set<String> getLanguageNames();
 
     /**
      * Creates a new {@link ProducerTemplate} which is <b>started</b> and therefore ready to use right away.
@@ -877,6 +929,13 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
      * @return      the created data format, or <tt>null</tt> if not found
      */
     DataFormat createDataFormat(String name);
+
+    /**
+     * Gets a readonly list of names of the data formats currently registered
+     *
+     * @return a readonly list with the names of the data formats
+     */
+    Set<String> getDataFormatNames();
 
     /**
      * Resolve a transformer given a scheme
@@ -1090,6 +1149,18 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
     void setTracer(Tracer tracer);
 
     /**
+     * Whether to set tracing on standby. If on standby then the tracer is installed and made available. Then the tracer
+     * can be enabled later at runtime via JMX or via {@link Tracer#setEnabled(boolean)}.
+     */
+    void setTracingStandby(boolean tracingStandby);
+
+    /**
+     * Whether to set tracing on standby. If on standby then the tracer is installed and made available. Then the tracer
+     * can be enabled later at runtime via JMX or via {@link Tracer#setEnabled(boolean)}.
+     */
+    boolean isTracingStandby();
+
+    /**
      * Gets the current {@link UuidGenerator}
      *
      * @return the uuidGenerator
@@ -1118,6 +1189,60 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
      * @param loadTypeConverters whether to load custom type converters using classpath scanning.
      */
     void setLoadTypeConverters(Boolean loadTypeConverters);
+
+    /**
+     * Whether to load custom health checks by scanning classpath.
+     */
+    Boolean isLoadHealthChecks();
+
+    /**
+     * Whether to load custom health checks by scanning classpath.
+     */
+    void setLoadHealthChecks(Boolean loadHealthChecks);
+
+    /**
+     * Whether to capture precise source location:line-number for all EIPs in Camel routes.
+     *
+     * Enabling this will impact parsing Java based routes (also Groovy, Kotlin, etc.) on startup as this uses
+     * {@link StackTraceElement} to calculate the location from the Camel route, which comes with a performance cost.
+     * This only impact startup, not the performance of the routes at runtime.
+     */
+    Boolean isSourceLocationEnabled();
+
+    /**
+     * Whether to capture precise source location:line-number for all EIPs in Camel routes.
+     *
+     * Enabling this will impact parsing Java based routes (also Groovy, Kotlin, etc.) on startup as this uses
+     * {@link StackTraceElement} to calculate the location from the Camel route, which comes with a performance cost.
+     * This only impact startup, not the performance of the routes at runtime.
+     */
+    void setSourceLocationEnabled(Boolean sourceLocationEnabled);
+
+    /**
+     * Whether camel-k style modeline is also enabled when not using camel-k. Enabling this allows to use a camel-k like
+     * experience by being able to configure various settings using modeline directly in your route source code.
+     */
+    Boolean isModeline();
+
+    /**
+     * Whether camel-k style modeline is also enabled when not using camel-k. Enabling this allows to use a camel-k like
+     * experience by being able to configure various settings using modeline directly in your route source code.
+     */
+    void setModeline(Boolean modeline);
+
+    /**
+     * Whether to enable developer console (requires camel-console on classpath).
+     *
+     * The developer console is only for assisting during development. This is NOT for production usage.
+     */
+    Boolean isDevConsole();
+
+    /**
+     * Whether to enable developer console (requires camel-console on classpath)
+     *
+     * The developer console is only for assisting during development. This is NOT for production usage.
+     */
+    void setDevConsole(Boolean loadDevConsoles);
 
     /**
      * Whether or not type converter statistics is enabled.
@@ -1192,6 +1317,48 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
      * @param pattern the pattern
      */
     void setMDCLoggingKeysPattern(String pattern);
+
+    /**
+     * To use a custom tracing logging format.
+     *
+     * The default format (arrow, routeId, label) is: %-4.4s [%-12.12s] [%-33.33s]
+     */
+    String getTracingLoggingFormat();
+
+    /**
+     * To use a custom tracing logging format.
+     *
+     * The default format (arrow, routeId, label) is: %-4.4s [%-12.12s] [%-33.33s]
+     *
+     * @param format the logging format
+     */
+    void setTracingLoggingFormat(String format);
+
+    /**
+     * If dumping is enabled then Camel will during startup dump all loaded routes (incl rests and route templates)
+     * represented as XML DSL into the log. This is intended for trouble shooting or to assist during development.
+     *
+     * Sensitive information that may be configured in the route endpoints could potentially be included in the dump
+     * output and is therefore not recommended to be used for production usage.
+     *
+     * This requires to have camel-xml-jaxb on the classpath to be able to dump the routes as XML.
+     *
+     * @return <tt>true</tt> if dumping is enabled
+     */
+    Boolean isDumpRoutes();
+
+    /**
+     * If dumping is enabled then Camel will during startup dump all loaded routes (incl rests and route templates)
+     * represented as XML DSL into the log. This is intended for trouble shooting or to assist during development.
+     *
+     * Sensitive information that may be configured in the route endpoints could potentially be included in the dump
+     * output and is therefore not recommended to be used for production usage.
+     *
+     * This requires to have camel-xml-jaxb on the classpath to be able to dump the routes as XML.
+     *
+     * @param dumpRoutes <tt>true</tt> to enable dumping routes.
+     */
+    void setDumpRoutes(Boolean dumpRoutes);
 
     /**
      * Whether to enable using data type on Camel messages.

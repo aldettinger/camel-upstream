@@ -18,6 +18,7 @@ package org.apache.camel.impl.engine;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -53,6 +54,7 @@ import org.apache.camel.Endpoint;
 import org.apache.camel.ErrorHandlerFactory;
 import org.apache.camel.ExchangeConstantProvider;
 import org.apache.camel.ExtendedCamelContext;
+import org.apache.camel.FailedToStartComponentException;
 import org.apache.camel.FluentProducerTemplate;
 import org.apache.camel.GlobalEndpointConfiguration;
 import org.apache.camel.IsSingleton;
@@ -63,6 +65,7 @@ import org.apache.camel.ProducerTemplate;
 import org.apache.camel.ResolveEndpointFailedException;
 import org.apache.camel.Route;
 import org.apache.camel.RouteAware;
+import org.apache.camel.RouteConfigurationsBuilder;
 import org.apache.camel.RoutesBuilder;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.Service;
@@ -76,8 +79,12 @@ import org.apache.camel.Suspendable;
 import org.apache.camel.SuspendableService;
 import org.apache.camel.TypeConverter;
 import org.apache.camel.VetoCamelContextStartException;
+import org.apache.camel.api.management.JmxSystemPropertyKeys;
 import org.apache.camel.catalog.RuntimeCamelCatalog;
+import org.apache.camel.console.DevConsoleRegistry;
+import org.apache.camel.console.DevConsoleResolver;
 import org.apache.camel.health.HealthCheckRegistry;
+import org.apache.camel.health.HealthCheckResolver;
 import org.apache.camel.spi.AnnotationBasedProcessorFactory;
 import org.apache.camel.spi.AnnotationScanTypeConverters;
 import org.apache.camel.spi.AsyncProcessorAwaitManager;
@@ -88,6 +95,8 @@ import org.apache.camel.spi.BootstrapCloseable;
 import org.apache.camel.spi.CamelBeanPostProcessor;
 import org.apache.camel.spi.CamelContextNameStrategy;
 import org.apache.camel.spi.CamelContextTracker;
+import org.apache.camel.spi.CamelDependencyInjectionAnnotationFactory;
+import org.apache.camel.spi.CamelLogger;
 import org.apache.camel.spi.ClassResolver;
 import org.apache.camel.spi.ComponentNameResolver;
 import org.apache.camel.spi.ComponentResolver;
@@ -96,11 +105,14 @@ import org.apache.camel.spi.DataFormat;
 import org.apache.camel.spi.DataFormatResolver;
 import org.apache.camel.spi.DataType;
 import org.apache.camel.spi.Debugger;
+import org.apache.camel.spi.DebuggerFactory;
 import org.apache.camel.spi.DeferServiceFactory;
 import org.apache.camel.spi.EndpointRegistry;
 import org.apache.camel.spi.EndpointStrategy;
 import org.apache.camel.spi.EndpointUriFactory;
 import org.apache.camel.spi.EventNotifier;
+import org.apache.camel.spi.ExchangeFactory;
+import org.apache.camel.spi.ExchangeFactoryManager;
 import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.FactoryFinder;
 import org.apache.camel.spi.FactoryFinderResolver;
@@ -122,15 +134,18 @@ import org.apache.camel.spi.ManagementStrategyFactory;
 import org.apache.camel.spi.MessageHistoryFactory;
 import org.apache.camel.spi.ModelJAXBContextFactory;
 import org.apache.camel.spi.ModelToXMLDumper;
+import org.apache.camel.spi.ModelineFactory;
 import org.apache.camel.spi.NodeIdFactory;
 import org.apache.camel.spi.NormalizedEndpointUri;
 import org.apache.camel.spi.PackageScanClassResolver;
 import org.apache.camel.spi.PackageScanResourceResolver;
+import org.apache.camel.spi.ProcessorExchangeFactory;
 import org.apache.camel.spi.ProcessorFactory;
 import org.apache.camel.spi.PropertiesComponent;
 import org.apache.camel.spi.ReactiveExecutor;
 import org.apache.camel.spi.Registry;
 import org.apache.camel.spi.ReifierStrategy;
+import org.apache.camel.spi.ResourceLoader;
 import org.apache.camel.spi.RestBindingJaxbDataFormatFactory;
 import org.apache.camel.spi.RestConfiguration;
 import org.apache.camel.spi.RestRegistry;
@@ -174,6 +189,7 @@ import org.apache.camel.util.StopWatch;
 import org.apache.camel.util.StringHelper;
 import org.apache.camel.util.TimeUtils;
 import org.apache.camel.util.URISupport;
+import org.apache.camel.vault.VaultConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -231,25 +247,32 @@ public abstract class AbstractCamelContext extends BaseService
     private ClassLoader applicationContextClassLoader;
     private boolean autoCreateComponents = true;
     private volatile RestConfiguration restConfiguration;
+    private volatile VaultConfiguration vaultConfiguration = new VaultConfiguration();
     private List<InterceptStrategy> interceptStrategies = new ArrayList<>();
     private List<RoutePolicyFactory> routePolicyFactories = new ArrayList<>();
     // special flags to control the first startup which can are special
     private volatile boolean firstStartDone;
-    private volatile boolean firstStopDone;
     private volatile boolean doNotStartRoutesOnFirstStart;
     private Initialization initialization = Initialization.Default;
     private Boolean autoStartup = Boolean.TRUE;
     private Boolean backlogTrace = Boolean.FALSE;
     private Boolean trace = Boolean.FALSE;
+    private Boolean traceStandby = Boolean.FALSE;
     private String tracePattern;
+    private String tracingLoggingFormat;
+    private Boolean modeline = Boolean.FALSE;
     private Boolean debug = Boolean.FALSE;
     private Boolean messageHistory = Boolean.FALSE;
     private Boolean logMask = Boolean.FALSE;
     private Boolean logExhaustedMessageBody = Boolean.FALSE;
-    private Boolean streamCache = Boolean.FALSE;
+    private Boolean streamCache = Boolean.TRUE;
     private Boolean disableJMX = Boolean.FALSE;
     private Boolean loadTypeConverters = Boolean.FALSE;
+    private Boolean loadHealthChecks = Boolean.FALSE;
+    private Boolean devConsole = Boolean.FALSE;
+    private Boolean sourceLocationEnabled = Boolean.FALSE;
     private Boolean typeConverterStatisticsEnabled = Boolean.FALSE;
+    private Boolean dumpRoutes = Boolean.FALSE;
     private Boolean useMDCLogging = Boolean.FALSE;
     private String mdcLoggingKeysPattern;
     private Boolean useDataType = Boolean.FALSE;
@@ -257,13 +280,18 @@ public abstract class AbstractCamelContext extends BaseService
     private Boolean allowUseOriginalMessage = Boolean.FALSE;
     private Boolean caseInsensitiveHeaders = Boolean.TRUE;
     private Boolean autowiredEnabled = Boolean.TRUE;
+    private String basePackageScan;
     private boolean lightweight;
     private Long delay;
+    @Deprecated
     private ErrorHandlerFactory errorHandlerFactory;
     private Map<String, String> globalOptions = new HashMap<>();
     private volatile String version;
     private volatile PropertiesComponent propertiesComponent;
     private volatile CamelContextNameStrategy nameStrategy;
+    private volatile ExchangeFactoryManager exchangeFactoryManager;
+    private volatile ExchangeFactory exchangeFactory;
+    private volatile ProcessorExchangeFactory processorExchangeFactory;
     private volatile ReactiveExecutor reactiveExecutor;
     private volatile ManagementNameStrategy managementNameStrategy;
     private volatile Registry registry;
@@ -271,12 +299,15 @@ public abstract class AbstractCamelContext extends BaseService
     private volatile TypeConverterRegistry typeConverterRegistry;
     private volatile Injector injector;
     private volatile CamelBeanPostProcessor beanPostProcessor;
+    private volatile CamelDependencyInjectionAnnotationFactory dependencyInjectionAnnotationFactory;
     private volatile ComponentResolver componentResolver;
     private volatile ComponentNameResolver componentNameResolver;
     private volatile LanguageResolver languageResolver;
     private volatile ConfigurerResolver configurerResolver;
     private volatile UriFactoryResolver uriFactoryResolver;
     private volatile DataFormatResolver dataFormatResolver;
+    private volatile HealthCheckResolver healthCheckResolver;
+    private volatile DevConsoleResolver devConsoleResolver;
     private volatile ManagementStrategy managementStrategy;
     private volatile ManagementMBeanAssembler managementMBeanAssembler;
     private volatile RestRegistryFactory restRegistryFactory;
@@ -286,6 +317,7 @@ public abstract class AbstractCamelContext extends BaseService
     private volatile BeanProcessorFactory beanProcessorFactory;
     private volatile XMLRoutesDefinitionLoader xmlRoutesDefinitionLoader;
     private volatile RoutesLoader routesLoader;
+    private volatile ResourceLoader resourceLoader;
     private volatile ModelToXMLDumper modelToXMLDumper;
     private volatile RestBindingJaxbDataFormatFactory restBindingJaxbDataFormatFactory;
     private volatile RuntimeCamelCatalog runtimeCamelCatalog;
@@ -293,6 +325,7 @@ public abstract class AbstractCamelContext extends BaseService
     private volatile PackageScanClassResolver packageScanClassResolver;
     private volatile PackageScanResourceResolver packageScanResourceResolver;
     private volatile NodeIdFactory nodeIdFactory;
+    private volatile ModelineFactory modelineFactory;
     private volatile ProcessorFactory processorFactory;
     private volatile InternalProcessorFactory internalProcessorFactory;
     private volatile InterceptEndpointFactory interceptEndpointFactory;
@@ -315,7 +348,7 @@ public abstract class AbstractCamelContext extends BaseService
     private volatile TransformerRegistry<TransformerKey> transformerRegistry;
     private volatile ValidatorRegistry<ValidatorKey> validatorRegistry;
     private volatile StartupStepRecorder startupStepRecorder = new DefaultStartupStepRecorder();
-    private EndpointRegistry<EndpointKey> endpoints;
+    private EndpointRegistry<NormalizedUri> endpoints;
     private RuntimeEndpointRegistry runtimeEndpointRegistry;
     private ShutdownRoute shutdownRoute = ShutdownRoute.Default;
     private ShutdownRunningTask shutdownRunningTask = ShutdownRunningTask.CompleteCurrentTaskOnly;
@@ -325,6 +358,7 @@ public abstract class AbstractCamelContext extends BaseService
     private long startDate;
     private SSLContextParameters sslContextParameters;
     private StartupSummaryLevel startupSummaryLevel = StartupSummaryLevel.Default;
+    private boolean logJvmUptime;
 
     /**
      * Creates the {@link CamelContext} using {@link org.apache.camel.support.DefaultRegistry} as registry.
@@ -358,11 +392,11 @@ public abstract class AbstractCamelContext extends BaseService
         // add a default LifecycleStrategy that discover strategies on the registry and invoke them
         this.lifecycleStrategies.add(new OnCamelContextLifecycleStrategy());
 
-        // add a default autowired strategy
-        this.lifecycleStrategies.add(new AutowiredLifecycleStrategy(this));
-
         // add a default LifecycleStrategy to customize services using customizers from registry
         this.lifecycleStrategies.add(new CustomizersLifecycleStrategy(this));
+
+        // add a default autowired strategy
+        this.lifecycleStrategies.add(new DefaultAutowiredLifecycleStrategy(this));
 
         // add the default bootstrap closer
         this.bootstraps.add(new DefaultServiceBootstrapCloseable(this));
@@ -542,7 +576,13 @@ public abstract class AbstractCamelContext extends BaseService
     public void addComponent(String componentName, final Component component) {
         ObjectHelper.notNull(component, "component");
         component.setCamelContext(getCamelContextReference());
-        ServiceHelper.initService(component);
+        if (isStarted()) {
+            // start component if context is already started (camel will start components when it starts)
+            ServiceHelper.startService(component);
+        } else {
+            // otherwise init the component
+            ServiceHelper.initService(component);
+        }
         Component oldValue = components.putIfAbsent(componentName, component);
         if (oldValue != null) {
             throw new IllegalArgumentException("Cannot add component as its already previously added: " + componentName);
@@ -664,7 +704,7 @@ public abstract class AbstractCamelContext extends BaseService
 
                 if (component != null) {
                     component.setCamelContext(getCamelContextReference());
-                    component.build();
+                    ServiceHelper.buildService(component);
                     postInitComponent(name, component);
                 }
             } catch (Exception e) {
@@ -711,19 +751,19 @@ public abstract class AbstractCamelContext extends BaseService
     }
 
     @Override
-    public EndpointRegistry<EndpointKey> getEndpointRegistry() {
+    public EndpointRegistry<NormalizedUri> getEndpointRegistry() {
         return endpoints;
     }
 
     @Override
     public Collection<Endpoint> getEndpoints() {
-        return new ArrayList<>(endpoints.values());
+        return endpoints.getReadOnlyValues();
     }
 
     @Override
     public Map<String, Endpoint> getEndpointMap() {
         Map<String, Endpoint> answer = new TreeMap<>();
-        for (Map.Entry<EndpointKey, Endpoint> entry : endpoints.entrySet()) {
+        for (Map.Entry<NormalizedUri, Endpoint> entry : endpoints.entrySet()) {
             answer.put(entry.getKey().get(), entry.getValue());
         }
         return answer;
@@ -742,13 +782,7 @@ public abstract class AbstractCamelContext extends BaseService
         if (endpoints.isEmpty()) {
             return null;
         }
-        EndpointKey key;
-        if (uri instanceof EndpointKey) {
-            key = (EndpointKey) uri;
-        } else {
-            key = new EndpointKey(uri.getUri(), true);
-        }
-        return endpoints.get(key);
+        return endpoints.get(uri);
     }
 
     @Override
@@ -781,8 +815,8 @@ public abstract class AbstractCamelContext extends BaseService
             answer.add(oldEndpoint);
             stopServices(oldEndpoint);
         } else {
-            List<EndpointKey> toRemove = new ArrayList<>();
-            for (Map.Entry<EndpointKey, Endpoint> entry : endpoints.entrySet()) {
+            List<NormalizedUri> toRemove = new ArrayList<>();
+            for (Map.Entry<NormalizedUri, Endpoint> entry : endpoints.entrySet()) {
                 oldEndpoint = entry.getValue();
                 if (EndpointHelper.matchEndpoint(this, oldEndpoint.getEndpointUri(), uri)) {
                     try {
@@ -794,7 +828,7 @@ public abstract class AbstractCamelContext extends BaseService
                     toRemove.add(entry.getKey());
                 }
             }
-            for (EndpointKey key : toRemove) {
+            for (NormalizedUri key : toRemove) {
                 endpoints.remove(key);
             }
         }
@@ -812,10 +846,12 @@ public abstract class AbstractCamelContext extends BaseService
     @Override
     public NormalizedEndpointUri normalizeUri(String uri) {
         try {
-            uri = resolvePropertyPlaceholders(uri);
-            uri = URISupport.normalizeUri(uri);
-            return new NormalizedUri(uri);
+            uri = EndpointHelper.resolveEndpointUriPropertyPlaceholders(this, uri);
+            return NormalizedUri.newNormalizedUri(uri, false);
         } catch (Exception e) {
+            if (e instanceof ResolveEndpointFailedException) {
+                throw e;
+            }
             throw new ResolveEndpointFailedException(uri, e);
         }
     }
@@ -868,14 +904,9 @@ public abstract class AbstractCamelContext extends BaseService
 
         LOG.trace("Getting endpoint with uri: {} and parameters: {}", uri, parameters);
 
-        // in case path has property placeholders then try to let property
-        // component resolve those
+        // in case path has property placeholders then try to let property component resolve those
         if (!normalized) {
-            try {
-                uri = resolvePropertyPlaceholders(uri);
-            } catch (Exception e) {
-                throw new ResolveEndpointFailedException(uri, e);
-            }
+            uri = EndpointHelper.resolveEndpointUriPropertyPlaceholders(this, uri);
         }
 
         final String rawUri = uri;
@@ -892,7 +923,7 @@ public abstract class AbstractCamelContext extends BaseService
         Endpoint answer = null;
         if (!prototype) {
             // use optimized method to get the endpoint uri
-            EndpointKey key = getEndpointKeyPreNormalized(uri);
+            NormalizedUri key = NormalizedUri.newNormalizedUri(uri, true);
             // only lookup and reuse existing endpoints if not prototype scoped
             answer = endpoints.get(key);
         }
@@ -1022,18 +1053,8 @@ public abstract class AbstractCamelContext extends BaseService
      * @param  uri the endpoint uri
      * @return     the key
      */
-    protected EndpointKey getEndpointKey(String uri) {
-        return new EndpointKey(uri);
-    }
-
-    /**
-     * Gets the endpoint key to use for lookup or whe adding endpoints to the {@link DefaultEndpointRegistry}
-     *
-     * @param  uri the endpoint uri which is pre normalized
-     * @return     the key
-     */
-    protected EndpointKey getEndpointKeyPreNormalized(String uri) {
-        return new EndpointKey(uri, true);
+    protected NormalizedUri getEndpointKey(String uri) {
+        return NormalizedUri.newNormalizedUri(uri, false);
     }
 
     /**
@@ -1043,12 +1064,12 @@ public abstract class AbstractCamelContext extends BaseService
      * @param  endpoint the endpoint
      * @return          the key
      */
-    protected EndpointKey getEndpointKey(String uri, Endpoint endpoint) {
+    protected NormalizedUri getEndpointKey(String uri, Endpoint endpoint) {
         if (endpoint != null && !endpoint.isSingleton()) {
             int counter = endpointKeyCounter.incrementAndGet();
-            return new EndpointKey(uri + ":" + counter);
+            return NormalizedUri.newNormalizedUri(uri + ":" + counter, false);
         } else {
-            return new EndpointKey(uri);
+            return NormalizedUri.newNormalizedUri(uri, false);
         }
     }
 
@@ -1145,11 +1166,25 @@ public abstract class AbstractCamelContext extends BaseService
     }
 
     @Override
-    public void addRoutes(final RoutesBuilder builder) throws Exception {
+    public void addRoutes(RoutesBuilder builder) throws Exception {
+        // in case the builder is also a route configuration builder
+        // then we need to add the configuration first
+        if (builder instanceof RouteConfigurationsBuilder) {
+            addRoutesConfigurations((RouteConfigurationsBuilder) builder);
+        }
         try (LifecycleHelper helper = new LifecycleHelper()) {
             build();
             LOG.debug("Adding routes from builder: {}", builder);
             builder.addRoutesToCamelContext(AbstractCamelContext.this);
+        }
+    }
+
+    @Override
+    public void addRoutesConfigurations(RouteConfigurationsBuilder builder) throws Exception {
+        try (LifecycleHelper helper = new LifecycleHelper()) {
+            build();
+            LOG.debug("Adding route configurations from builder: {}", builder);
+            builder.addRouteConfigurationsToCamelContext(AbstractCamelContext.this);
         }
     }
 
@@ -1182,6 +1217,74 @@ public abstract class AbstractCamelContext extends BaseService
 
     public void startAllRoutes() throws Exception {
         internalRouteStartupManager.doStartOrResumeRoutes(routeServices, true, true, false, false);
+    }
+
+    public void stopAllRoutes() throws Exception {
+        RouteController controller = getRouteController();
+        if (controller == null) {
+            // in case we are called during shutdown and controller is null
+            return;
+        }
+
+        // stop all routes in reverse order that they were started
+        Comparator<RouteStartupOrder> comparator = Comparator.comparingInt(RouteStartupOrder::getStartupOrder);
+        if (shutdownStrategy == null || shutdownStrategy.isShutdownRoutesInReverseOrder()) {
+            comparator = comparator.reversed();
+        }
+        List<RouteStartupOrder> routesOrdered = new ArrayList<>(getRouteStartupOrder());
+        routesOrdered.sort(comparator);
+        for (RouteStartupOrder order : routesOrdered) {
+            Route route = order.getRoute();
+            boolean stopped = controller.getRouteStatus(route.getRouteId()).isStopped();
+            if (!stopped) {
+                stopRoute(route.getRouteId(), LoggingLevel.DEBUG);
+            }
+        }
+        // stop any remainder routes
+        for (Route route : getRoutes()) {
+            boolean stopped = controller.getRouteStatus(route.getRouteId()).isStopped();
+            if (!stopped) {
+                stopRoute(route.getRouteId(), LoggingLevel.DEBUG);
+            }
+        }
+
+        if (startupSummaryLevel != StartupSummaryLevel.Oneline
+                && startupSummaryLevel != StartupSummaryLevel.Off) {
+            logRouteStopSummary(LoggingLevel.INFO);
+        }
+    }
+
+    public void removeAllRoutes() throws Exception {
+        // stop all routes in reverse order that they were started
+        Comparator<RouteStartupOrder> comparator = Comparator.comparingInt(RouteStartupOrder::getStartupOrder);
+        if (shutdownStrategy == null || shutdownStrategy.isShutdownRoutesInReverseOrder()) {
+            comparator = comparator.reversed();
+        }
+        List<RouteStartupOrder> routesOrdered = new ArrayList<>(getRouteStartupOrder());
+        routesOrdered.sort(comparator);
+        for (RouteStartupOrder order : routesOrdered) {
+            Route route = order.getRoute();
+            boolean stopped = getRouteController().getRouteStatus(route.getRouteId()).isStopped();
+            if (!stopped) {
+                stopRoute(route.getRouteId(), LoggingLevel.DEBUG);
+            }
+        }
+        // stop any remainder routes
+        for (Route route : getRoutes()) {
+            boolean stopped = getRouteController().getRouteStatus(route.getRouteId()).isStopped();
+            if (!stopped) {
+                stopRoute(route.getRouteId(), LoggingLevel.DEBUG);
+            }
+        }
+
+        // do not be noisy when removing routes
+        // as this is used by route-reload functionality, so lets be brief
+        logRouteStopSummary(LoggingLevel.DEBUG);
+
+        // remove all routes
+        for (Route route : getRoutes()) {
+            removeRoute(route.getRouteId(), LoggingLevel.DEBUG);
+        }
     }
 
     public synchronized void startRoute(String routeId) throws Exception {
@@ -1221,7 +1324,8 @@ public abstract class AbstractCamelContext extends BaseService
         }
     }
 
-    public synchronized boolean stopRoute(String routeId, long timeout, TimeUnit timeUnit, boolean abortAfterTimeout)
+    public synchronized boolean stopRoute(
+            String routeId, long timeout, TimeUnit timeUnit, boolean abortAfterTimeout, LoggingLevel loggingLevel)
             throws Exception {
         DefaultRouteError.reset(this, routeId);
 
@@ -1233,7 +1337,7 @@ public abstract class AbstractCamelContext extends BaseService
                 boolean completed = getShutdownStrategy().shutdown(this, route, timeout, timeUnit, abortAfterTimeout);
                 if (completed) {
                     // must stop route service as well
-                    stopRouteService(routeService, false);
+                    stopRouteService(routeService, false, loggingLevel);
                 } else {
                     // shutdown was aborted, make sure route is re-started properly
                     startRouteService(routeService, false);
@@ -1249,14 +1353,19 @@ public abstract class AbstractCamelContext extends BaseService
     }
 
     public void stopRoute(String routeId) throws Exception {
-        doShutdownRoute(routeId, getShutdownStrategy().getTimeout(), getShutdownStrategy().getTimeUnit(), false);
+        stopRoute(routeId, LoggingLevel.INFO);
+    }
+
+    public void stopRoute(String routeId, LoggingLevel loggingLevel) throws Exception {
+        doShutdownRoute(routeId, getShutdownStrategy().getTimeout(), getShutdownStrategy().getTimeUnit(), false, loggingLevel);
     }
 
     public void stopRoute(String routeId, long timeout, TimeUnit timeUnit) throws Exception {
-        doShutdownRoute(routeId, timeout, timeUnit, false);
+        doShutdownRoute(routeId, timeout, timeUnit, false, LoggingLevel.INFO);
     }
 
-    protected synchronized void doShutdownRoute(String routeId, long timeout, TimeUnit timeUnit, boolean removingRoutes)
+    protected synchronized void doShutdownRoute(
+            String routeId, long timeout, TimeUnit timeUnit, boolean removingRoutes, LoggingLevel loggingLevel)
             throws Exception {
         DefaultRouteError.reset(this, routeId);
 
@@ -1270,7 +1379,7 @@ public abstract class AbstractCamelContext extends BaseService
                 getShutdownStrategy().shutdown(this, routes, timeout, timeUnit);
                 // must stop route service as well (and remove the routes from
                 // management)
-                stopRouteService(routeService, removingRoutes);
+                stopRouteService(routeService, removingRoutes, loggingLevel);
             } catch (Exception e) {
                 DefaultRouteError.set(this, routeId, removingRoutes ? Phase.SHUTDOWN : Phase.STOP, e);
                 throw e;
@@ -1280,6 +1389,10 @@ public abstract class AbstractCamelContext extends BaseService
 
     @Override
     public synchronized boolean removeRoute(String routeId) throws Exception {
+        return removeRoute(routeId, LoggingLevel.INFO);
+    }
+
+    protected synchronized boolean removeRoute(String routeId, LoggingLevel loggingLevel) throws Exception {
         DefaultRouteError.reset(this, routeId);
 
         // gather a map of all the endpoints in use by the routes, so we can
@@ -1295,7 +1408,7 @@ public abstract class AbstractCamelContext extends BaseService
             if (getRouteStatus(routeId).isStopped()) {
                 try {
                     routeService.setRemovingRoutes(true);
-                    shutdownRouteService(routeService);
+                    shutdownRouteService(routeService, loggingLevel);
                     routeServices.remove(routeId);
                     // remove route from startup order as well, as it was
                     // removed
@@ -1413,10 +1526,7 @@ public abstract class AbstractCamelContext extends BaseService
             throws Exception {
 
         // inject CamelContext
-        if (object instanceof CamelContextAware) {
-            CamelContextAware aware = (CamelContextAware) object;
-            aware.setCamelContext(getCamelContextReference());
-        }
+        CamelContextAware.trySetCamelContext(object, getCamelContextReference());
 
         if (object instanceof Service) {
             Service service = (Service) object;
@@ -1733,7 +1843,7 @@ public abstract class AbstractCamelContext extends BaseService
                             Service service = (Service) language;
                             // init service first
                             CamelContextAware.trySetCamelContext(service, camelContext);
-                            service.init();
+                            ServiceHelper.initService(service);
                             startService(service);
                         } catch (Exception e) {
                             throw RuntimeCamelException.wrapRuntimeCamelException(e);
@@ -1761,9 +1871,14 @@ public abstract class AbstractCamelContext extends BaseService
 
     @Override
     public String resolvePropertyPlaceholders(String text) {
+        return resolvePropertyPlaceholders(text, false);
+    }
+
+    @Override
+    public String resolvePropertyPlaceholders(String text, boolean keepUnresolvedOptional) {
         if (text != null && text.contains(PropertiesComponent.PREFIX_TOKEN)) {
             // the parser will throw exception if property key was not found
-            String answer = getPropertiesComponent().parseUri(text);
+            String answer = getPropertiesComponent().parseUri(text, keepUnresolvedOptional);
             LOG.debug("Resolved text: {} -> {}", text, answer);
             return answer;
         }
@@ -1871,8 +1986,27 @@ public abstract class AbstractCamelContext extends BaseService
         return beanPostProcessor;
     }
 
+    @Override
     public void setBeanPostProcessor(CamelBeanPostProcessor beanPostProcessor) {
         this.beanPostProcessor = doAddService(beanPostProcessor);
+    }
+
+    @Override
+    public CamelDependencyInjectionAnnotationFactory getDependencyInjectionAnnotationFactory() {
+        if (dependencyInjectionAnnotationFactory == null) {
+            synchronized (lock) {
+                if (dependencyInjectionAnnotationFactory == null) {
+                    setDependencyInjectionAnnotationFactory(createDependencyInjectionAnnotationFactory());
+                }
+            }
+        }
+        return dependencyInjectionAnnotationFactory;
+    }
+
+    @Override
+    public void setDependencyInjectionAnnotationFactory(
+            CamelDependencyInjectionAnnotationFactory dependencyInjectionAnnotationFactory) {
+        this.dependencyInjectionAnnotationFactory = dependencyInjectionAnnotationFactory;
     }
 
     @Override
@@ -1981,9 +2115,7 @@ public abstract class AbstractCamelContext extends BaseService
 
     @Override
     public void setRegistry(Registry registry) {
-        if (registry instanceof CamelContextAware) {
-            ((CamelContextAware) registry).setCamelContext(getCamelContextReference());
-        }
+        CamelContextAware.trySetCamelContext(registry, getCamelContextReference());
         this.registry = registry;
     }
 
@@ -2034,6 +2166,16 @@ public abstract class AbstractCamelContext extends BaseService
     @Override
     public void setRestConfiguration(RestConfiguration restConfiguration) {
         this.restConfiguration = restConfiguration;
+    }
+
+    @Override
+    public VaultConfiguration getVaultConfiguration() {
+        return vaultConfiguration;
+    }
+
+    @Override
+    public void setVaultConfiguration(VaultConfiguration vaultConfiguration) {
+        this.vaultConfiguration = vaultConfiguration;
     }
 
     @Override
@@ -2112,6 +2254,16 @@ public abstract class AbstractCamelContext extends BaseService
     @Override
     public void setTracingPattern(String tracePattern) {
         this.tracePattern = tracePattern;
+    }
+
+    @Override
+    public String getTracingLoggingFormat() {
+        return tracingLoggingFormat;
+    }
+
+    @Override
+    public void setTracingLoggingFormat(String format) {
+        this.tracingLoggingFormat = format;
     }
 
     @Override
@@ -2341,7 +2493,8 @@ public abstract class AbstractCamelContext extends BaseService
         // try to load from maven properties first
         try {
             Properties p = new Properties();
-            is = getClass().getResourceAsStream("/META-INF/maven/org.apache.camel/camel-base/pom.properties");
+            is = AbstractCamelContext.class
+                    .getResourceAsStream("/META-INF/maven/org.apache.camel/camel-base-engine/pom.properties");
             if (is != null) {
                 p.load(is);
                 version = p.getProperty("version", "");
@@ -2419,7 +2572,7 @@ public abstract class AbstractCamelContext extends BaseService
         watch.taken();
         if (LOG.isInfoEnabled()) {
             LOG.info("Apache Camel {} ({}) is suspended in {}", getVersion(), getName(),
-                    TimeUtils.printDuration(watch.taken()));
+                    TimeUtils.printDuration(watch.taken(), true));
         }
 
         EventHelper.notifyCamelContextSuspended(this);
@@ -2452,7 +2605,8 @@ public abstract class AbstractCamelContext extends BaseService
 
             if (LOG.isInfoEnabled()) {
                 LOG.info("Resumed {} routes", suspendedRouteServices.size());
-                LOG.info("Apache Camel {} ({}) resumed in {}", getVersion(), getName(), TimeUtils.printDuration(watch.taken()));
+                LOG.info("Apache Camel {} ({}) resumed in {}", getVersion(), getName(),
+                        TimeUtils.printDuration(watch.taken(), true));
             }
 
             // and clear the list as they have been resumed
@@ -2472,18 +2626,21 @@ public abstract class AbstractCamelContext extends BaseService
 
     @Override
     public void init() {
-        super.init();
+        try {
+            super.init();
+        } catch (RuntimeCamelException e) {
+            if (e.getCause() != null && e.getCause() instanceof VetoCamelContextStartException) {
+                vetoed = (VetoCamelContextStartException) e.getCause();
+            } else {
+                throw e;
+            }
+        }
 
         // was the initialization vetoed?
         if (vetoed != null) {
-            if (vetoed.isRethrowException()) {
-                throw RuntimeCamelException.wrapRuntimeException(vetoed);
-            } else {
-                LOG.info("CamelContext ({}) vetoed to not initialize due to {}", getName(), vetoed.getMessage());
-                // swallow exception and change state of this camel context to stopped
-                fail(vetoed);
-                return;
-            }
+            LOG.info("CamelContext ({}) vetoed to not initialize due to: {}", getName(), vetoed.getMessage());
+            failOnStartup(vetoed);
+            return;
         }
     }
 
@@ -2498,14 +2655,10 @@ public abstract class AbstractCamelContext extends BaseService
 
         // did the start veto?
         if (vetoed != null) {
-            if (vetoed.isRethrowException()) {
-                throw RuntimeCamelException.wrapRuntimeException(vetoed);
-            } else {
-                LOG.info("CamelContext ({}) vetoed to not start due to {}", getName(), vetoed.getMessage());
-                // swallow exception and change state of this camel context to stopped
-                stop();
-                return;
-            }
+            LOG.info("CamelContext ({}) vetoed to not start due to: {}", getName(), vetoed.getMessage());
+            failOnStartup(vetoed);
+            stop();
+            return;
         }
 
         for (LifecycleStrategy strategy : lifecycleStrategies) {
@@ -2594,6 +2747,19 @@ public abstract class AbstractCamelContext extends BaseService
             startupStepRecorder.endStep(step4);
         }
 
+        // setup dev-console registry as its needed this early phase for 3rd party to register custom consoles
+        DevConsoleRegistry dcr = getExtension(DevConsoleRegistry.class);
+        if (dcr == null) {
+            StartupStep step5 = startupStepRecorder.beginStep(CamelContext.class, null, "Setup DevConsoleRegistry");
+            dcr = createDevConsoleRegistry();
+            if (dcr != null) {
+                // install dev-console registry if it was discovered from classpath (camel-console)
+                dcr.setCamelContext(this);
+                setExtension(DevConsoleRegistry.class, dcr);
+            }
+            startupStepRecorder.endStep(step5);
+        }
+
         // Call all registered trackers with this context
         // Note, this may use a partially constructed object
         CamelContextTracker.notifyContextCreated(this);
@@ -2608,7 +2774,7 @@ public abstract class AbstractCamelContext extends BaseService
         startupStepRecorder.endStep(step);
 
         buildTaken = watch.taken();
-        LOG.debug("Apache Camel {} ({}) built in {}", getVersion(), getName(), TimeUtils.printDuration(buildTaken));
+        LOG.debug("Apache Camel {} ({}) built in {}", getVersion(), getName(), TimeUtils.printDuration(buildTaken, true));
     }
 
     protected void resetBuildTime() {
@@ -2620,12 +2786,14 @@ public abstract class AbstractCamelContext extends BaseService
     public void doInit() throws Exception {
         StopWatch watch = new StopWatch();
 
+        vetoed = null;
+
         StartupStep step = startupStepRecorder.beginStep(CamelContext.class, null, "Init CamelContext");
 
         // init the route controller
         this.routeController = getRouteController();
-        if (startupSummaryLevel == StartupSummaryLevel.Classic || startupSummaryLevel == StartupSummaryLevel.Verbose) {
-            // classic/verbose startup should let route controller do the route startup logging
+        if (startupSummaryLevel == StartupSummaryLevel.Verbose) {
+            // verbose startup should let route controller do the route startup logging
             if (routeController.getLoggingLevel().ordinal() < LoggingLevel.INFO.ordinal()) {
                 routeController.setLoggingLevel(LoggingLevel.INFO);
             }
@@ -2633,8 +2801,8 @@ public abstract class AbstractCamelContext extends BaseService
 
         // init the shutdown strategy
         this.shutdownStrategy = getShutdownStrategy();
-        if (startupSummaryLevel == StartupSummaryLevel.Classic || startupSummaryLevel == StartupSummaryLevel.Verbose) {
-            // classic/verbose startup should let route controller do the route shutdown logging
+        if (startupSummaryLevel == StartupSummaryLevel.Verbose) {
+            // verbose startup should let route controller do the route shutdown logging
             if (shutdownStrategy != null && shutdownStrategy.getLoggingLevel().ordinal() < LoggingLevel.INFO.ordinal()) {
                 shutdownStrategy.setLoggingLevel(LoggingLevel.INFO);
             }
@@ -2643,9 +2811,31 @@ public abstract class AbstractCamelContext extends BaseService
         // optimize - before starting routes lets check if event notifications is possible
         eventNotificationApplicable = EventHelper.eventsApplicable(this);
 
-        // ensure additional type converters is loaded
-        if (loadTypeConverters && typeConverter instanceof AnnotationScanTypeConverters) {
+        // ensure additional type converters is loaded (either if enabled or we should use package scanning from the base)
+        boolean load = loadTypeConverters || getBasePackageScan() != null;
+        if (load && typeConverter instanceof AnnotationScanTypeConverters) {
+            StartupStep step2 = startupStepRecorder.beginStep(CamelContext.class, null, "Scan TypeConverters");
             ((AnnotationScanTypeConverters) typeConverter).scanTypeConverters();
+            startupStepRecorder.endStep(step2);
+        }
+
+        // ensure additional health checks is loaded
+        if (loadHealthChecks) {
+            StartupStep step3 = startupStepRecorder.beginStep(CamelContext.class, null, "Scan HealthChecks");
+            HealthCheckRegistry hcr = getExtension(HealthCheckRegistry.class);
+            if (hcr != null) {
+                hcr.loadHealthChecks();
+            }
+            startupStepRecorder.endStep(step3);
+        }
+        // ensure additional dev consoles is loaded
+        if (devConsole) {
+            StartupStep step4 = startupStepRecorder.beginStep(CamelContext.class, null, "Scan DevConsoles");
+            DevConsoleRegistry dcr = getExtension(DevConsoleRegistry.class);
+            if (dcr != null) {
+                dcr.loadDevConsoles();
+            }
+            startupStepRecorder.endStep(step4);
         }
 
         // custom properties may use property placeholders so resolve those
@@ -2669,17 +2859,18 @@ public abstract class AbstractCamelContext extends BaseService
         forceLazyInitialization();
 
         addService(getManagementStrategy(), false);
+        lifecycleStrategies.sort(OrderedComparator.get());
         ServiceHelper.initService(lifecycleStrategies);
         for (LifecycleStrategy strategy : lifecycleStrategies) {
             try {
                 strategy.onContextInitializing(this);
             } catch (VetoCamelContextStartException e) {
                 // okay we should not start Camel since it was vetoed
-                LOG.warn("Lifecycle strategy " + strategy + " vetoed initializing CamelContext ({}) due to: {}", getName(),
+                LOG.warn("Lifecycle strategy {} vetoed initializing CamelContext ({}) due to: {}", strategy, getName(),
                         e.getMessage());
                 throw e;
             } catch (Exception e) {
-                LOG.warn("Lifecycle strategy " + strategy + " failed initializing CamelContext ({}) due to: {}", getName(),
+                LOG.warn("Lifecycle strategy {} failed initializing CamelContext ({}) due to: {}", strategy, getName(),
                         e.getMessage());
                 throw e;
             }
@@ -2728,7 +2919,7 @@ public abstract class AbstractCamelContext extends BaseService
 
         bindDataFormats();
 
-        // start components
+        // init components
         ServiceHelper.initService(components.values());
 
         // create route definitions from route templates if we have any sources
@@ -2765,11 +2956,11 @@ public abstract class AbstractCamelContext extends BaseService
                     strategy.onContextInitialized(this);
                 } catch (VetoCamelContextStartException e) {
                     // okay we should not start Camel since it was vetoed
-                    LOG.warn("Lifecycle strategy " + strategy + " vetoed initializing CamelContext ({}) due to: {}", getName(),
+                    LOG.warn("Lifecycle strategy {} vetoed initializing CamelContext ({}) due to: {}", strategy, getName(),
                             e.getMessage());
                     throw e;
                 } catch (Exception e) {
-                    LOG.warn("Lifecycle strategy " + strategy + " failed initializing CamelContext ({}) due to: {}", getName(),
+                    LOG.warn("Lifecycle strategy {} failed initializing CamelContext ({}) due to: {}", strategy, getName(),
                             e.getMessage());
                     throw e;
                 }
@@ -2782,13 +2973,13 @@ public abstract class AbstractCamelContext extends BaseService
         startupStepRecorder.endStep(step);
 
         initTaken = watch.taken();
-        LOG.debug("Apache Camel {} ({}) initialized in {}", getVersion(), getName(), TimeUtils.printDuration(initTaken));
+        LOG.debug("Apache Camel {} ({}) initialized in {}", getVersion(), getName(), TimeUtils.printDuration(initTaken, true));
     }
 
     @Override
     protected void doStart() throws Exception {
         if (firstStartDone) {
-            // its not good practice to reset a camel context
+            // its not good practice resetting a camel context
             LOG.warn("Starting CamelContext: {} after the context has been stopped is not recommended", getName());
         }
         StartupStep step = startupStepRecorder.beginStep(CamelContext.class, getName(), "Start CamelContext");
@@ -2811,18 +3002,14 @@ public abstract class AbstractCamelContext extends BaseService
     }
 
     protected void doStartContext() throws Exception {
-        if (startupSummaryLevel == StartupSummaryLevel.Classic) {
-            // classic was logging this at INFO level
-            LOG.info("Apache Camel {} ({}) is starting", getVersion(), getName());
-        } else if (LOG.isDebugEnabled()) {
-            LOG.debug("Apache Camel {} ({}) is starting", getVersion(), getName());
-        }
+        LOG.info("Apache Camel {} ({}) is starting", getVersion(), getName());
+
         vetoed = null;
         startDate = System.currentTimeMillis();
         stopWatch.restart();
 
         // Start the route controller
-        ServiceHelper.startService(this.routeController);
+        startService(this.routeController);
 
         doNotStartRoutesOnFirstStart = !firstStartDone && !isAutoStartup();
 
@@ -2856,15 +3043,11 @@ public abstract class AbstractCamelContext extends BaseService
             }
         }
 
-        // ant duplicate components in use?
+        // duplicate components in use?
         logDuplicateComponents();
 
         // log startup summary
-        if (startupSummaryLevel == StartupSummaryLevel.Classic) {
-            logClassicStartSummary();
-        } else {
-            logStartSummary();
-        }
+        logStartSummary();
 
         // now Camel has been started/bootstrap is complete, then run cleanup to help free up memory etc
         for (BootstrapCloseable bootstrap : bootstraps) {
@@ -2876,6 +3059,11 @@ public abstract class AbstractCamelContext extends BaseService
         }
         bootstraps.clear();
 
+        if (adapt(ExtendedCamelContext.class).getExchangeFactory().isPooled()) {
+            LOG.info(
+                    "Pooled mode enabled. Camel pools and reuses objects to reduce JVM object allocations. The pool capacity is: {} elements.",
+                    adapt(ExtendedCamelContext.class).getExchangeFactory().getCapacity());
+        }
         if (isLightweight()) {
             LOG.info("Lightweight mode enabled. Performing optimizations and memory reduction.");
             ReifierStrategy.clearReifiers();
@@ -2887,8 +3075,8 @@ public abstract class AbstractCamelContext extends BaseService
         // output how many instances of the same component class are in use, as multiple instances is potential a mistake
         if (LOG.isInfoEnabled()) {
             Map<Class<?>, Set<String>> counters = new LinkedHashMap<>();
-            List<String> cnames = getComponentNames();
-            Collections.sort(cnames);
+            // use TreeSet to sort the names
+            Set<String> cnames = new TreeSet<>(getComponentNames());
             for (String sourceName : cnames) {
                 Class<?> source = getComponent(sourceName).getClass();
                 if (!counters.containsKey(source)) {
@@ -2914,29 +3102,6 @@ public abstract class AbstractCamelContext extends BaseService
 
     }
 
-    protected void logClassicStartSummary() {
-        if (LOG.isInfoEnabled()) {
-            // count how many routes are actually started
-            int started = 0;
-            for (Route route : getRoutes()) {
-                ServiceStatus status = getRouteStatus(route.getId());
-                if (status != null && status.isStarted()) {
-                    started++;
-                }
-            }
-
-            final Collection<Route> controlledRoutes = getRouteController().getControlledRoutes();
-            if (controlledRoutes.isEmpty()) {
-                LOG.info("Total {} routes, of which {} are started", getRoutes().size(), started);
-            } else {
-                LOG.info("Total {} routes, of which {} are started, and {} are managed by RouteController: {}",
-                        getRoutes().size(), started, controlledRoutes.size(),
-                        getRouteController().getClass().getName());
-            }
-            LOG.info("Apache Camel {} ({}) started in {}", getVersion(), getName(), TimeUtils.printDuration(stopWatch.taken()));
-        }
-    }
-
     protected void logStartSummary() {
         // supervising route controller should do their own startup log summary
         boolean supervised = getRouteController().isSupervising();
@@ -2946,6 +3111,7 @@ public abstract class AbstractCamelContext extends BaseService
             int total = 0;
             int disabled = 0;
             List<String> lines = new ArrayList<>();
+            List<String> configs = new ArrayList<>();
             routeStartupOrder.sort(Comparator.comparingInt(RouteStartupOrder::getStartupOrder));
             for (RouteStartupOrder order : routeStartupOrder) {
                 total++;
@@ -2957,7 +3123,16 @@ public abstract class AbstractCamelContext extends BaseService
                 // use basic endpoint uri to not log verbose details or potential sensitive data
                 String uri = order.getRoute().getEndpoint().getEndpointBaseUri();
                 uri = URISupport.sanitizeUri(uri);
-                lines.add(String.format("\t%s %s (%s)", status, id, uri));
+                String loc = order.getRoute().getSourceLocationShort();
+                if (startupSummaryLevel == StartupSummaryLevel.Verbose && loc != null) {
+                    lines.add(String.format("    %s %s (%s) (source: %s)", status, id, uri, loc));
+                } else {
+                    lines.add(String.format("    %s %s (%s)", status, id, uri));
+                }
+                String cid = order.getRoute().getConfigurationId();
+                if (cid != null) {
+                    configs.add(String.format("    %s (%s)", id, cid));
+                }
             }
             for (Route route : routes) {
                 if (!route.isAutoStartup()) {
@@ -2971,18 +3146,36 @@ public abstract class AbstractCamelContext extends BaseService
                     // use basic endpoint uri to not log verbose details or potential sensitive data
                     String uri = route.getEndpoint().getEndpointBaseUri();
                     uri = URISupport.sanitizeUri(uri);
-                    lines.add(String.format("\t%s %s (%s)", status, id, uri));
+                    String loc = route.getSourceLocationShort();
+                    if (startupSummaryLevel == StartupSummaryLevel.Verbose && loc != null) {
+                        lines.add(String.format("    %s %s (%s) (source: %s)", status, id, uri, loc));
+                    } else {
+                        lines.add(String.format("    %s %s (%s)", status, id, uri));
+                    }
+
+                    String cid = route.getConfigurationId();
+                    if (cid != null) {
+                        configs.add(String.format("    %s (%s)", id, cid));
+                    }
                 }
             }
             if (disabled > 0) {
-                LOG.info("Routes startup summary (total:{} started:{} disabled:{})", total, started, disabled);
+                LOG.info("Routes startup (total:{} started:{} disabled:{})", total, started, disabled);
+            } else if (total != started) {
+                LOG.info("Routes startup (total:{} started:{})", total, started);
             } else {
-                LOG.info("Routes startup summary (total:{} started:{})", total, started);
+                LOG.info("Routes startup (started:{})", started);
             }
             // if we are default/verbose then log each route line
             if (startupSummaryLevel == StartupSummaryLevel.Default || startupSummaryLevel == StartupSummaryLevel.Verbose) {
                 for (String line : lines) {
                     LOG.info(line);
+                }
+                if (startupSummaryLevel == StartupSummaryLevel.Verbose) {
+                    LOG.info("Routes configuration:");
+                    for (String line : configs) {
+                        LOG.info(line);
+                    }
                 }
             }
         }
@@ -2990,20 +3183,27 @@ public abstract class AbstractCamelContext extends BaseService
         if (startupSummaryLevel != StartupSummaryLevel.Off && LOG.isInfoEnabled()) {
             long taken = stopWatch.taken();
             long max = buildTaken + initTaken + taken;
-            String total = TimeUtils.printDuration(max);
-            String start = TimeUtils.printDuration(taken);
-            String init = TimeUtils.printDuration(initTaken);
-            String built = TimeUtils.printDuration(buildTaken);
-            LOG.info("Apache Camel {} ({}) started in {} (build:{} init:{} start:{})", getVersion(), getName(), total, built,
-                    init,
-                    start);
+            String total = TimeUtils.printDuration(max, true);
+            String start = TimeUtils.printDuration(taken, true);
+            String init = TimeUtils.printDuration(initTaken, true);
+            String built = TimeUtils.printDuration(buildTaken, true);
+            String jvm = logJvmUptime ? getJvmUptime() : null;
+            if (jvm != null) {
+                LOG.info("Apache Camel {} ({}) started in {} (build:{} init:{} start:{} JVM-uptime:{})", getVersion(),
+                        getName(), total, built,
+                        init, start, jvm);
+            } else {
+                LOG.info("Apache Camel {} ({}) started in {} (build:{} init:{} start:{})", getVersion(), getName(), total,
+                        built,
+                        init,
+                        start);
+            }
         }
     }
 
     protected void doStartCamel() throws Exception {
         if (!adapt(ExtendedCamelContext.class).getBeanPostProcessor().isEnabled()) {
-            LOG.info(
-                    "BeanPostProcessor is disabled. This means features such as dependency injection of Camel annotations in beans is not supported.");
+            LOG.info("BeanPostProcessor is disabled. Dependency injection of Camel annotations in beans is not supported.");
         }
         if (LOG.isDebugEnabled()) {
             LOG.debug(
@@ -3012,11 +3212,12 @@ public abstract class AbstractCamelContext extends BaseService
                     getPackageScanClassResolver(), getApplicationContextClassLoader(), getRouteController());
         }
         if (isStreamCaching()) {
-            LOG.info("StreamCaching is enabled on CamelContext: {}", getName());
+            // stream caching is default enabled so lets report if it has been disabled
+            LOG.debug("StreamCaching is disabled on CamelContext: {}", getName());
         }
         if (isBacklogTracing()) {
             // tracing is added in the DefaultChannel so we can enable it on the fly
-            LOG.info("Backlog Tracing is enabled on CamelContext: {}", getName());
+            LOG.debug("Backlog Tracing is enabled on CamelContext: {}", getName());
         }
         if (isTracing()) {
             // tracing is added in the DefaultChannel so we can enable it on the fly
@@ -3043,23 +3244,35 @@ public abstract class AbstractCamelContext extends BaseService
         if (!lifecycleStrategies.isEmpty()) {
             StartupStep subStep
                     = startupStepRecorder.beginStep(CamelContext.class, getName(), "LifecycleStrategy onContextStarting");
-            ServiceHelper.startService(lifecycleStrategies);
+            startServices(lifecycleStrategies);
             for (LifecycleStrategy strategy : lifecycleStrategies) {
                 try {
                     strategy.onContextStarting(this);
                     strategy.onContextStart(this);
                 } catch (VetoCamelContextStartException e) {
                     // okay we should not start Camel since it was vetoed
-                    LOG.warn("Lifecycle strategy " + strategy + " vetoed starting CamelContext ({}) due to: {}", getName(),
+                    LOG.warn("Lifecycle strategy {} vetoed starting CamelContext ({}) due to: {}", strategy, getName(),
                             e.getMessage());
                     throw e;
                 } catch (Exception e) {
-                    LOG.warn("Lifecycle strategy " + strategy + " failed starting CamelContext ({}) due to: {}", getName(),
+                    LOG.warn("Lifecycle strategy {} failed starting CamelContext ({}) due to: {}", strategy, getName(),
                             e.getMessage());
                     throw e;
                 }
             }
             startupStepRecorder.endStep(subStep);
+        }
+
+        // ensure components are started
+        for (Map.Entry<String, Component> entry : components.entrySet()) {
+            StartupStep step = startupStepRecorder.beginStep(Component.class, entry.getKey(), "Start Component");
+            try {
+                startService(entry.getValue());
+            } catch (Exception e) {
+                throw new FailedToStartComponentException(entry.getKey(), e.getMessage(), e);
+            } finally {
+                startupStepRecorder.endStep(step);
+            }
         }
 
         if (!startupListeners.isEmpty()) {
@@ -3085,12 +3298,9 @@ public abstract class AbstractCamelContext extends BaseService
         // must let some bootstrap service be started before we can notify the starting event
         EventHelper.notifyCamelContextStarting(this);
 
-        // start components
-        startServices(components.values());
-
         if (isUseDataType()) {
             // log if DataType has been enabled
-            LOG.info("Message DataType is enabled on CamelContext: {}", getName());
+            LOG.debug("Message DataType is enabled on CamelContext: {}", getName());
         }
 
         // is there any stream caching enabled then log an info about this and
@@ -3144,6 +3354,10 @@ public abstract class AbstractCamelContext extends BaseService
             LOG.debug("Skip starting routes as CamelContext has been configured with autoStartup=false");
         }
 
+        if (isDumpRoutes() != null && isDumpRoutes()) {
+            doDumpRoutes();
+        }
+
         // invoke this logic to warmup the routes and if possible also start the routes
         StartupStep subStep = startupStepRecorder.beginStep(CamelContext.class, getName(), "Start Routes");
         EventHelper.notifyCamelContextRoutesStarting(this);
@@ -3170,7 +3384,8 @@ public abstract class AbstractCamelContext extends BaseService
         if (startupSummaryLevel != StartupSummaryLevel.Oneline && startupSummaryLevel != StartupSummaryLevel.Off) {
             if (shutdownStrategy != null && shutdownStrategy.getTimeUnit() != null) {
                 long timeout = shutdownStrategy.getTimeUnit().toMillis(shutdownStrategy.getTimeout());
-                String to = TimeUtils.printDuration(timeout);
+                // only use precise print duration if timeout is shorter than 10 seconds
+                String to = TimeUtils.printDuration(timeout, timeout < 10000);
                 LOG.info("Apache Camel {} ({}) shutting down (timeout:{})", getVersion(), getName(), to);
             } else {
                 LOG.info("Apache Camel {} ({}) shutting down", getVersion(), getName());
@@ -3216,9 +3431,9 @@ public abstract class AbstractCamelContext extends BaseService
         }
         shutdownServices(list, false);
 
-        if (startupSummaryLevel != StartupSummaryLevel.Classic && startupSummaryLevel != StartupSummaryLevel.Oneline
+        if (startupSummaryLevel != StartupSummaryLevel.Oneline
                 && startupSummaryLevel != StartupSummaryLevel.Off) {
-            logRouteStopSummary();
+            logRouteStopSummary(LoggingLevel.INFO);
         }
 
         // do not clear route services or startup listeners as we can start
@@ -3294,23 +3509,24 @@ public abstract class AbstractCamelContext extends BaseService
         shutdownServices(executorServiceManager);
         shutdownServices(reactiveExecutor);
 
-        // shutdown type converter as late as possible
+        // shutdown type converter and registry as late as possible
         ServiceHelper.stopService(typeConverter);
         ServiceHelper.stopService(typeConverterRegistry);
+        ServiceHelper.stopService(registry);
 
         // stop the lazy created so they can be re-created on restart
         forceStopLazyInitialization();
 
-        if (startupSummaryLevel == StartupSummaryLevel.Classic) {
+        if (startupSummaryLevel != StartupSummaryLevel.Off) {
             if (LOG.isInfoEnabled()) {
-                LOG.info("Apache Camel {} ({}) uptime {}", getVersion(), getName(), getUptime());
-                LOG.info("Apache Camel {} ({}) is shutdown in {}", getVersion(), getName(),
-                        TimeUtils.printDuration(stopWatch.taken()));
-            }
-        } else if (startupSummaryLevel != StartupSummaryLevel.Off) {
-            if (LOG.isInfoEnabled()) {
-                String taken = TimeUtils.printDuration(stopWatch.taken());
-                LOG.info("Apache Camel {} ({}) shutdown in {} (uptime:{})", getVersion(), getName(), taken, getUptime());
+                String taken = TimeUtils.printDuration(stopWatch.taken(), true);
+                String jvm = logJvmUptime ? getJvmUptime() : null;
+                if (jvm != null) {
+                    LOG.info("Apache Camel {} ({}) shutdown in {} (uptime:{} JVM-uptime:{})", getVersion(), getName(), taken,
+                            getUptime(), jvm);
+                } else {
+                    LOG.info("Apache Camel {} ({}) shutdown in {} (uptime:{})", getVersion(), getName(), taken, getUptime());
+                }
             }
         }
 
@@ -3334,8 +3550,13 @@ public abstract class AbstractCamelContext extends BaseService
         firstStartDone = false;
     }
 
-    protected void logRouteStopSummary() {
-        if (LOG.isInfoEnabled()) {
+    protected void doDumpRoutes() {
+        // noop
+    }
+
+    protected void logRouteStopSummary(LoggingLevel loggingLevel) {
+        CamelLogger logger = new CamelLogger(LOG, loggingLevel);
+        if (logger.shouldLog()) {
             int total = 0;
             int stopped = 0;
             int forced = 0;
@@ -3360,17 +3581,19 @@ public abstract class AbstractCamelContext extends BaseService
                 // use basic endpoint uri to not log verbose details or potential sensitive data
                 String uri = order.getRoute().getEndpoint().getEndpointBaseUri();
                 uri = URISupport.sanitizeUri(uri);
-                lines.add(String.format("\t%s %s (%s)", status, id, uri));
+                lines.add(String.format("    %s %s (%s)", status, id, uri));
             }
             if (forced > 0) {
-                LOG.info("Routes shutdown summary (total:{} stopped:{} forced:{})", total, stopped, forced);
+                logger.log(String.format("Routes stopped (total:%s stopped:%s forced:%s)", total, stopped, forced));
+            } else if (total != stopped) {
+                logger.log(String.format("Routes stopped (total:%s stopped:%s)", total, stopped));
             } else {
-                LOG.info("Routes shutdown summary (total:{} stopped:{})", total, stopped);
+                logger.log(String.format("Routes stopped (stopped:%s)", stopped));
             }
             // if we are default/verbose then log each route line
             if (startupSummaryLevel == StartupSummaryLevel.Default || startupSummaryLevel == StartupSummaryLevel.Verbose) {
                 for (String line : lines) {
-                    LOG.info(line);
+                    logger.log(line);
                 }
             }
         }
@@ -3438,12 +3661,8 @@ public abstract class AbstractCamelContext extends BaseService
             addStartupListener(listener);
         }
 
-        if (service instanceof CamelContextAware) {
-            CamelContextAware aware = (CamelContextAware) service;
-            aware.setCamelContext(getCamelContextReference());
-        }
-
-        service.start();
+        CamelContextAware.trySetCamelContext(service, getCamelContextReference());
+        ServiceHelper.startService(service);
     }
 
     private void startServices(Collection<?> services) throws Exception {
@@ -3527,38 +3746,47 @@ public abstract class AbstractCamelContext extends BaseService
         }
     }
 
-    protected synchronized void stopRouteService(RouteService routeService, boolean removingRoutes) throws Exception {
+    protected synchronized void stopRouteService(RouteService routeService, boolean removingRoutes, LoggingLevel loggingLevel)
+            throws Exception {
         routeService.setRemovingRoutes(removingRoutes);
-        stopRouteService(routeService);
+        stopRouteService(routeService, loggingLevel);
     }
 
-    protected void logRouteState(Route route, String state) {
-        if (LOG.isInfoEnabled()) {
+    protected void logRouteState(Route route, String state, LoggingLevel loggingLevel) {
+        CamelLogger logger = new CamelLogger(LOG, loggingLevel);
+        if (logger.shouldLog()) {
             if (route.getConsumer() != null) {
-                // use basic endpoint uri to not log verbose details or potential sensitive data
+                String id = route.getId();
                 String uri = route.getEndpoint().getEndpointBaseUri();
                 uri = URISupport.sanitizeUri(uri);
-                LOG.info("Route: {} is {}, was consuming from: {}", route.getId(), state, uri);
+                String line = String.format("%s %s (%s)", state, id, uri);
+                logger.log(line);
             } else {
-                LOG.info("Route: {} is {}.", route.getId(), state);
+                String id = route.getId();
+                String line = String.format("%s %s", state, id);
+                logger.log(line);
             }
         }
     }
 
-    protected synchronized void stopRouteService(RouteService routeService) throws Exception {
+    protected synchronized void stopRouteService(RouteService routeService, LoggingLevel loggingLevel) throws Exception {
         routeService.stop();
-        logRouteState(routeService.getRoute(), "stopped");
+        logRouteState(routeService.getRoute(), "Stopped", loggingLevel);
     }
 
     protected synchronized void shutdownRouteService(RouteService routeService) throws Exception {
+        shutdownRouteService(routeService, LoggingLevel.INFO);
+    }
+
+    protected synchronized void shutdownRouteService(RouteService routeService, LoggingLevel loggingLevel) throws Exception {
         routeService.shutdown();
-        logRouteState(routeService.getRoute(), "shutdown and removed");
+        logRouteState(routeService.getRoute(), "Shutdown", loggingLevel);
     }
 
     protected synchronized void suspendRouteService(RouteService routeService) throws Exception {
         routeService.setRemovingRoutes(false);
         routeService.suspend();
-        logRouteState(routeService.getRoute(), "suspended");
+        logRouteState(routeService.getRoute(), "Suspended", LoggingLevel.INFO);
     }
 
     /**
@@ -3620,8 +3848,11 @@ public abstract class AbstractCamelContext extends BaseService
         getComponentResolver();
         getComponentNameResolver();
         getDataFormatResolver();
+        getHealthCheckResolver();
 
         getExecutorServiceManager();
+        getExchangeFactoryManager();
+        getExchangeFactory();
         getShutdownStrategy();
         getUuidGenerator();
 
@@ -3647,6 +3878,7 @@ public abstract class AbstractCamelContext extends BaseService
         getUnitOfWorkFactory();
         getRouteController();
         getRoutesLoader();
+        getResourceLoader();
 
         try {
             getRestRegistryFactory();
@@ -3680,6 +3912,10 @@ public abstract class AbstractCamelContext extends BaseService
         typeConverter = null;
         reactiveExecutor = null;
         asyncProcessorAwaitManager = null;
+        exchangeFactory = null;
+        exchangeFactoryManager = null;
+        processorExchangeFactory = null;
+        registry = null;
     }
 
     /**
@@ -3858,13 +4094,13 @@ public abstract class AbstractCamelContext extends BaseService
     }
 
     @Override
-    public List<String> getComponentNames() {
-        return new ArrayList<>(components.keySet());
+    public Set<String> getComponentNames() {
+        return Collections.unmodifiableSet(components.keySet());
     }
 
     @Override
-    public List<String> getLanguageNames() {
-        return new ArrayList<>(languages.keySet());
+    public Set<String> getLanguageNames() {
+        return Collections.unmodifiableSet(languages.keySet());
     }
 
     @Override
@@ -3902,6 +4138,23 @@ public abstract class AbstractCamelContext extends BaseService
     }
 
     @Override
+    public ModelineFactory getModelineFactory() {
+        if (modelineFactory == null) {
+            synchronized (lock) {
+                if (modelineFactory == null) {
+                    setModelineFactory(createModelineFactory());
+                }
+            }
+        }
+        return modelineFactory;
+    }
+
+    @Override
+    public void setModelineFactory(ModelineFactory modelineFactory) {
+        this.modelineFactory = doAddService(modelineFactory);
+    }
+
+    @Override
     public ManagementStrategy getManagementStrategy() {
         return managementStrategy;
     }
@@ -3926,7 +4179,7 @@ public abstract class AbstractCamelContext extends BaseService
     }
 
     public boolean isJMXDisabled() {
-        String override = System.getProperty("org.apache.camel.jmx.disabled");
+        String override = System.getProperty(JmxSystemPropertyKeys.DISABLED);
         if (override != null) {
             return "true".equals(override);
         } else {
@@ -3947,6 +4200,17 @@ public abstract class AbstractCamelContext extends BaseService
                     Object object = finder.newInstance("ManagementStrategyFactory").orElse(null);
                     if (object instanceof ManagementStrategyFactory) {
                         factory = (ManagementStrategyFactory) object;
+                    }
+                }
+                // detect if camel-debug is on classpath that enables debugging
+                DebuggerFactory df
+                        = getBootstrapFactoryFinder().newInstance(Debugger.FACTORY, DebuggerFactory.class).orElse(null);
+                if (df != null) {
+                    LOG.info("Detected: {} JAR (Enabling Camel Debugging)", df);
+                    setDebugging(true);
+                    Debugger debugger = df.createDebugger(this);
+                    if (debugger != null) {
+                        setDebugger(debugger);
                     }
                 }
             } catch (Exception e) {
@@ -3972,9 +4236,18 @@ public abstract class AbstractCamelContext extends BaseService
             LifecycleStrategy lifecycle = factory.createLifecycle(this);
             factory.setupManagement(this, strategy, lifecycle);
         } catch (Exception e) {
-            LOG.warn("Error setting up management due " + e.getMessage());
+            LOG.warn("Error setting up management due {}", e.getMessage());
             throw RuntimeCamelException.wrapRuntimeCamelException(e);
         }
+    }
+
+    private static String getJvmUptime() {
+        try {
+            return TimeUtils.printDuration(ManagementFactory.getRuntimeMXBean().getUptime());
+        } catch (Exception e) {
+            // ignore
+        }
+        return null;
     }
 
     @Override
@@ -4049,13 +4322,72 @@ public abstract class AbstractCamelContext extends BaseService
     }
 
     @Override
+    public Boolean isLoadHealthChecks() {
+        return loadHealthChecks != null && loadHealthChecks;
+    }
+
+    @Override
+    public void setLoadHealthChecks(Boolean loadHealthChecks) {
+        this.loadHealthChecks = loadHealthChecks;
+    }
+
+    @Override
+    public Boolean isModeline() {
+        return modeline != null && modeline;
+    }
+
+    @Override
+    public void setModeline(Boolean modeline) {
+        this.modeline = modeline;
+    }
+
+    public Boolean isDevConsole() {
+        return devConsole != null && devConsole;
+    }
+
+    @Override
+    public void setDevConsole(Boolean loadDevConsoles) {
+        this.devConsole = loadDevConsoles;
+    }
+
+    @Override
     public Boolean isTypeConverterStatisticsEnabled() {
         return typeConverterStatisticsEnabled != null && typeConverterStatisticsEnabled;
     }
 
     @Override
+    public Boolean isSourceLocationEnabled() {
+        return sourceLocationEnabled;
+    }
+
+    @Override
+    public void setSourceLocationEnabled(Boolean sourceLocationEnabled) {
+        this.sourceLocationEnabled = sourceLocationEnabled;
+    }
+
+    @Override
     public void setTypeConverterStatisticsEnabled(Boolean typeConverterStatisticsEnabled) {
         this.typeConverterStatisticsEnabled = typeConverterStatisticsEnabled;
+    }
+
+    @Override
+    public String getBasePackageScan() {
+        return basePackageScan;
+    }
+
+    @Override
+    public void setBasePackageScan(String basePackageScan) {
+        this.basePackageScan = basePackageScan;
+    }
+
+    @Override
+    public Boolean isDumpRoutes() {
+        return dumpRoutes;
+    }
+
+    @Override
+    public void setDumpRoutes(Boolean dumpRoutes) {
+        this.dumpRoutes = dumpRoutes;
     }
 
     @Override
@@ -4178,6 +4510,43 @@ public abstract class AbstractCamelContext extends BaseService
             startupStepRecorder.endStep(step);
         }
         return answer;
+    }
+
+    @Override
+    public Set<String> getDataFormatNames() {
+        return Collections.unmodifiableSet(dataformats.keySet());
+    }
+
+    @Override
+    public HealthCheckResolver getHealthCheckResolver() {
+        if (healthCheckResolver == null) {
+            synchronized (lock) {
+                if (healthCheckResolver == null) {
+                    setHealthCheckResolver(createHealthCheckResolver());
+                }
+            }
+        }
+        return healthCheckResolver;
+    }
+
+    @Override
+    public void setHealthCheckResolver(HealthCheckResolver healthCheckResolver) {
+        this.healthCheckResolver = doAddService(healthCheckResolver);
+    }
+
+    public DevConsoleResolver getDevConsoleResolver() {
+        if (devConsoleResolver == null) {
+            synchronized (lock) {
+                if (devConsoleResolver == null) {
+                    setDevConsoleResolver(createDevConsoleResolver());
+                }
+            }
+        }
+        return devConsoleResolver;
+    }
+
+    public void setDevConsoleResolver(DevConsoleResolver devConsoleResolver) {
+        this.devConsoleResolver = doAddService(devConsoleResolver);
     }
 
     @Override
@@ -4366,16 +4735,16 @@ public abstract class AbstractCamelContext extends BaseService
     @Override
     public Debugger getDebugger() {
         return debugger;
+        // do not lazy create debugger as the DefaultDebugger is mostly only useable for testing
+        // and if debugging is enabled then Camel will use BacklogDebugger that can be remotely controlled via JMX management
     }
 
     @Override
     public void setDebugger(Debugger debugger) {
         if (isStartingOrStarted()) {
-            throw new IllegalStateException("Can not set debugger on a started CamelContext");
+            throw new IllegalStateException("Cannot set debugger on a started CamelContext");
         }
         this.debugger = doAddService(debugger, true, false, true);
-        // enable debugging if we set a custom debugger
-        setDebugging(true);
     }
 
     @Override
@@ -4392,9 +4761,21 @@ public abstract class AbstractCamelContext extends BaseService
 
     @Override
     public void setTracer(Tracer tracer) {
+        // if tracing is in standby mode, then we can use it after camel is started
+        if (!isTracingStandby() && isStartingOrStarted()) {
+            throw new IllegalStateException("Cannot set tracer on a started CamelContext");
+        }
         this.tracer = doAddService(tracer, true, false, true);
-        // enable tracing if we set a custom tracer
-        setTracing(true);
+    }
+
+    @Override
+    public void setTracingStandby(boolean tracingStandby) {
+        this.traceStandby = tracingStandby;
+    }
+
+    @Override
+    public boolean isTracingStandby() {
+        return traceStandby != null && traceStandby;
     }
 
     @Override
@@ -4592,6 +4973,23 @@ public abstract class AbstractCamelContext extends BaseService
         this.routesLoader = doAddService(routesLoader);
     }
 
+    @Override
+    public ResourceLoader getResourceLoader() {
+        if (resourceLoader == null) {
+            synchronized (lock) {
+                if (resourceLoader == null) {
+                    setResourceLoader(createResourceLoader());
+                }
+            }
+        }
+        return resourceLoader;
+    }
+
+    @Override
+    public void setResourceLoader(ResourceLoader resourceLoader) {
+        this.resourceLoader = doAddService(resourceLoader);
+    }
+
     public ModelToXMLDumper getModelToXMLDumper() {
         if (modelToXMLDumper == null) {
             synchronized (lock) {
@@ -4637,6 +5035,61 @@ public abstract class AbstractCamelContext extends BaseService
     @Override
     public void setRuntimeCamelCatalog(RuntimeCamelCatalog runtimeCamelCatalog) {
         this.runtimeCamelCatalog = doAddService(runtimeCamelCatalog);
+    }
+
+    @Override
+    public ExchangeFactory getExchangeFactory() {
+        if (exchangeFactory == null) {
+            synchronized (lock) {
+                if (exchangeFactory == null) {
+                    setExchangeFactory(createExchangeFactory());
+                }
+            }
+        }
+        return exchangeFactory;
+    }
+
+    @Override
+    public void setExchangeFactory(ExchangeFactory exchangeFactory) {
+        // automatic inject camel context
+        exchangeFactory.setCamelContext(this);
+        this.exchangeFactory = exchangeFactory;
+    }
+
+    @Override
+    public ExchangeFactoryManager getExchangeFactoryManager() {
+        if (exchangeFactoryManager == null) {
+            synchronized (lock) {
+                if (exchangeFactoryManager == null) {
+                    setExchangeFactoryManager(createExchangeFactoryManager());
+                }
+            }
+        }
+        return exchangeFactoryManager;
+    }
+
+    @Override
+    public void setExchangeFactoryManager(ExchangeFactoryManager exchangeFactoryManager) {
+        this.exchangeFactoryManager = doAddService(exchangeFactoryManager);
+    }
+
+    @Override
+    public ProcessorExchangeFactory getProcessorExchangeFactory() {
+        if (processorExchangeFactory == null) {
+            synchronized (lock) {
+                if (processorExchangeFactory == null) {
+                    setProcessorExchangeFactory(createProcessorExchangeFactory());
+                }
+            }
+        }
+        return processorExchangeFactory;
+    }
+
+    @Override
+    public void setProcessorExchangeFactory(ProcessorExchangeFactory processorExchangeFactory) {
+        // automatic inject camel context
+        processorExchangeFactory.setCamelContext(this);
+        this.processorExchangeFactory = processorExchangeFactory;
     }
 
     @Override
@@ -4722,6 +5175,17 @@ public abstract class AbstractCamelContext extends BaseService
         this.beanProcessorFactory = doAddService(beanProcessorFactory);
     }
 
+    public boolean isLogJvmUptime() {
+        return logJvmUptime;
+    }
+
+    /**
+     * Whether to log the JVM uptime on startup and shutdown
+     */
+    public void setLogJvmUptime(boolean logJvmUptime) {
+        this.logJvmUptime = logJvmUptime;
+    }
+
     protected Map<String, RouteService> getRouteServices() {
         return routeServices;
     }
@@ -4731,7 +5195,29 @@ public abstract class AbstractCamelContext extends BaseService
         return "CamelContext(" + getName() + ")";
     }
 
+    protected void failOnStartup(Exception e) {
+        if (e instanceof VetoCamelContextStartException) {
+            VetoCamelContextStartException vetoException = (VetoCamelContextStartException) e;
+            if (vetoException.isRethrowException()) {
+                fail(e);
+            } else {
+                // swallow exception and change state of this camel context to stopped
+                status = FAILED;
+            }
+        } else {
+            fail(e);
+        }
+    }
+
+    protected abstract ExchangeFactory createExchangeFactory();
+
+    protected abstract ExchangeFactoryManager createExchangeFactoryManager();
+
+    protected abstract ProcessorExchangeFactory createProcessorExchangeFactory();
+
     protected abstract HealthCheckRegistry createHealthCheckRegistry();
+
+    protected abstract DevConsoleRegistry createDevConsoleRegistry();
 
     protected abstract ReactiveExecutor createReactiveExecutor();
 
@@ -4747,6 +5233,8 @@ public abstract class AbstractCamelContext extends BaseService
 
     protected abstract CamelBeanPostProcessor createBeanPostProcessor();
 
+    protected abstract CamelDependencyInjectionAnnotationFactory createDependencyInjectionAnnotationFactory();
+
     protected abstract ComponentResolver createComponentResolver();
 
     protected abstract ComponentNameResolver createComponentNameResolver();
@@ -4758,6 +5246,8 @@ public abstract class AbstractCamelContext extends BaseService
     protected abstract ModelJAXBContextFactory createModelJAXBContextFactory();
 
     protected abstract NodeIdFactory createNodeIdFactory();
+
+    protected abstract ModelineFactory createModelineFactory();
 
     protected abstract FactoryFinderResolver createFactoryFinderResolver();
 
@@ -4772,6 +5262,10 @@ public abstract class AbstractCamelContext extends BaseService
     protected abstract RouteFactory createRouteFactory();
 
     protected abstract DataFormatResolver createDataFormatResolver();
+
+    protected abstract HealthCheckResolver createHealthCheckResolver();
+
+    protected abstract DevConsoleResolver createDevConsoleResolver();
 
     protected abstract MessageHistoryFactory createMessageHistoryFactory();
 
@@ -4811,6 +5305,8 @@ public abstract class AbstractCamelContext extends BaseService
 
     protected abstract RoutesLoader createRoutesLoader();
 
+    protected abstract ResourceLoader createResourceLoader();
+
     protected abstract ModelToXMLDumper createModelToXMLDumper();
 
     protected abstract RestBindingJaxbDataFormatFactory createRestBindingJaxbDataFormatFactory();
@@ -4827,7 +5323,7 @@ public abstract class AbstractCamelContext extends BaseService
 
     protected abstract RestRegistryFactory createRestRegistryFactory();
 
-    protected abstract EndpointRegistry<EndpointKey> createEndpointRegistry(Map<EndpointKey, Endpoint> endpoints);
+    protected abstract EndpointRegistry<NormalizedUri> createEndpointRegistry(Map<NormalizedUri, Endpoint> endpoints);
 
     protected abstract TransformerRegistry<TransformerKey> createTransformerRegistry();
 
@@ -4838,7 +5334,7 @@ public abstract class AbstractCamelContext extends BaseService
         RestConfiguration conf
                 = CamelContextHelper.lookup(this, RestConfiguration.DEFAULT_REST_CONFIGURATION_ID, RestConfiguration.class);
         if (conf == null) {
-            conf = CamelContextHelper.findByType(this, RestConfiguration.class);
+            conf = CamelContextHelper.findSingleByType(this, RestConfiguration.class);
         }
         if (conf == null) {
             conf = new RestConfiguration();

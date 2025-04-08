@@ -224,6 +224,14 @@ public class JmsComponent extends HeaderFilterStrategyComponent {
         configuration.setConsumerType(consumerType);
     }
 
+    public ConsumerType getReplyToConsumerType() {
+        return configuration.getReplyToConsumerType();
+    }
+
+    public void setReplyToConsumerType(ConsumerType replyToConsumerType) {
+        configuration.setReplyToConsumerType(replyToConsumerType);
+    }
+
     public ConnectionFactory getConnectionFactory() {
         return configuration.getConnectionFactory();
     }
@@ -1234,7 +1242,12 @@ public class JmsComponent extends HeaderFilterStrategyComponent {
     /**
      * A strategy method allowing the URI destination to be translated into the actual JMS destination name (say by
      * looking up in JNDI or something)
+     *
+     * @param  path       the path to convert
+     * @param  parameters an optional, component specific, set of parameters
+     * @return            the path as the actual destination
      */
+
     protected String convertPathToActualDestination(String path, Map<String, Object> parameters) {
         return path;
     }

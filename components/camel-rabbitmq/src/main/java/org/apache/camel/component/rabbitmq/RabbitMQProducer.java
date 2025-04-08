@@ -17,6 +17,7 @@
 package org.apache.camel.component.rabbitmq;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -35,8 +36,9 @@ import org.apache.camel.component.rabbitmq.reply.TemporaryQueueReplyManager;
 import org.apache.camel.support.DefaultAsyncProducer;
 import org.apache.camel.support.service.ServiceHelper;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.commons.pool.ObjectPool;
-import org.apache.commons.pool.impl.GenericObjectPool;
+import org.apache.commons.pool2.ObjectPool;
+import org.apache.commons.pool2.impl.GenericObjectPool;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,7 +56,7 @@ public class RabbitMQProducer extends DefaultAsyncProducer {
 
     private ReplyManager replyManager;
 
-    public RabbitMQProducer(RabbitMQEndpoint endpoint) throws IOException {
+    public RabbitMQProducer(RabbitMQEndpoint endpoint) {
         super(endpoint);
     }
 
@@ -100,8 +102,6 @@ public class RabbitMQProducer extends DefaultAsyncProducer {
 
     /**
      * Open connection and initialize channel pool
-     * 
-     * @throws Exception
      */
     private synchronized void openConnectionAndChannelPool() throws Exception {
         LOG.trace("Creating connection...");
@@ -109,10 +109,14 @@ public class RabbitMQProducer extends DefaultAsyncProducer {
         LOG.debug("Created connection: {}", conn);
 
         LOG.trace("Creating channel pool...");
-        channelPool = new GenericObjectPool<>(
-                new PoolableChannelFactory(this.conn), getEndpoint().getChannelPoolMaxSize(),
-                GenericObjectPool.WHEN_EXHAUSTED_BLOCK,
-                getEndpoint().getChannelPoolMaxWait());
+        int channelPoolMaxSize = getEndpoint().getChannelPoolMaxSize();
+        long maxWait = getEndpoint().getChannelPoolMaxWait();
+
+        GenericObjectPoolConfig config = new GenericObjectPoolConfig();
+        config.setMaxWait(Duration.ofMillis(maxWait));
+        config.setMaxTotal(channelPoolMaxSize);
+
+        channelPool = new GenericObjectPool(new PoolableChannelFactory(this.conn), config);
         attemptDeclaration();
     }
 
@@ -259,7 +263,7 @@ public class RabbitMQProducer extends DefaultAsyncProducer {
 
         replyManager.registerReply(replyManager, exchange, callback, originalCorrelationId, correlationId, timeout);
         try {
-            basicPublish(exchange, exchangeName, key);
+            basicPublish(exchange, key);
         } catch (Exception e) {
             replyManager.cancelCorrelationId(correlationId);
             exchange.setException(e);
@@ -291,7 +295,7 @@ public class RabbitMQProducer extends DefaultAsyncProducer {
             throw new IllegalArgumentException("ExchangeName and RoutingKey is not provided in the endpoint: " + getEndpoint());
         }
 
-        basicPublish(exchange, exchangeName, key);
+        basicPublish(exchange, key);
         callback.done(true);
         return true;
     }
@@ -299,7 +303,7 @@ public class RabbitMQProducer extends DefaultAsyncProducer {
     /**
      * Send a message borrowing a channel from the pool.
      */
-    private void basicPublish(final Exchange camelExchange, final String rabbitExchange, final String routingKey)
+    private void basicPublish(final Exchange camelExchange, final String routingKey)
             throws Exception {
         if (channelPool == null) {
             // Open connection and channel lazily if another thread hasn't
@@ -392,7 +396,7 @@ public class RabbitMQProducer extends DefaultAsyncProducer {
         }
     }
 
-    protected ReplyManager createReplyManager() throws Exception {
+    protected ReplyManager createReplyManager() {
         // use a temporary queue
         ReplyManager replyManager = new TemporaryQueueReplyManager(getEndpoint().getCamelContext());
         replyManager.setEndpoint(getEndpoint());

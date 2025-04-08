@@ -265,6 +265,19 @@ public class DefaultSupervisingRouteController extends DefaultRouteController im
     }
 
     @Override
+    public void stopRoute(String routeId, Throwable cause) throws Exception {
+        final Optional<RouteHolder> route = routes.stream().filter(r -> r.getId().equals(routeId)).findFirst();
+
+        if (!route.isPresent()) {
+            // This route is unknown to this controller, apply default behaviour
+            // from super class.
+            super.stopRoute(routeId, cause);
+        } else {
+            doStopRoute(route.get(), true, r -> super.stopRoute(routeId, cause));
+        }
+    }
+
+    @Override
     public void stopRoute(String routeId, long timeout, TimeUnit timeUnit) throws Exception {
         final Optional<RouteHolder> route = routes.stream().filter(r -> r.getId().equals(routeId)).findFirst();
 
@@ -481,6 +494,7 @@ public class DefaultSupervisingRouteController extends DefaultRouteController im
         int restarting = 0;
         int exhausted = 0;
         List<String> lines = new ArrayList<>();
+        List<String> configs = new ArrayList<>();
         for (RouteHolder route : routes) {
             String id = route.getId();
             String status = getRouteStatus(id).name();
@@ -491,7 +505,11 @@ public class DefaultSupervisingRouteController extends DefaultRouteController im
                 // use basic endpoint uri to not log verbose details or potential sensitive data
                 String uri = route.get().getEndpoint().getEndpointBaseUri();
                 uri = URISupport.sanitizeUri(uri);
-                lines.add(String.format("\t%s %s (%s)", status, id, uri));
+                lines.add(String.format("    %s %s (%s)", status, id, uri));
+                String cid = route.get().getConfigurationId();
+                if (cid != null) {
+                    configs.add(String.format("    %s (%s)", id, cid));
+                }
             }
         }
         for (RouteHolder route : routeManager.routes.keySet()) {
@@ -503,7 +521,11 @@ public class DefaultSupervisingRouteController extends DefaultRouteController im
             String uri = route.get().getEndpoint().getEndpointBaseUri();
             uri = URISupport.sanitizeUri(uri);
             BackOff backOff = getBackOff(id);
-            lines.add(String.format("\t%s %s (%s) with %s", status, id, uri, backOff));
+            lines.add(String.format("    %s %s (%s) with %s", status, id, uri, backOff));
+            String cid = route.get().getConfigurationId();
+            if (cid != null) {
+                configs.add(String.format("    %s (%s)", id, cid));
+            }
         }
         for (RouteHolder route : routeManager.exhausted.keySet()) {
             total++;
@@ -513,19 +535,29 @@ public class DefaultSupervisingRouteController extends DefaultRouteController im
             // use basic endpoint uri to not log verbose details or potential sensitive data
             String uri = route.get().getEndpoint().getEndpointBaseUri();
             uri = URISupport.sanitizeUri(uri);
-            lines.add(String.format("\t%s %s (%s)", status, id, uri));
+            lines.add(String.format("    %s %s (%s)", status, id, uri));
+            String cid = route.get().getConfigurationId();
+            if (cid != null) {
+                configs.add(String.format("    %s (%s)", id, cid));
+            }
         }
 
         if (restarting == 0 && exhausted == 0) {
-            LOG.info("Routes startup summary (total:{} started:{})", total, started);
+            LOG.info("Routes startup (total:{} started:{})", total, started);
         } else {
-            LOG.info("Routes startup summary (total:{} started:{} restarting:{} exhausted:{})", total, started, restarting,
+            LOG.info("Routes startup (total:{} started:{} restarting:{} exhausted:{})", total, started, restarting,
                     exhausted);
         }
         if (getCamelContext().getStartupSummaryLevel() == StartupSummaryLevel.Default
                 || getCamelContext().getStartupSummaryLevel() == StartupSummaryLevel.Verbose) {
             for (String line : lines) {
                 LOG.info(line);
+            }
+            if (getCamelContext().getStartupSummaryLevel() == StartupSummaryLevel.Verbose) {
+                LOG.info("Routes configuration:");
+                for (String line : configs) {
+                    LOG.info(line);
+                }
             }
         }
     }

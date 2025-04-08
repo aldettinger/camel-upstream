@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>components</artifactId>
-        <version>3.9.0-SNAPSHOT</version>
+        <version>3.18.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>camel-ftp</artifactId>
@@ -33,8 +33,17 @@
 
     <properties>
         <camel.osgi.import.before.defaults>
-            com.jcraft.jsch.*;version="[0.1.5,0.2)"
+            com.jcraft.jsch.*;version="[0.2,1)"
         </camel.osgi.import.before.defaults>
+
+        <camel.surefire.forkCount>4</camel.surefire.forkCount>
+        <camel.surefire.forkTimeout>1800</camel.surefire.forkTimeout>
+        <camel.surefire.parallel>false</camel.surefire.parallel>
+
+        <!-- This one can run in parallel rather safely-->
+        <camel.failsafe.forkCount>${camel.surefire.forkCount}</camel.failsafe.forkCount>
+        <camel.failsafe.forkTimeout>${camel.surefire.forkTimeout}</camel.failsafe.forkTimeout>
+        <camel.failsafe.parallel>${camel.surefire.parallel}</camel.failsafe.parallel>
     </properties>
 
     <dependencies>
@@ -48,7 +57,7 @@
             <artifactId>camel-core-catalog</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.jcraft</groupId>
+            <groupId>com.github.mwiede</groupId>
             <artifactId>jsch</artifactId>
             <version>${jsch-version}</version>
         </dependency>
@@ -88,6 +97,11 @@
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -149,13 +163,13 @@
         <!-- needed for sftp server -->
         <dependency>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcpg-jdk15on</artifactId>
+            <artifactId>bcpg-jdk18on</artifactId>
             <version>${bouncycastle-version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcpkix-jdk15on</artifactId>
+            <artifactId>bcpkix-jdk18on</artifactId>
             <version>${bouncycastle-version}</version>
             <scope>test</scope>
         </dependency>
@@ -164,6 +178,12 @@
         <dependency>
             <groupId>org.apache.mina</groupId>
             <artifactId>mina-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.i2p.crypto</groupId>
+            <artifactId>eddsa</artifactId>
+            <version>${eddsa-version}</version>
             <scope>test</scope>
         </dependency>
 
@@ -177,14 +197,6 @@
         <!-- test infra -->
         <dependency>
             <groupId>org.apache.camel</groupId>
-            <artifactId>camel-test-infra-common</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.camel</groupId>
             <artifactId>camel-test-infra-ftp</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
@@ -194,16 +206,16 @@
 
     <build>
         <plugins>
-
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
+                <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
-                    <!-- The default timeout of 5 minutes through the parent pom is not long enough -->
-                    <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
+                    <!-- This one can run in parallel rather safely-->
+                    <forkCount>${camel.failsafe.forkCount}</forkCount>
+                    <parallel>${camel.failsafe.parallel}</parallel>
+                    <forkedProcessTimeoutInSeconds>${camel.failsafe.forkTimeout}</forkedProcessTimeoutInSeconds>
                 </configuration>
             </plugin>
-
         </plugins>
     </build>
 

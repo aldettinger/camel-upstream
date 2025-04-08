@@ -44,10 +44,20 @@ public class RestOpenApiReaderModelBookOrderTest extends CamelTestSupport {
     private Object dummy = new Object();
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
+                rest()
+                    .securityDefinitions()
+                    .oauth2("global")
+                    .accessCode(
+                        "https://AUTHORIZATION_URL",
+                        "https://TOKEN_URL"
+                    )
+                    .withScope("groups", "Required scopes for Camel REST APIs")
+                    .end();
+
                 // this user REST service is json only
                 rest("/books").tag("dude").description("Book order service").consumes("application/json")
                         .produces("application/json")
@@ -74,7 +84,7 @@ public class RestOpenApiReaderModelBookOrderTest extends CamelTestSupport {
         config.setVersion("2.0");
         RestOpenApiReader reader = new RestOpenApiReader();
 
-        OasDocument openApi = reader.read(context, context.getRestDefinitions(), null, config, context.getName(),
+        OasDocument openApi = reader.read(context, context.getRestDefinitions(), config, context.getName(),
                 new DefaultClassResolver());
         assertNotNull(openApi);
 
@@ -110,7 +120,7 @@ public class RestOpenApiReaderModelBookOrderTest extends CamelTestSupport {
         config.setLicenseUrl("http://www.apache.org/licenses/LICENSE-2.0.html");
         RestOpenApiReader reader = new RestOpenApiReader();
 
-        OasDocument openApi = reader.read(context, context.getRestDefinitions(), null, config, context.getName(),
+        OasDocument openApi = reader.read(context, context.getRestDefinitions(), config, context.getName(),
                 new DefaultClassResolver());
         assertNotNull(openApi);
 

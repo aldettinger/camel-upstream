@@ -17,11 +17,13 @@
 package org.apache.camel.component.smpp;
 
 import java.io.IOException;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.support.DefaultProducer;
+import org.apache.camel.support.task.BlockingTask;
 import org.jsmpp.DefaultPDUReader;
 import org.jsmpp.DefaultPDUSender;
 import org.jsmpp.SynchronizedPDUSender;
@@ -31,11 +33,16 @@ import org.jsmpp.bean.TypeOfNumber;
 import org.jsmpp.extra.SessionState;
 import org.jsmpp.session.BindParameter;
 import org.jsmpp.session.SMPPSession;
-import org.jsmpp.session.Session;
 import org.jsmpp.session.SessionStateListener;
 import org.jsmpp.util.DefaultComposer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.camel.component.smpp.SmppUtils.createExecutor;
+import static org.apache.camel.component.smpp.SmppUtils.isServiceStopping;
+import static org.apache.camel.component.smpp.SmppUtils.isSessionClosed;
+import static org.apache.camel.component.smpp.SmppUtils.newReconnectTask;
+import static org.apache.camel.component.smpp.SmppUtils.shutdownReconnectService;
 
 /**
  * An implementation of @{link Producer} which use the SMPP protocol
@@ -43,27 +50,30 @@ import org.slf4j.LoggerFactory;
 public class SmppProducer extends DefaultProducer {
 
     private static final Logger LOG = LoggerFactory.getLogger(SmppProducer.class);
+    private static final String RECONNECT_TASK_NAME = "smpp-producer-reconnect";
 
-    private SmppConfiguration configuration;
-    private SMPPSession session;
-    private SessionStateListener internalSessionStateListener;
+    private final SmppConfiguration configuration;
+    private final SessionStateListener internalSessionStateListener;
     private final ReentrantLock connectLock = new ReentrantLock();
+    private final ScheduledExecutorService reconnectService;
+
+    private SMPPSession session;
 
     public SmppProducer(SmppEndpoint endpoint, SmppConfiguration config) {
         super(endpoint);
-        this.configuration = config;
-        this.internalSessionStateListener = new SessionStateListener() {
-            @Override
-            public void onStateChange(SessionState newState, SessionState oldState, Session source) {
-                if (configuration.getSessionStateListener() != null) {
-                    configuration.getSessionStateListener().onStateChange(newState, oldState, source);
-                }
 
-                if (newState.equals(SessionState.CLOSED)) {
-                    LOG.warn("Lost connection to: {} - trying to reconnect...", getEndpoint().getConnectionString());
-                    closeSession();
-                    reconnect(configuration.getInitialReconnectDelay());
-                }
+        this.reconnectService = createExecutor(this, endpoint, RECONNECT_TASK_NAME);
+
+        this.configuration = config;
+        this.internalSessionStateListener = (newState, oldState, source) -> {
+            if (configuration.getSessionStateListener() != null) {
+                configuration.getSessionStateListener().onStateChange(newState, oldState, source);
+            }
+
+            if (newState.equals(SessionState.CLOSED)) {
+                LOG.warn("Lost connection to: {} - trying to reconnect...", getEndpoint().getConnectionString());
+                closeSession();
+                reconnect(configuration.getInitialReconnectDelay());
             }
         };
     }
@@ -79,6 +89,9 @@ public class SmppProducer extends DefaultProducer {
                 } finally {
                     connectLock.unlock();
                 }
+            } else {
+                LOG.warn("Thread {} could not acquire a lock for creating the session during producer start",
+                        Thread.currentThread().getId());
             }
         }
     }
@@ -89,6 +102,8 @@ public class SmppProducer extends DefaultProducer {
         SMPPSession session = createSMPPSession();
         session.setEnquireLinkTimer(this.configuration.getEnquireLinkTimer());
         session.setTransactionTimer(this.configuration.getTransactionTimer());
+        session.setPduProcessorDegree(this.configuration.getPduProcessorDegree());
+        session.setQueueCapacity(this.configuration.getPduProcessorQueueCapacity());
         session.addSessionStateListener(internalSessionStateListener);
         session.connectAndBind(
                 this.configuration.getHost(),
@@ -142,6 +157,9 @@ public class SmppProducer extends DefaultProducer {
                     } finally {
                         connectLock.unlock();
                     }
+                } else {
+                    LOG.warn("Thread {} could not acquire a lock for creating the session during lazy initialization",
+                            Thread.currentThread().getId());
                 }
             }
         }
@@ -157,6 +175,8 @@ public class SmppProducer extends DefaultProducer {
 
     @Override
     protected void doStop() throws Exception {
+        shutdownReconnectService(reconnectService);
+
         LOG.debug("Disconnecting from: {}...", getEndpoint().getConnectionString());
 
         super.doStop();
@@ -176,51 +196,50 @@ public class SmppProducer extends DefaultProducer {
 
     private void reconnect(final long initialReconnectDelay) {
         if (connectLock.tryLock()) {
+            BlockingTask task = newReconnectTask(reconnectService, RECONNECT_TASK_NAME, initialReconnectDelay,
+                    configuration.getReconnectDelay(), configuration.getMaxReconnect());
+
             try {
-                Runnable r = new Runnable() {
-                    public void run() {
-                        boolean reconnected = false;
-
-                        LOG.info("Schedule reconnect after {} millis", initialReconnectDelay);
-                        try {
-                            Thread.sleep(initialReconnectDelay);
-                        } catch (InterruptedException e) {
-                        }
-
-                        int attempt = 0;
-                        while (!(isStopping() || isStopped())
-                                && (session == null || session.getSessionState().equals(SessionState.CLOSED))
-                                && attempt < configuration.getMaxReconnect()) {
-                            try {
-                                attempt++;
-                                LOG.info("Trying to reconnect to {} - attempt #{}", getEndpoint().getConnectionString(),
-                                        attempt);
-                                session = createSession();
-                                reconnected = true;
-                            } catch (IOException e) {
-                                LOG.warn("Failed to reconnect to {}", getEndpoint().getConnectionString());
-                                closeSession();
-                                try {
-                                    Thread.sleep(configuration.getReconnectDelay());
-                                } catch (InterruptedException ee) {
-                                }
-                            }
-                        }
-
-                        if (reconnected) {
-                            LOG.info("Reconnected to {}", getEndpoint().getConnectionString());
-                        }
-                    }
-                };
-
-                Thread t = new Thread(r);
-                t.start();
-                t.join();
-            } catch (InterruptedException e) {
-                // noop
+                task.run(this::doReconnect);
             } finally {
                 connectLock.unlock();
             }
+        } else {
+            LOG.warn("Thread {} could not acquire a lock for creating the session during producer reconnection",
+                    Thread.currentThread().getId());
+        }
+    }
+
+    private boolean doReconnect() {
+        try {
+            LOG.info("Trying to reconnect to {}", getEndpoint().getConnectionString());
+            if (isServiceStopping(this)) {
+                return true;
+            }
+
+            if (isSessionClosed(session)) {
+                return tryCreateSession();
+            }
+
+            LOG.info("Nothing to do: the session is not closed");
+        } catch (Exception e) {
+            LOG.error("Unable to reconnect to {}: {}", getEndpoint().getConnectionString(), e.getMessage(), e);
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean tryCreateSession() {
+        try {
+
+            session = createSession();
+            return true;
+        } catch (IOException e) {
+            LOG.warn("Failed to reconnect to {}", getEndpoint().getConnectionString());
+            closeSession();
+
+            return false;
         }
     }
 

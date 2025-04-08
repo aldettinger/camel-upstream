@@ -42,7 +42,7 @@ public class SpanProcessorsTest extends CamelOpenTelemetryTestSupport {
     }
 
     @Test
-    public void testRoute() throws Exception {
+    public void testRoute() {
         Exchange result = template.request("direct:start",
                 exchange -> {
                     exchange.getIn().setBody("Hello");
@@ -50,14 +50,14 @@ public class SpanProcessorsTest extends CamelOpenTelemetryTestSupport {
                 });
 
         verify();
-        assertEquals(result.getMessage().getHeader("baggage-header", String.class), "request-header-value");
+        assertEquals("request-header-value", result.getMessage().getHeader("baggage-header", String.class));
     }
 
     @Override
-    protected RoutesBuilder createRouteBuilder() throws Exception {
+    protected RoutesBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("direct:start").to("seda:a").routeId("start");
 
                 from("seda:a").routeId("a")

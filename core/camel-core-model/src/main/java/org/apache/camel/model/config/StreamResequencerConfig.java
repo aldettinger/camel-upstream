@@ -28,29 +28,32 @@ import org.apache.camel.spi.Metadata;
 /**
  * Configures stream-processing resequence eip.
  */
-@Metadata(label = "eip,routing,resequence")
+@Metadata(label = "configuration,eip")
 @XmlRootElement(name = "stream-config")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class StreamResequencerConfig extends ResequencerConfig {
+
+    @XmlTransient
+    private ExpressionResultComparator comparatorBean;
+
     @XmlAttribute
-    @Metadata(defaultValue = "100", javaType = "java.lang.Integer")
+    @Metadata(defaultValue = "1000", javaType = "java.lang.Integer")
     private String capacity;
     @XmlAttribute
-    @Metadata(defaultValue = "1s", javaType = "java.time.Duration")
+    @Metadata(defaultValue = "1000", javaType = "java.time.Duration")
     private String timeout;
     @XmlAttribute
-    @Metadata(defaultValue = "1s", javaType = "java.time.Duration")
+    @Metadata(label = "advanced", defaultValue = "1000", javaType = "java.time.Duration")
     private String deliveryAttemptInterval;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String ignoreInvalidExchanges;
-    @XmlTransient
-    private ExpressionResultComparator comparator;
     @XmlAttribute
-    private String comparatorRef;
-    @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String rejectOld;
+    @XmlAttribute
+    @Metadata(label = "advanced", javaType = "org.apache.camel.processor.resequencer.ExpressionResultComparator")
+    private String comparator;
 
     /**
      * Creates a new {@link StreamResequencerConfig} instance using default values for <code>capacity</code> (1000) and
@@ -78,7 +81,7 @@ public class StreamResequencerConfig extends ResequencerConfig {
      * 
      * @param capacity   capacity of the resequencer's inbound queue.
      * @param timeout    minimum time to wait for missing elements (messages).
-     * @param comparator comparator for sequence comparision
+     * @param comparator comparator for sequence comparison
      */
     public StreamResequencerConfig(int capacity, long timeout, ExpressionResultComparator comparator) {
         this(capacity, timeout, null, comparator);
@@ -103,13 +106,13 @@ public class StreamResequencerConfig extends ResequencerConfig {
      * @param capacity   capacity of the resequencer's inbound queue.
      * @param timeout    minimum time to wait for missing elements (messages).
      * @param rejectOld  if true, throws an exception when messages older than the last delivered message are processed
-     * @param comparator comparator for sequence comparision
+     * @param comparator comparator for sequence comparison
      */
     public StreamResequencerConfig(int capacity, long timeout, Boolean rejectOld, ExpressionResultComparator comparator) {
         this.capacity = Integer.toString(capacity);
         this.timeout = Long.toString(timeout);
         this.rejectOld = rejectOld != null ? Boolean.toString(rejectOld) : null;
-        this.comparator = comparator;
+        this.comparatorBean = comparator;
     }
 
     /**
@@ -128,7 +131,7 @@ public class StreamResequencerConfig extends ResequencerConfig {
     }
 
     /**
-     * Sets the capacity of the resequencer's inbound queue.
+     * Sets the capacity of the resequencer inbound queue.
      */
     public void setCapacity(String capacity) {
         this.capacity = capacity;
@@ -139,7 +142,7 @@ public class StreamResequencerConfig extends ResequencerConfig {
     }
 
     /**
-     * Sets minimum time to wait for missing elements (messages).
+     * Sets minimum time (milliseconds) to wait for missing elements (messages).
      */
     public void setTimeout(String timeout) {
         this.timeout = timeout;
@@ -150,7 +153,7 @@ public class StreamResequencerConfig extends ResequencerConfig {
     }
 
     /**
-     * Sets the interval in milli seconds the stream resequencer will at most wait while waiting for condition of being
+     * Sets the interval in milliseconds the stream resequencer will at most wait while waiting for condition of being
      * able to deliver.
      */
     public void setDeliveryAttemptInterval(String deliveryAttemptInterval) {
@@ -168,26 +171,26 @@ public class StreamResequencerConfig extends ResequencerConfig {
         this.ignoreInvalidExchanges = ignoreInvalidExchanges;
     }
 
-    public ExpressionResultComparator getComparator() {
+    public ExpressionResultComparator getComparatorBean() {
+        return comparatorBean;
+    }
+
+    /**
+     * To use a custom comparator
+     */
+    public void setComparatorBean(ExpressionResultComparator comparatorBean) {
+        this.comparatorBean = comparatorBean;
+    }
+
+    public String getComparator() {
         return comparator;
     }
 
     /**
-     * To use a custom comparator
+     * To use a custom comparator as a org.apache.camel.processor.resequencer.ExpressionResultComparator type.
      */
-    public void setComparator(ExpressionResultComparator comparator) {
+    public void setComparator(String comparator) {
         this.comparator = comparator;
-    }
-
-    public String getComparatorRef() {
-        return comparatorRef;
-    }
-
-    /**
-     * To use a custom comparator
-     */
-    public void setComparatorRef(String comparatorRef) {
-        this.comparatorRef = comparatorRef;
     }
 
     /**

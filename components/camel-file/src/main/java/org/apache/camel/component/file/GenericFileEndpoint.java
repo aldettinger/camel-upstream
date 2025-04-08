@@ -27,6 +27,7 @@ import java.util.regex.Pattern;
 
 import org.apache.camel.Component;
 import org.apache.camel.Exchange;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.Expression;
 import org.apache.camel.ExpressionIllegalSyntaxException;
 import org.apache.camel.LoggingLevel;
@@ -140,7 +141,7 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
                                                                                 + "if an existing file existed, if its true, then the existing file is deleted before the move operation.")
     protected boolean eagerDeleteTargetFile = true;
     @UriParam(label = "producer,advanced", description = "Will keep the last modified timestamp from the source file "
-                                                         + "(if any). Will use the Exchange.FILE_LAST_MODIFIED header to located the timestamp. This header can "
+                                                         + "(if any). Will use the FileConstants.FILE_LAST_MODIFIED header to located the timestamp. This header can "
                                                          + "contain either a java.util.Date or long with the timestamp. If the timestamp exists and the option is "
                                                          + "enabled it will set this timestamp on the written file. Note: This option only applies to the file "
                                                          + "producer. You cannot use this option with any of the ftp producers.")
@@ -157,7 +158,7 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
                                                                        + "files to directories outside the starting directory, such as parent or root folders.")
     protected boolean jailStartingDirectory = true;
     @UriParam(label = "producer", description = "Used to append characters (text) after writing files. This can for "
-                                                + "example be used to add new lines or other separators when writing and appending to existing files. <p/> "
+                                                + "example be used to add new lines or other separators when writing and appending new files or existing files. <p/> "
                                                 + "To specify new-line (slash-n or slash-r) or tab (slash-t) characters then escape with an extra slash, "
                                                 + "eg slash-slash-n.")
     protected String appendChars;
@@ -222,19 +223,22 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
                                                        + "endpoint uris</a>")
     protected String include;
     @UriParam(label = "consumer,filter", description = "Is used to exclude files, if filename matches the regex "
-                                                       + "pattern (matching is case in-senstive). <p/> Notice if you use symbols such as plus sign and others "
+                                                       + "pattern (matching is case in-sensitive). <p/> Notice if you use symbols such as plus sign and others "
                                                        + "you would need to configure this using the RAW() syntax if configuring this as an endpoint uri. See "
                                                        + "more details at <a href=\"http://camel.apache.org/how-do-i-configure-endpoints.html\">configuring "
-                                                       + ""
                                                        + "endpoint uris</a>")
     protected String exclude;
     @UriParam(label = "consumer,filter",
               description = "Is used to include files matching file extension name (case insensitive). For example to include txt files, then use includeExt=txt."
-                            + " Multiple extensions can be separated by comma, for example to include txt and xml files, use includeExt=txt,xml")
+                            + " Multiple extensions can be separated by comma, for example to include txt and xml files, use includeExt=txt,xml."
+                            + " Note that the file extension includes all parts, for example having a file named mydata.tar.gz will have extension as tar.gz."
+                            + " For more flexibility then use the include/exclude options.")
     protected String includeExt;
     @UriParam(label = "consumer,filter",
               description = "Is used to exclude files matching file extension name (case insensitive). For example to exclude bak files, then use excludeExt=bak."
-                            + " Multiple extensions can be separated by comma, for example to exclude bak and dat files, use excludeExt=bak,dat.")
+                            + " Multiple extensions can be separated by comma, for example to exclude bak and dat files, use excludeExt=bak,dat."
+                            + " Note that the file extension includes all parts, for example having a file named mydata.tar.gz will have extension as tar.gz."
+                            + " For more flexibility then use the include/exclude options.")
     protected String excludeExt;
     @UriParam(label = "consumer,filter", javaType = "java.lang.String", description = "Expression (such as Simple "
                                                                                       + "Language) used to dynamically set the filename when moving it after processing. To move files into "
@@ -271,7 +275,7 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
                                                                                       + "use the file name and file size, you can do: idempotentKey=${file:name}-${file:size}")
     protected Expression idempotentKey;
     @UriParam(label = "consumer,filter", description = "A pluggable repository org.apache.camel.spi.IdempotentRepository "
-                                                       + "which by default use MemoryMessageIdRepository if none is specified and idempotent is true.")
+                                                       + "which by default use MemoryIdempotentRepository if none is specified and idempotent is true.")
     protected IdempotentRepository idempotentRepository;
     @UriParam(label = "consumer,filter",
               description = "Pluggable filter as a org.apache.camel.component.file.GenericFileFilter "
@@ -905,7 +909,7 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
     }
 
     /**
-     * A pluggable repository org.apache.camel.spi.IdempotentRepository which by default use MemoryMessageIdRepository
+     * A pluggable repository org.apache.camel.spi.IdempotentRepository which by default use MemoryIdempotentRepository
      * if none is specified and idempotent is true.
      */
     public void setIdempotentRepository(IdempotentRepository idempotentRepository) {
@@ -1412,10 +1416,11 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
     }
 
     /**
-     * Will keep the last modified timestamp from the source file (if any). Will use the Exchange.FILE_LAST_MODIFIED
-     * header to located the timestamp. This header can contain either a java.util.Date or long with the timestamp. If
-     * the timestamp exists and the option is enabled it will set this timestamp on the written file. Note: This option
-     * only applies to the file producer. You cannot use this option with any of the ftp producers.
+     * Will keep the last modified timestamp from the source file (if any). Will use the
+     * FileConstants.FILE_LAST_MODIFIED header to located the timestamp. This header can contain either a java.util.Date
+     * or long with the timestamp. If the timestamp exists and the option is enabled it will set this timestamp on the
+     * written file. Note: This option only applies to the file producer. You cannot use this option with any of the ftp
+     * producers.
      */
     public void setKeepLastModified(boolean keepLastModified) {
         this.keepLastModified = keepLastModified;
@@ -1454,7 +1459,7 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
 
     /**
      * Used to append characters (text) after writing files. This can for example be used to add new lines or other
-     * separators when writing and appending to existing files.
+     * separators when writing and appending to new files or existing files.
      * <p/>
      * To specify new-line (slash-n or slash-r) or tab (slash-t) characters then escape with an extra slash, eg
      * slash-slash-n
@@ -1517,7 +1522,7 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
 
         if (flatten) {
             // when flatten the file name should not contain any paths
-            message.setHeader(Exchange.FILE_NAME, file.getFileNameOnly());
+            message.setHeader(FileConstants.FILE_NAME, file.getFileNameOnly());
         } else {
             // compute name to set on header that should be relative to starting
             // directory
@@ -1534,17 +1539,18 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
             }
 
             // adjust filename
-            message.setHeader(Exchange.FILE_NAME, name);
+            message.setHeader(FileConstants.FILE_NAME, name);
         }
     }
 
     /**
      * Set up the exchange properties with the options of the file endpoint
      */
+    @Override
     public void configureExchange(Exchange exchange) {
         // Now we just set the charset property here
         if (getCharset() != null) {
-            exchange.setProperty(Exchange.CHARSET_NAME, getCharset());
+            exchange.setProperty(ExchangePropertyKey.CHARSET_NAME, getCharset());
         }
     }
 

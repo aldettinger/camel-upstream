@@ -5,8 +5,9 @@
     "title": "From",
     "description": "Act as a message source as input to a route",
     "deprecated": false,
-    "label": "eip,endpoint,routing",
+    "label": "eip,routing",
     "javaType": "org.apache.camel.model.FromDefinition",
+    "abstract": false,
     "input": false,
     "output": false
   },

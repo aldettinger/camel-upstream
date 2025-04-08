@@ -19,6 +19,7 @@ package org.apache.camel.component.seda;
 import org.apache.camel.ContextTestSupport;
 import org.apache.camel.builder.RouteBuilder;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -26,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Tests that a Seda producer supports the blockWhenFull option by blocking when a message is sent while the queue is
  * full.
  */
+@Timeout(20)
 public class SedaBlockWhenFullTest extends ContextTestSupport {
     private static final int QUEUE_SIZE = 1;
     private static final int DELAY = 10;
@@ -33,9 +35,9 @@ public class SedaBlockWhenFullTest extends ContextTestSupport {
     private static final String MOCK_URI = "mock:blockWhenFullOutput";
     private static final String SIZE_PARAM = "?size=%d";
     private static final String SEDA_WITH_OFFER_TIMEOUT_URI
-            = "seda:blockingFoo" + String.format(SIZE_PARAM, QUEUE_SIZE) + "&blockWhenFull=true&offerTimeout=100";
+            = "seda:blockingFoo" + String.format(SIZE_PARAM, QUEUE_SIZE) + "&blockWhenFull=true&offerTimeout=200";
     private static final String BLOCK_WHEN_FULL_URI
-            = "seda:blockingBar" + String.format(SIZE_PARAM, QUEUE_SIZE) + "&blockWhenFull=true&timeout=0&offerTimeout=200";
+            = "seda:blockingBar" + String.format(SIZE_PARAM, QUEUE_SIZE) + "&blockWhenFull=true&timeout=0&offerTimeout=300";
     private static final String DEFAULT_URI = "seda:foo" + String.format(SIZE_PARAM, QUEUE_SIZE);
 
     @Override

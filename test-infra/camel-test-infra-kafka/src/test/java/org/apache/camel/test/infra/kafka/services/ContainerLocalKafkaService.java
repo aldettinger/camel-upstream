@@ -22,10 +22,25 @@ import org.apache.camel.test.infra.kafka.common.KafkaProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.KafkaContainer;
+import org.testcontainers.utility.DockerImageName;
 
 public class ContainerLocalKafkaService implements KafkaService, ContainerService<KafkaContainer> {
+    public static final String KAFKA3_IMAGE_NAME = "confluentinc/cp-kafka:7.0.1";
+
     private static final Logger LOG = LoggerFactory.getLogger(ContainerLocalKafkaService.class);
-    private KafkaContainer kafka = new KafkaContainer().withEmbeddedZookeeper();
+    private final KafkaContainer kafka;
+
+    public ContainerLocalKafkaService() {
+        kafka = initContainer();
+    }
+
+    public ContainerLocalKafkaService(KafkaContainer kafka) {
+        this.kafka = kafka;
+    }
+
+    protected KafkaContainer initContainer() {
+        return new KafkaContainer().withEmbeddedZookeeper();
+    }
 
     public String getBootstrapServers() {
         return kafka.getBootstrapServers();
@@ -52,5 +67,16 @@ public class ContainerLocalKafkaService implements KafkaService, ContainerServic
     @Override
     public KafkaContainer getContainer() {
         return kafka;
+    }
+
+    public static ContainerLocalKafkaService kafka2Container() {
+        return new ContainerLocalKafkaService();
+    }
+
+    public static ContainerLocalKafkaService kafka3Container() {
+        KafkaContainer container = new KafkaContainer(DockerImageName.parse(KAFKA3_IMAGE_NAME));
+        container = container.withEmbeddedZookeeper();
+
+        return new ContainerLocalKafkaService(container);
     }
 }

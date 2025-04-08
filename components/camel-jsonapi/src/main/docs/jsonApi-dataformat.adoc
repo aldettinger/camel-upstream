@@ -1,25 +1,17 @@
-[[jsonApi-dataformat]]
 = JSonApi DataFormat
-:docTitle: JSonApi
-:artifactId: camel-jsonapi
+:doctitle: JSonApi
+:shortname: jsonApi
+:artifactid: camel-jsonapi
 :description: Marshal and unmarshal JSON:API resources using JSONAPI-Converter library.
 :since: 3.0
-:supportLevel: Stable
-include::{cq-version}@camel-quarkus:ROOT:partial$reference/dataformats/jsonApi.adoc[opts=optional]
+:supportlevel: Stable
+//Manually maintained attributes
+:camel-spring-boot-name: jsonapi
 
 *Since Camel {since}*
 
 // dataformat options: START
-The JSonApi dataformat supports 2 options, which are listed below.
-
-
-
-[width="100%",cols="2s,1m,1m,6",options="header"]
-|===
-| Name | Default | Java Type | Description
-| dataFormatTypes |  | Class[] | The classes to take into account for the marshalling
-| mainFormatType |  | Class | The classes to take into account while unmarshalling
-|===
+include::partial$dataformat-options.adoc[]
 // dataformat options: END
 
 
@@ -42,4 +34,5 @@ the download page for the latest versions).
 </dependency>
 ----
 
-include::camel-spring-boot::page$jsonapi-starter.adoc[]
+
+include::spring-boot:partial$starter.adoc[]

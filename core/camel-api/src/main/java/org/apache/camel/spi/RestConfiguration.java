@@ -59,9 +59,6 @@ public class RestConfiguration {
     private int port;
     private String contextPath;
     private String apiContextPath;
-    private String apiContextRouteId;
-    private String apiContextIdPattern;
-    private boolean apiContextListing;
     private boolean apiVendorExtension;
     private RestHostNameResolver hostNameResolver = RestHostNameResolver.allLocalIp;
     private RestBindingMode bindingMode = RestBindingMode.off;
@@ -172,7 +169,7 @@ public class RestConfiguration {
     }
 
     /**
-     * WWhether to use X-Forward headers to set host etc. for Swagger.
+     * Whether to use X-Forward headers to set host etc. for Swagger.
      * <p/>
      * This option is default <tt>true</tt>.
      */
@@ -181,11 +178,9 @@ public class RestConfiguration {
     }
 
     /**
-     * WWhether to use X-Forward headers to set host etc. for Swagger.
+     * Whether to use X-Forward headers to set host etc. for Swagger.
      * <p/>
      * This option is default <tt>true</tt>.
-     *
-     * @param useXForwardHeaders whether to use X-Forward headers
      */
     public void setUseXForwardHeaders(boolean useXForwardHeaders) {
         this.useXForwardHeaders = useXForwardHeaders;
@@ -196,7 +191,7 @@ public class RestConfiguration {
     }
 
     /**
-     * To use an specific hostname for the API documentation (eg swagger)
+     * To use a specific hostname for the API documentation (such as swagger or openapi)
      * <p/>
      * This can be used to override the generated host with this configured hostname
      */
@@ -276,51 +271,6 @@ public class RestConfiguration {
      */
     public void setApiContextPath(String contextPath) {
         this.apiContextPath = contextPath;
-    }
-
-    public String getApiContextRouteId() {
-        return apiContextRouteId;
-    }
-
-    /**
-     * Sets the route id to use for the route that services the REST API.
-     * <p/>
-     * The route will by default use an auto assigned route id.
-     *
-     * @param apiContextRouteId the route id
-     */
-    public void setApiContextRouteId(String apiContextRouteId) {
-        this.apiContextRouteId = apiContextRouteId;
-    }
-
-    public String getApiContextIdPattern() {
-        return apiContextIdPattern;
-    }
-
-    /**
-     * Optional CamelContext id pattern to only allow Rest APIs from rest services within CamelContext's which name
-     * matches the pattern.
-     * <p/>
-     * The pattern <tt>#name#</tt> refers to the CamelContext name, to match on the current CamelContext only. For any
-     * other value, the pattern uses the rules from
-     * {@link org.apache.camel.support.EndpointHelper#matchPattern(String, String)}
-     *
-     * @param apiContextIdPattern the pattern
-     */
-    public void setApiContextIdPattern(String apiContextIdPattern) {
-        this.apiContextIdPattern = apiContextIdPattern;
-    }
-
-    public boolean isApiContextListing() {
-        return apiContextListing;
-    }
-
-    /**
-     * Sets whether listing of all available CamelContext's with REST services in the JVM is enabled. If enabled it
-     * allows to discover these contexts, if <tt>false</tt> then only the current CamelContext is in use.
-     */
-    public void setApiContextListing(boolean apiContextListing) {
-        this.apiContextListing = apiContextListing;
     }
 
     public boolean isApiVendorExtension() {
@@ -417,13 +367,12 @@ public class RestConfiguration {
     }
 
     /**
-     * Whether to enable validation of the client request to check whether the Content-Type and Accept headers from the
-     * client is supported by the Rest-DSL configuration of its consumes/produces settings.
-     * <p/>
-     * This can be turned on, to enable this check. In case of validation error, then HTTP Status codes 415 or 406 is
-     * returned.
-     * <p/>
-     * The default value is false.
+     * Whether to enable validation of the client request to check:
+     *
+     * 1) Content-Type header matches what the Rest DSL consumes; returns HTTP Status 415 if validation error. 2) Accept
+     * header matches what the Rest DSL produces; returns HTTP Status 406 if validation error. 3) Missing required data
+     * (query parameters, HTTP headers, body); returns HTTP Status 400 if validation error. 4) Parsing error of the
+     * message body (JSon, XML or Auto binding mode must be enabled); returns HTTP Status 400 if validation error.
      */
     public void setClientRequestValidation(boolean clientRequestValidation) {
         this.clientRequestValidation = clientRequestValidation;

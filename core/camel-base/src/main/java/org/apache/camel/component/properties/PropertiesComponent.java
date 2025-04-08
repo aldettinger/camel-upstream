@@ -19,19 +19,21 @@ package org.apache.camel.component.properties;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelContextAware;
 import org.apache.camel.ExtendedCamelContext;
+import org.apache.camel.PropertiesLookupListener;
 import org.apache.camel.StaticService;
 import org.apache.camel.api.management.ManagedAttribute;
+import org.apache.camel.api.management.ManagedOperation;
 import org.apache.camel.api.management.ManagedResource;
 import org.apache.camel.spi.FactoryFinder;
 import org.apache.camel.spi.LoadablePropertiesSource;
@@ -39,10 +41,12 @@ import org.apache.camel.spi.PropertiesFunction;
 import org.apache.camel.spi.PropertiesSource;
 import org.apache.camel.spi.annotations.JdkService;
 import org.apache.camel.support.OrderedComparator;
+import org.apache.camel.support.PatternHelper;
 import org.apache.camel.support.service.ServiceHelper;
 import org.apache.camel.support.service.ServiceSupport;
 import org.apache.camel.util.FilePathResolver;
 import org.apache.camel.util.ObjectHelper;
+import org.apache.camel.util.OrderedLocationProperties;
 import org.apache.camel.util.OrderedProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,10 +102,13 @@ public class PropertiesComponent extends ServiceSupport
 
     private static final Logger LOG = LoggerFactory.getLogger(PropertiesComponent.class);
 
+    private static final String NEGATE_PREFIX = PREFIX_TOKEN + "!";
+
     private CamelContext camelContext;
-    private final Map<String, PropertiesFunction> functions = new LinkedHashMap<>();
+    private PropertiesFunctionResolver propertiesFunctionResolver = new DefaultPropertiesFunctionResolver();
     private PropertiesParser propertiesParser = new DefaultPropertiesParser(this);
     private final PropertiesLookup propertiesLookup = new DefaultPropertiesLookup(this);
+    private final List<PropertiesLookupListener> propertiesLookupListeners = new ArrayList<>();
     private final List<PropertiesSource> sources = new ArrayList<>();
     private List<PropertiesLocation> locations = new ArrayList<>();
     private String location;
@@ -111,6 +118,7 @@ public class PropertiesComponent extends ServiceSupport
     private Properties initialProperties;
     private Properties overrideProperties;
     private final ThreadLocal<Properties> localProperties = new ThreadLocal<>();
+    private volatile boolean localPropertiesEnabled;
     private int systemPropertiesMode = SYSTEM_PROPERTIES_MODE_OVERRIDE;
     private int environmentVariableMode = ENVIRONMENT_VARIABLES_MODE_OVERRIDE;
     private boolean autoDiscoverPropertiesSources = true;
@@ -152,13 +160,18 @@ public class PropertiesComponent extends ServiceSupport
 
     @Override
     public String parseUri(String uri) {
-        return parseUri(uri, propertiesLookup);
+        return parseUri(uri, false);
+    }
+
+    @Override
+    public String parseUri(String uri, boolean keepUnresolvedOptional) {
+        return parseUri(uri, propertiesLookup, keepUnresolvedOptional);
     }
 
     @Override
     public Optional<String> resolveProperty(String key) {
         try {
-            String value = parseUri(key, propertiesLookup);
+            String value = parseUri(key, propertiesLookup, false);
             return Optional.of(value);
         } catch (IllegalArgumentException e) {
             // property not found
@@ -171,11 +184,11 @@ public class PropertiesComponent extends ServiceSupport
         // this method may be replaced by loadProperties(k -> true) but the underlying sources
         // may have some optimization for bulk load so let's keep it
 
-        Properties prop = new OrderedProperties();
+        OrderedLocationProperties prop = new OrderedLocationProperties();
 
         // use initial properties
         if (initialProperties != null) {
-            prop.putAll(initialProperties);
+            prop.putAll("initial", initialProperties);
         }
 
         if (!sources.isEmpty()) {
@@ -187,7 +200,14 @@ public class PropertiesComponent extends ServiceSupport
                 if (ps instanceof LoadablePropertiesSource) {
                     LoadablePropertiesSource lps = (LoadablePropertiesSource) ps;
                     Properties p = lps.loadProperties();
-                    prop.putAll(p);
+                    if (p instanceof OrderedLocationProperties) {
+                        prop.putAll((OrderedLocationProperties) p);
+                    } else if (ps instanceof LocationPropertiesSource) {
+                        String loc = ((LocationPropertiesSource) ps).getLocation().getPath();
+                        prop.putAll(loc, p);
+                    } else {
+                        prop.putAll(lps.getName(), p);
+                    }
                 }
             }
         }
@@ -195,9 +215,9 @@ public class PropertiesComponent extends ServiceSupport
         // use override properties
         if (overrideProperties != null) {
             // make a copy to avoid affecting the original properties
-            Properties override = new OrderedProperties();
+            OrderedLocationProperties override = new OrderedLocationProperties();
             override.putAll(prop);
-            override.putAll(overrideProperties);
+            override.putAll("override", overrideProperties);
             prop = override;
         }
 
@@ -206,13 +226,20 @@ public class PropertiesComponent extends ServiceSupport
 
     @Override
     public Properties loadProperties(Predicate<String> filter) {
-        Properties prop = new OrderedProperties();
+        return loadProperties(filter, k -> k);
+    }
+
+    @Override
+    public Properties loadProperties(Predicate<String> filter, Function<String, String> keyMapper) {
+        OrderedLocationProperties prop = new OrderedLocationProperties();
 
         // use initial properties
         if (initialProperties != null) {
             for (String name : initialProperties.stringPropertyNames()) {
                 if (filter.test(name)) {
-                    prop.put(name, initialProperties.get(name));
+                    Object value = initialProperties.get(name);
+                    name = keyMapper.apply(name);
+                    prop.put("initial", name, value);
                 }
             }
         }
@@ -226,7 +253,26 @@ public class PropertiesComponent extends ServiceSupport
                 if (ps instanceof LoadablePropertiesSource) {
                     LoadablePropertiesSource lps = (LoadablePropertiesSource) ps;
                     Properties p = lps.loadProperties(filter);
-                    prop.putAll(p);
+                    if (p instanceof OrderedLocationProperties) {
+                        OrderedLocationProperties olp = (OrderedLocationProperties) p;
+                        for (String name : olp.stringPropertyNames()) {
+                            String loc = olp.getLocation(name);
+                            Object value = olp.getProperty(name);
+                            name = keyMapper.apply(name);
+                            prop.put(loc, name, value);
+                        }
+                    } else {
+                        String loc = lps.getName();
+                        if (ps instanceof LocationPropertiesSource) {
+                            LocationPropertiesSource olp = (LocationPropertiesSource) ps;
+                            loc = olp.getLocation().getPath();
+                        }
+                        for (String name : p.stringPropertyNames()) {
+                            Object value = p.getProperty(name);
+                            name = keyMapper.apply(name);
+                            prop.put(loc, name, value);
+                        }
+                    }
                 }
             }
         }
@@ -235,7 +281,9 @@ public class PropertiesComponent extends ServiceSupport
         if (overrideProperties != null) {
             for (String name : overrideProperties.stringPropertyNames()) {
                 if (filter.test(name)) {
-                    prop.put(name, overrideProperties.get(name));
+                    Object value = overrideProperties.get(name);
+                    name = keyMapper.apply(name);
+                    prop.put("override", name, value);
                 }
             }
         }
@@ -243,17 +291,34 @@ public class PropertiesComponent extends ServiceSupport
         return prop;
     }
 
-    protected String parseUri(String uri, PropertiesLookup properties) {
+    protected String parseUri(final String uri, PropertiesLookup properties, boolean keepUnresolvedOptional) {
+        LOG.trace("Parsing uri {}", uri);
+
+        String key = uri;
         // enclose tokens if missing
-        if (!uri.contains(PREFIX_TOKEN) && !uri.startsWith(PREFIX_TOKEN)) {
-            uri = PREFIX_TOKEN + uri;
+        if (!key.contains(PREFIX_TOKEN) && !key.startsWith(PREFIX_TOKEN)) {
+            key = PREFIX_TOKEN + key;
         }
-        if (!uri.contains(SUFFIX_TOKEN) && !uri.endsWith(SUFFIX_TOKEN)) {
-            uri = uri + SUFFIX_TOKEN;
+        if (!key.contains(SUFFIX_TOKEN) && !key.endsWith(SUFFIX_TOKEN)) {
+            key = key + SUFFIX_TOKEN;
         }
 
-        LOG.trace("Parsing uri {}", uri);
-        return propertiesParser.parseUri(uri, properties, defaultFallbackEnabled);
+        // if key starts with a ! then negate a boolean response
+        boolean negate = key.startsWith(NEGATE_PREFIX);
+        if (negate) {
+            key = PREFIX_TOKEN + key.substring(NEGATE_PREFIX.length());
+        }
+
+        String answer = propertiesParser.parseUri(key, properties, defaultFallbackEnabled, keepUnresolvedOptional);
+        if (negate) {
+            if ("true".equalsIgnoreCase(answer)) {
+                answer = "false";
+            } else if ("false".equalsIgnoreCase(answer)) {
+                answer = "true";
+            }
+        }
+        LOG.trace("Parsed uri {} -> {}", uri, answer);
+        return answer;
     }
 
     @Override
@@ -374,6 +439,17 @@ public class PropertiesComponent extends ServiceSupport
         this.propertiesParser = propertiesParser;
     }
 
+    public PropertiesFunctionResolver getPropertiesFunctionResolver() {
+        return propertiesFunctionResolver;
+    }
+
+    /**
+     * To use a custom PropertiesFunctionResolver
+     */
+    public void setPropertiesFunctionResolver(PropertiesFunctionResolver propertiesFunctionResolver) {
+        this.propertiesFunctionResolver = propertiesFunctionResolver;
+    }
+
     @ManagedAttribute(description = "Whether to support using fallback values if a property cannot be found")
     public boolean isDefaultFallbackEnabled() {
         return defaultFallbackEnabled;
@@ -404,7 +480,7 @@ public class PropertiesComponent extends ServiceSupport
      */
     public Properties getInitialProperties() {
         if (initialProperties == null) {
-            initialProperties = new Properties();
+            initialProperties = new OrderedProperties();
         }
 
         return initialProperties;
@@ -418,12 +494,20 @@ public class PropertiesComponent extends ServiceSupport
         this.initialProperties = initialProperties;
     }
 
+    @Override
+    public void addInitialProperty(String key, String value) {
+        if (this.initialProperties == null) {
+            this.initialProperties = new OrderedProperties();
+        }
+        this.initialProperties.setProperty(key, value);
+    }
+
     /**
      * @return a list of properties that take precedence and will use first, if a property exists (can't be null).
      */
     public Properties getOverrideProperties() {
         if (overrideProperties == null) {
-            overrideProperties = new Properties();
+            overrideProperties = new OrderedProperties();
         }
 
         return overrideProperties;
@@ -437,6 +521,15 @@ public class PropertiesComponent extends ServiceSupport
         this.overrideProperties = overrideProperties;
     }
 
+    @Override
+    public void addOverrideProperty(String key, String value) {
+        if (this.overrideProperties == null) {
+            this.overrideProperties = new OrderedProperties();
+        }
+        this.overrideProperties.setProperty(key, value);
+
+    }
+
     /**
      * Sets a special list of local properties (ie thread local) that take precedence and will use first, if a property
      * exists.
@@ -445,37 +538,54 @@ public class PropertiesComponent extends ServiceSupport
     public void setLocalProperties(Properties localProperties) {
         if (localProperties != null) {
             this.localProperties.set(localProperties);
+            this.localPropertiesEnabled = true;
         } else {
             this.localProperties.remove();
+            this.localPropertiesEnabled = false;
         }
     }
 
     /**
-     * Gets a list of properties that are local for the current thread only (ie thread local)
+     * Gets a list of properties that are local for the current thread only (ie thread local), or <tt>null</tt> if not
+     * currently in use.
      */
     public Properties getLocalProperties() {
-        return localProperties.get();
+        return localPropertiesEnabled ? localProperties.get() : null;
     }
 
     /**
      * Gets the functions registered in this properties component.
      */
+    @Deprecated
     public Map<String, PropertiesFunction> getFunctions() {
-        return functions;
+        return propertiesFunctionResolver.getFunctions();
+    }
+
+    /**
+     * Gets the function by the given name
+     *
+     * @param  name the function name
+     * @return      the function or null if no function exists
+     */
+    public PropertiesFunction getPropertiesFunction(String name) {
+        if (name == null) {
+            return null;
+        }
+        return propertiesFunctionResolver.resolvePropertiesFunction(name);
     }
 
     /**
      * Registers the {@link PropertiesFunction} as a function to this component.
      */
     public void addPropertiesFunction(PropertiesFunction function) {
-        this.functions.put(function.getName(), function);
+        propertiesFunctionResolver.addPropertiesFunction(function);
     }
 
     /**
      * Is there a {@link PropertiesFunction} with the given name?
      */
     public boolean hasFunction(String name) {
-        return functions.containsKey(name);
+        return propertiesFunctionResolver.hasFunction(name);
     }
 
     @ManagedAttribute(description = "System properties mode")
@@ -488,7 +598,7 @@ public class PropertiesComponent extends ServiceSupport
      *
      * The default mode (override) is to use system properties if present, and override any existing properties.
      *
-     * OS environment variable mode is checked before JVM system property mode
+     * OS environment variable mode is checked before JVM system property mode.
      *
      * @see #SYSTEM_PROPERTIES_MODE_NEVER
      * @see #SYSTEM_PROPERTIES_MODE_FALLBACK
@@ -508,7 +618,7 @@ public class PropertiesComponent extends ServiceSupport
      *
      * The default mode (override) is to use OS environment variables if present, and override any existing properties.
      *
-     * OS environment variable mode is checked before JVM system property mode
+     * OS environment variable mode is checked before JVM system property mode.
      *
      * @see #ENVIRONMENT_VARIABLES_MODE_NEVER
      * @see #ENVIRONMENT_VARIABLES_MODE_FALLBACK
@@ -531,13 +641,13 @@ public class PropertiesComponent extends ServiceSupport
 
     @Override
     public void addPropertiesSource(PropertiesSource propertiesSource) {
-        if (propertiesSource instanceof CamelContextAware) {
-            ((CamelContextAware) propertiesSource).setCamelContext(getCamelContext());
-        }
+        CamelContextAware.trySetCamelContext(propertiesSource, getCamelContext());
         synchronized (lock) {
             sources.add(propertiesSource);
+            // resort after we add a new source
+            sources.sort(OrderedComparator.get());
             if (!isNew()) {
-                // if we have already initialized or started then we should also init the source
+                // if we have already initialized or started then also init the source
                 ServiceHelper.initService(propertiesSource);
             }
             if (isStarted()) {
@@ -546,8 +656,62 @@ public class PropertiesComponent extends ServiceSupport
         }
     }
 
+    @Override
+    public PropertiesSource getPropertiesSource(String name) {
+        for (PropertiesSource source : sources) {
+            if (name.equals(source.getName())) {
+                return source;
+            }
+        }
+        return null;
+    }
+
     public List<PropertiesSource> getSources() {
         return sources;
+    }
+
+    public void addPropertiesLookupListener(PropertiesLookupListener propertiesLookupListener) {
+        propertiesLookupListeners.add(propertiesLookupListener);
+    }
+
+    /**
+     * Remove {@link PropertiesLookupListener}
+     */
+    public void removePropertiesLookupListener(PropertiesLookupListener propertiesLookupListener) {
+        propertiesLookupListeners.remove(propertiesLookupListener);
+    }
+
+    /**
+     * Gets the {@link PropertiesLookupListener}
+     */
+    public List<PropertiesLookupListener> getPropertiesLookupListeners() {
+        return propertiesLookupListeners;
+    }
+
+    @ManagedOperation(description = "Reload properties from the given location patterns")
+    @Override
+    public boolean reloadProperties(String pattern) {
+        if (ObjectHelper.isEmpty(pattern)) {
+            pattern = "*";
+        }
+        LOG.debug("Reloading properties (pattern: {})", pattern);
+        boolean answer = false;
+
+        // find sources with this location to reload
+        for (PropertiesSource source : sources) {
+            if (source instanceof LocationPropertiesSource && source instanceof LoadablePropertiesSource) {
+                LocationPropertiesSource loc = (LocationPropertiesSource) source;
+                LoadablePropertiesSource loadable = (LoadablePropertiesSource) source;
+                String schemeAndPath = loc.getLocation().getResolver() + ":" + loc.getLocation().getPath();
+                String path = loc.getLocation().getPath();
+                if (PatternHelper.matchPattern(schemeAndPath, pattern) || PatternHelper.matchPattern(path, pattern)) {
+                    loadable.reloadProperties(schemeAndPath);
+                    LOG.trace("Reloaded properties: {}", schemeAndPath);
+                    answer = true;
+                }
+            }
+        }
+        return answer;
     }
 
     @Override
@@ -555,6 +719,7 @@ public class PropertiesComponent extends ServiceSupport
         super.doInit();
 
         ObjectHelper.notNull(camelContext, "CamelContext", this);
+        CamelContextAware.trySetCamelContext(propertiesFunctionResolver, camelContext);
 
         if (systemPropertiesMode != SYSTEM_PROPERTIES_MODE_NEVER
                 && systemPropertiesMode != SYSTEM_PROPERTIES_MODE_FALLBACK
@@ -577,7 +742,7 @@ public class PropertiesComponent extends ServiceSupport
             try {
                 for (PropertiesSource source : getCamelContext().getRegistry().findByType(PropertiesSource.class)) {
                     addPropertiesSource(source);
-                    LOG.info("PropertiesComponent added custom PropertiesSource (registry): {}", source);
+                    LOG.debug("PropertiesComponent added custom PropertiesSource (registry): {}", source);
                 }
 
                 FactoryFinder factoryFinder = getCamelContext().adapt(ExtendedCamelContext.class)
@@ -588,37 +753,41 @@ public class PropertiesComponent extends ServiceSupport
                     if (obj instanceof PropertiesSource) {
                         PropertiesSource ps = (PropertiesSource) obj;
                         addPropertiesSource(ps);
-                        LOG.info("PropertiesComponent added custom PropertiesSource (factory): {}", ps);
+                        LOG.debug("PropertiesComponent added custom PropertiesSource (factory): {}", ps);
                     } else if (obj != null) {
                         LOG.warn(
-                                "PropertiesComponent cannot add custom PropertiesSource as the type is not a org.apache.camel.component.properties.PropertiesSource but: "
-                                 + type.getName());
+                                "PropertiesComponent cannot add custom PropertiesSource as the type is not a {} but: {}",
+                                PropertiesSource.class.getName(), type.getName());
                     }
                 }
             } catch (Exception e) {
-                LOG.debug("Error discovering and using custom PropertiesSource due to " + e.getMessage()
-                          + ". This exception is ignored",
-                        e);
+                LOG.debug("Error discovering and using custom PropertiesSource due to {}. This exception is ignored",
+                        e.getMessage(), e);
             }
         }
 
         sources.sort(OrderedComparator.get());
-        ServiceHelper.initService(sources);
+        ServiceHelper.initService(sources, propertiesFunctionResolver);
+    }
+
+    @Override
+    protected void doBuild() throws Exception {
+        ServiceHelper.buildService(sources, propertiesFunctionResolver);
     }
 
     @Override
     protected void doStart() throws Exception {
-        ServiceHelper.startService(sources);
+        ServiceHelper.startService(sources, propertiesFunctionResolver);
     }
 
     @Override
     protected void doStop() throws Exception {
-        ServiceHelper.stopService(sources);
+        ServiceHelper.stopService(sources, propertiesFunctionResolver);
     }
 
     @Override
     protected void doShutdown() throws Exception {
-        ServiceHelper.stopAndShutdownServices(sources);
+        ServiceHelper.stopAndShutdownServices(sources, propertiesFunctionResolver);
     }
 
     private void addPropertiesLocationsAsPropertiesSource(PropertiesLocation location) {

@@ -53,7 +53,7 @@ public class OpenShiftServer implements BeforeEachCallback, AfterEachCallback {
     }
 
     @Override
-    public void beforeEach(ExtensionContext context) throws Exception {
+    public void beforeEach(ExtensionContext context) {
         this.mock = this.curdMode
                 ? new OpenShiftMockServer(
                         new Context(), new MockWebServer(), new HashMap(), new KubernetesCrudDispatcher(), true)
@@ -63,7 +63,7 @@ public class OpenShiftServer implements BeforeEachCallback, AfterEachCallback {
     }
 
     @Override
-    public void afterEach(ExtensionContext context) throws Exception {
+    public void afterEach(ExtensionContext context) {
         this.mock.destroy();
         this.client.close();
     }
@@ -92,15 +92,11 @@ public class OpenShiftServer implements BeforeEachCallback, AfterEachCallback {
         ((TimesOnceableOrHttpHeaderable) ((ReturnOrWebsocketable) this.expect().withPath(path)).andReturn(code, body)).always();
     }
 
-    public MockWebServer getMockServer() {
-        return this.mock.getServer();
-    }
-
     public RecordedRequest getLastRequest() throws InterruptedException {
-        int count = this.mock.getServer().getRequestCount();
+        int count = this.mock.getRequestCount();
 
         RecordedRequest request;
-        for (request = null; count-- > 0; request = this.mock.getServer().takeRequest()) {
+        for (request = null; count-- > 0; request = this.mock.takeRequest()) {
         }
 
         return request;

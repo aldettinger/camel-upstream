@@ -23,12 +23,14 @@ import java.util.Queue;
 import java.util.Set;
 
 import org.apache.camel.Exchange;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.Processor;
 import org.apache.camel.component.hbase.mapping.CellMappingStrategy;
 import org.apache.camel.component.hbase.mapping.CellMappingStrategyFactory;
 import org.apache.camel.component.hbase.model.HBaseCell;
 import org.apache.camel.component.hbase.model.HBaseData;
 import org.apache.camel.component.hbase.model.HBaseRow;
+import org.apache.camel.support.DefaultExchange;
 import org.apache.camel.support.ScheduledBatchPollingConsumer;
 import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.ObjectHelper;
@@ -94,8 +96,8 @@ public class HBaseConsumer extends ScheduledBatchPollingConsumer {
             ResultScanner scanner = table.getScanner(scan);
             int exchangeCount = 0;
             // The next three statements are used just to get a reference to the BodyCellMappingStrategy instance.
-            Exchange exchange = endpoint.createExchange();
-            exchange.getIn().setHeader(CellMappingStrategyFactory.STRATEGY, CellMappingStrategyFactory.BODY);
+            Exchange exchange = new DefaultExchange(endpoint);
+            exchange.getIn().setHeader(HBaseConstants.STRATEGY, CellMappingStrategyFactory.BODY);
             CellMappingStrategy mappingStrategy = endpoint.getCellMappingStrategyFactory().getStrategy(exchange.getIn());
             for (Result result = scanner.next();
                  (exchangeCount < maxMessagesPerPoll || maxMessagesPerPoll <= 0) && result != null;
@@ -137,12 +139,12 @@ public class HBaseConsumer extends ScheduledBatchPollingConsumer {
                     }
 
                     data.getRows().add(resultRow);
-                    exchange = endpoint.createExchange();
+                    exchange = createExchange(true);
                     // Probably overkill but kept it here for consistency.
-                    exchange.getIn().setHeader(CellMappingStrategyFactory.STRATEGY, CellMappingStrategyFactory.BODY);
+                    exchange.getIn().setHeader(HBaseConstants.STRATEGY, CellMappingStrategyFactory.BODY);
                     mappingStrategy.applyScanResults(exchange.getIn(), data);
                     //Make sure that there is a header containing the marked row ids, so that they can be deleted.
-                    exchange.getIn().setHeader(HBaseAttribute.HBASE_MARKED_ROW_ID.asHeader(), result.getRow());
+                    exchange.getIn().setHeader(HBaseConstants.HBASE_MARKED_ROW_ID, result.getRow());
                     queue.add(exchange);
                     exchangeCount++;
                 }
@@ -167,9 +169,9 @@ public class HBaseConsumer extends ScheduledBatchPollingConsumer {
             // only loop if we are started (allowed to run)
             Exchange exchange = ObjectHelper.cast(Exchange.class, exchanges.poll());
             // add current index and total as properties
-            exchange.setProperty(Exchange.BATCH_INDEX, index);
-            exchange.setProperty(Exchange.BATCH_SIZE, total);
-            exchange.setProperty(Exchange.BATCH_COMPLETE, index == total - 1);
+            exchange.setProperty(ExchangePropertyKey.BATCH_INDEX, index);
+            exchange.setProperty(ExchangePropertyKey.BATCH_SIZE, total);
+            exchange.setProperty(ExchangePropertyKey.BATCH_COMPLETE, index == total - 1);
 
             // update pending number of exchanges
             pendingExchanges = total - index - 1;
@@ -182,7 +184,7 @@ public class HBaseConsumer extends ScheduledBatchPollingConsumer {
             }
 
             if (endpoint.isRemove()) {
-                remove((byte[]) exchange.getIn().getHeader(HBaseAttribute.HBASE_MARKED_ROW_ID.asHeader()));
+                remove((byte[]) exchange.getIn().getHeader(HBaseConstants.HBASE_MARKED_ROW_ID));
             }
         }
 

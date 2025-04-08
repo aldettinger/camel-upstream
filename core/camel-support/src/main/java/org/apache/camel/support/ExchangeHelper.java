@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,13 +30,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Predicate;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelExecutionException;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangePattern;
+import org.apache.camel.ExchangePropertyKey;
 import org.apache.camel.ExtendedExchange;
 import org.apache.camel.Message;
 import org.apache.camel.MessageHistory;
@@ -49,22 +50,31 @@ import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.TypeConversionException;
 import org.apache.camel.WrappedFile;
 import org.apache.camel.spi.NormalizedEndpointUri;
-import org.apache.camel.spi.Synchronization;
 import org.apache.camel.spi.UnitOfWork;
+import org.apache.camel.spi.annotations.EagerClassloaded;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.Scanner;
 import org.apache.camel.util.StringHelper;
+import org.slf4j.Logger;
 
 /**
  * Some helper methods for working with {@link Exchange} objects
  */
+@EagerClassloaded
 public final class ExchangeHelper {
+
+    private static String defaultCharsetName = ObjectHelper.getSystemProperty(Exchange.DEFAULT_CHARSET_PROPERTY, "UTF-8");
+    private static Charset defaultCharset = Charset.forName(defaultCharsetName);
 
     /**
      * Utility classes should not have a public constructor.
      */
     private ExchangeHelper() {
+    }
+
+    public static void onClassloaded(Logger log) {
+        log.trace("Loaded ExchangeHelper");
     }
 
     /**
@@ -277,22 +287,6 @@ public final class ExchangeHelper {
      * @param useSameMessageId whether to use same message id on the copy message.
      */
     public static Exchange createCorrelatedCopy(Exchange exchange, boolean handover, boolean useSameMessageId) {
-        return createCorrelatedCopy(exchange, handover, useSameMessageId, null);
-    }
-
-    /**
-     * Creates a new instance and copies from the current message exchange so that it can be forwarded to another
-     * destination as a new instance. Unlike regular copy this operation will not share the same
-     * {@link org.apache.camel.spi.UnitOfWork} so its should be used for async messaging, where the original and copied
-     * exchange are independent.
-     *
-     * @param exchange         original copy of the exchange
-     * @param handover         whether the on completion callbacks should be handed over to the new copy.
-     * @param useSameMessageId whether to use same message id on the copy message.
-     * @param filter           whether to handover the on completion
-     */
-    public static Exchange createCorrelatedCopy(
-            Exchange exchange, boolean handover, boolean useSameMessageId, Predicate<Synchronization> filter) {
         String id = exchange.getExchangeId();
 
         // make sure to do a safe copy as the correlated copy can be routed independently of the source.
@@ -307,15 +301,12 @@ public final class ExchangeHelper {
         // do not share the unit of work
         ExtendedExchange ce = (ExtendedExchange) copy;
         ce.setUnitOfWork(null);
-
-        // do not reuse the message id
-        // hand over on completion to the copy if we got any
-        UnitOfWork uow = exchange.getUnitOfWork();
-        if (handover && uow != null) {
-            uow.handoverSynchronization(copy, filter);
+        if (handover) {
+            // Need to hand over the completion for async invocation
+            exchange.adapt(ExtendedExchange.class).handoverCompletions(ce);
         }
         // set a correlation id so we can track back the original exchange
-        copy.setProperty(Exchange.CORRELATION_ID, id);
+        copy.setProperty(ExchangePropertyKey.CORRELATION_ID, id);
         return copy;
     }
 
@@ -405,6 +396,7 @@ public final class ExchangeHelper {
         if (source.hasProperties()) {
             result.getProperties().putAll(source.getProperties());
         }
+        source.adapt(ExtendedExchange.class).copyInternalProperties(result);
 
         // copy over state
         result.setRouteStop(source.isRouteStop());
@@ -571,27 +563,6 @@ public final class ExchangeHelper {
     }
 
     /**
-     * Returns the first exchange in the given collection of exchanges which has the same exchange ID as the one given
-     * or null if none could be found
-     *
-     * @param      exchanges  the exchanges
-     * @param      exchangeId the exchangeId to find
-     * @return                matching exchange, or <tt>null</tt> if none found
-     *
-     * @deprecated            not in use, to be removed in a future Camel release
-     */
-    @Deprecated
-    public static Exchange getExchangeById(Iterable<Exchange> exchanges, String exchangeId) {
-        for (Exchange exchange : exchanges) {
-            String id = exchange.getExchangeId();
-            if (id != null && id.equals(exchangeId)) {
-                return exchange;
-            }
-        }
-        return null;
-    }
-
-    /**
      * Prepares the exchanges for aggregation.
      * <p/>
      * This implementation will copy the OUT body to the IN body so when you do aggregation the body is <b>only</b> in
@@ -624,7 +595,17 @@ public final class ExchangeHelper {
      * @return          <tt>true</tt> if failure handled, <tt>false</tt> otherwise
      */
     public static boolean isFailureHandled(Exchange exchange) {
-        return exchange.getProperty(Exchange.FAILURE_HANDLED, false, Boolean.class);
+        return exchange.getProperty(ExchangePropertyKey.FAILURE_HANDLED, false, Boolean.class);
+    }
+
+    /**
+     * Checks whether the exchange has been error handler bridged
+     *
+     * @param  exchange the exchange
+     * @return          <tt>true</tt> if error handler bridged, <tt>false</tt> otherwise
+     */
+    public static boolean isErrorHandlerBridge(Exchange exchange) {
+        return exchange.getProperty(ExchangePropertyKey.ERRORHANDLER_BRIDGE, false, Boolean.class);
     }
 
     /**
@@ -634,7 +615,7 @@ public final class ExchangeHelper {
      * @return          <tt>true</tt> if exhausted, <tt>false</tt> otherwise
      */
     public static boolean isUnitOfWorkExhausted(Exchange exchange) {
-        return exchange.getProperty(Exchange.UNIT_OF_WORK_EXHAUSTED, false, Boolean.class);
+        return exchange.getProperty(ExchangePropertyKey.UNIT_OF_WORK_EXHAUSTED, false, Boolean.class);
     }
 
     /**
@@ -643,7 +624,7 @@ public final class ExchangeHelper {
      * @param exchange the exchange
      */
     public static void setFailureHandled(Exchange exchange) {
-        exchange.setProperty(Exchange.FAILURE_HANDLED, Boolean.TRUE);
+        exchange.setProperty(ExchangePropertyKey.FAILURE_HANDLED, Boolean.TRUE);
         // clear exception since its failure handled
         exchange.setException(null);
     }
@@ -848,6 +829,15 @@ public final class ExchangeHelper {
         if (exchange.hasProperties()) {
             answer.setProperties(safeCopyProperties(exchange.getProperties()));
         }
+        exchange.adapt(ExtendedExchange.class).copyInternalProperties(answer);
+        // safe copy message history using a defensive copy
+        List<MessageHistory> history
+                = (List<MessageHistory>) exchange.getProperty(ExchangePropertyKey.MESSAGE_HISTORY);
+        if (history != null) {
+            // use thread-safe list as message history may be accessed concurrently
+            answer.setProperty(ExchangePropertyKey.MESSAGE_HISTORY, new CopyOnWriteArrayList<>(history));
+        }
+
         if (handover) {
             // Need to hand over the completion for async invocation
             exchange.adapt(ExtendedExchange.class).handoverCompletions(answer);
@@ -885,16 +875,16 @@ public final class ExchangeHelper {
      * Gets the original IN {@link Message} this Unit of Work was started with.
      * <p/>
      * The original message is only returned if the option
-     * {@link org.apache.camel.RuntimeConfiguration#isAllowUseOriginalMessage()} is enabled. If its disabled, then
-     * <tt>null</tt> is returned.
+     * {@link org.apache.camel.RuntimeConfiguration#isAllowUseOriginalMessage()} is enabled. If it is disabled, then
+     * <tt>IllegalStateException</tt> is thrown.
      *
-     * @return the original IN {@link Message}, or <tt>null</tt> if using original message is disabled.
+     * @return the original IN {@link Message}
      */
     public static Message getOriginalInMessage(Exchange exchange) {
         Message answer = null;
 
         // try parent first
-        UnitOfWork uow = exchange.getProperty(Exchange.PARENT_UNIT_OF_WORK, UnitOfWork.class);
+        UnitOfWork uow = exchange.getProperty(ExchangePropertyKey.PARENT_UNIT_OF_WORK, UnitOfWork.class);
         if (uow != null) {
             answer = uow.getOriginalInMessage();
         }
@@ -923,17 +913,7 @@ public final class ExchangeHelper {
         if (properties == null) {
             return null;
         }
-
-        Map<String, Object> answer = new ConcurrentHashMap<>(properties);
-
-        // safe copy message history using a defensive copy
-        List<MessageHistory> history = (List<MessageHistory>) answer.remove(Exchange.MESSAGE_HISTORY);
-        if (history != null) {
-            // use thread-safe list as message history may be accessed concurrently
-            answer.put(Exchange.MESSAGE_HISTORY, new CopyOnWriteArrayList<>(history));
-        }
-
-        return answer;
+        return new ConcurrentHashMap<>(properties);
     }
 
     /**
@@ -941,6 +921,13 @@ public final class ExchangeHelper {
      */
     public static String getCharsetName(Exchange exchange) {
         return getCharsetName(exchange, true);
+    }
+
+    /**
+     * @see #getCharset(Exchange, boolean)
+     */
+    public static Charset getCharset(Exchange exchange) {
+        return getCharset(exchange, true);
     }
 
     /**
@@ -956,7 +943,7 @@ public final class ExchangeHelper {
             // header takes precedence
             String charsetName = exchange.getIn().getHeader(Exchange.CHARSET_NAME, String.class);
             if (charsetName == null) {
-                charsetName = exchange.getProperty(Exchange.CHARSET_NAME, String.class);
+                charsetName = exchange.getProperty(ExchangePropertyKey.CHARSET_NAME, String.class);
             }
             if (charsetName != null) {
                 return IOHelper.normalizeCharset(charsetName);
@@ -969,8 +956,39 @@ public final class ExchangeHelper {
         }
     }
 
+    /**
+     * Gets the charset if set as header or property {@link Exchange#CHARSET_NAME}. <b>Notice:</b> The lookup from the
+     * header has priority over the property.
+     *
+     * @param  exchange   the exchange
+     * @param  useDefault should we fallback and use JVM default charset if no property existed?
+     * @return            the charset, or <tt>null</tt> if no found
+     */
+    public static Charset getCharset(Exchange exchange, boolean useDefault) {
+        if (exchange != null) {
+            // header takes precedence
+            String charsetName = exchange.getIn().getHeader(Exchange.CHARSET_NAME, String.class);
+            if (charsetName == null) {
+                charsetName = exchange.getProperty(ExchangePropertyKey.CHARSET_NAME, String.class);
+            }
+            if (charsetName != null) {
+                charsetName = IOHelper.normalizeCharset(charsetName);
+                return Charset.forName(charsetName);
+            }
+        }
+        if (useDefault) {
+            return getDefaultCharset();
+        } else {
+            return null;
+        }
+    }
+
     private static String getDefaultCharsetName() {
-        return ObjectHelper.getSystemProperty(Exchange.DEFAULT_CHARSET_PROPERTY, "UTF-8");
+        return defaultCharsetName;
+    }
+
+    private static Charset getDefaultCharset() {
+        return defaultCharset;
     }
 
     /**
@@ -1000,7 +1018,7 @@ public final class ExchangeHelper {
         } else if (value instanceof String) {
             scanner = new Scanner((String) value, delimiter);
         } else {
-            String charset = exchange.getProperty(Exchange.CHARSET_NAME, String.class);
+            String charset = exchange.getProperty(ExchangePropertyKey.CHARSET_NAME, String.class);
             if (value instanceof File) {
                 try {
                     scanner = new Scanner((File) value, charset, delimiter);

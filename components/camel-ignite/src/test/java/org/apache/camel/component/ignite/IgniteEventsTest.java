@@ -34,9 +34,12 @@ import org.apache.ignite.configuration.IgniteConfiguration;
 import org.apache.ignite.events.Event;
 import org.apache.ignite.events.EventType;
 import org.assertj.core.api.Assertions;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+
+import static org.awaitility.Awaitility.await;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class IgniteEventsTest extends AbstractIgniteTest {
@@ -55,7 +58,7 @@ public class IgniteEventsTest extends AbstractIgniteTest {
     public void testConsumeAllEvents() throws Exception {
         context.addRoutes(new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("ignite-events:" + resourceUid).to("mock:test1");
             }
         });
@@ -71,9 +74,8 @@ public class IgniteEventsTest extends AbstractIgniteTest {
         cache.withExpiryPolicy(CreatedExpiryPolicy.factoryOf(new Duration(TimeUnit.MILLISECONDS, 100)).create())
                 .put(resourceUid, "123");
 
-        Thread.sleep(150);
-
-        cache.get(resourceUid);
+        await().atMost(150, TimeUnit.MILLISECONDS)
+                .until(() -> cache.get(resourceUid), Matchers.nullValue());
 
         assertMockEndpointsSatisfied();
 
@@ -89,7 +91,7 @@ public class IgniteEventsTest extends AbstractIgniteTest {
     public void testConsumeFilteredEventsInline() throws Exception {
         context.addRoutes(new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("ignite-events:" + resourceUid + "?events=EVT_CACHE_OBJECT_PUT").to("mock:test3");
             }
         });

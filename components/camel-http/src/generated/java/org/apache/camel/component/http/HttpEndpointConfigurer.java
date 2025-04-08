@@ -37,7 +37,6 @@ public class HttpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "authenticationPreemptive": target.setAuthenticationPreemptive(property(camelContext, boolean.class, value)); return true;
         case "bridgeendpoint":
         case "bridgeEndpoint": target.setBridgeEndpoint(property(camelContext, boolean.class, value)); return true;
-        case "chunked": target.setChunked(property(camelContext, boolean.class, value)); return true;
         case "clearexpiredcookies":
         case "clearExpiredCookies": target.setClearExpiredCookies(property(camelContext, boolean.class, value)); return true;
         case "clientbuilder":
@@ -64,8 +63,6 @@ public class HttpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "getWithBody": target.setGetWithBody(property(camelContext, boolean.class, value)); return true;
         case "headerfilterstrategy":
         case "headerFilterStrategy": target.setHeaderFilterStrategy(property(camelContext, org.apache.camel.spi.HeaderFilterStrategy.class, value)); return true;
-        case "httpbinding":
-        case "httpBinding": target.setHttpBinding(property(camelContext, org.apache.camel.http.common.HttpBinding.class, value)); return true;
         case "httpclient":
         case "httpClient": target.setHttpClient(property(camelContext, org.apache.http.client.HttpClient.class, value)); return true;
         case "httpclientconfigurer":
@@ -106,14 +103,18 @@ public class HttpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "proxyHost": target.setProxyHost(property(camelContext, java.lang.String.class, value)); return true;
         case "proxyport":
         case "proxyPort": target.setProxyPort(property(camelContext, int.class, value)); return true;
+        case "skiprequestheaders":
+        case "skipRequestHeaders": target.setSkipRequestHeaders(property(camelContext, boolean.class, value)); return true;
+        case "skipresponseheaders":
+        case "skipResponseHeaders": target.setSkipResponseHeaders(property(camelContext, boolean.class, value)); return true;
         case "sslcontextparameters":
         case "sslContextParameters": target.setSslContextParameters(property(camelContext, org.apache.camel.support.jsse.SSLContextParameters.class, value)); return true;
         case "throwexceptiononfailure":
         case "throwExceptionOnFailure": target.setThrowExceptionOnFailure(property(camelContext, boolean.class, value)); return true;
-        case "transferexception":
-        case "transferException": target.setTransferException(property(camelContext, boolean.class, value)); return true;
         case "usesystemproperties":
         case "useSystemProperties": target.setUseSystemProperties(property(camelContext, boolean.class, value)); return true;
+        case "useragent":
+        case "userAgent": target.setUserAgent(property(camelContext, java.lang.String.class, value)); return true;
         case "x509hostnameverifier":
         case "x509HostnameVerifier": target.setX509HostnameVerifier(property(camelContext, javax.net.ssl.HostnameVerifier.class, value)); return true;
         default: return false;
@@ -139,7 +140,6 @@ public class HttpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "authenticationPreemptive": return boolean.class;
         case "bridgeendpoint":
         case "bridgeEndpoint": return boolean.class;
-        case "chunked": return boolean.class;
         case "clearexpiredcookies":
         case "clearExpiredCookies": return boolean.class;
         case "clientbuilder":
@@ -166,8 +166,6 @@ public class HttpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "getWithBody": return boolean.class;
         case "headerfilterstrategy":
         case "headerFilterStrategy": return org.apache.camel.spi.HeaderFilterStrategy.class;
-        case "httpbinding":
-        case "httpBinding": return org.apache.camel.http.common.HttpBinding.class;
         case "httpclient":
         case "httpClient": return org.apache.http.client.HttpClient.class;
         case "httpclientconfigurer":
@@ -208,14 +206,18 @@ public class HttpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "proxyHost": return java.lang.String.class;
         case "proxyport":
         case "proxyPort": return int.class;
+        case "skiprequestheaders":
+        case "skipRequestHeaders": return boolean.class;
+        case "skipresponseheaders":
+        case "skipResponseHeaders": return boolean.class;
         case "sslcontextparameters":
         case "sslContextParameters": return org.apache.camel.support.jsse.SSLContextParameters.class;
         case "throwexceptiononfailure":
         case "throwExceptionOnFailure": return boolean.class;
-        case "transferexception":
-        case "transferException": return boolean.class;
         case "usesystemproperties":
         case "useSystemProperties": return boolean.class;
+        case "useragent":
+        case "userAgent": return java.lang.String.class;
         case "x509hostnameverifier":
         case "x509HostnameVerifier": return javax.net.ssl.HostnameVerifier.class;
         default: return null;
@@ -242,7 +244,6 @@ public class HttpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "authenticationPreemptive": return target.isAuthenticationPreemptive();
         case "bridgeendpoint":
         case "bridgeEndpoint": return target.isBridgeEndpoint();
-        case "chunked": return target.isChunked();
         case "clearexpiredcookies":
         case "clearExpiredCookies": return target.isClearExpiredCookies();
         case "clientbuilder":
@@ -269,8 +270,6 @@ public class HttpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "getWithBody": return target.isGetWithBody();
         case "headerfilterstrategy":
         case "headerFilterStrategy": return target.getHeaderFilterStrategy();
-        case "httpbinding":
-        case "httpBinding": return target.getHttpBinding();
         case "httpclient":
         case "httpClient": return target.getHttpClient();
         case "httpclientconfigurer":
@@ -311,14 +310,18 @@ public class HttpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "proxyHost": return target.getProxyHost();
         case "proxyport":
         case "proxyPort": return target.getProxyPort();
+        case "skiprequestheaders":
+        case "skipRequestHeaders": return target.isSkipRequestHeaders();
+        case "skipresponseheaders":
+        case "skipResponseHeaders": return target.isSkipResponseHeaders();
         case "sslcontextparameters":
         case "sslContextParameters": return target.getSslContextParameters();
         case "throwexceptiononfailure":
         case "throwExceptionOnFailure": return target.isThrowExceptionOnFailure();
-        case "transferexception":
-        case "transferException": return target.isTransferException();
         case "usesystemproperties":
         case "useSystemProperties": return target.isUseSystemProperties();
+        case "useragent":
+        case "userAgent": return target.getUserAgent();
         case "x509hostnameverifier":
         case "x509HostnameVerifier": return target.getX509HostnameVerifier();
         default: return null;

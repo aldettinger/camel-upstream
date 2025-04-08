@@ -24,24 +24,25 @@ import javax.xml.bind.annotation.XmlRootElement;
 import org.apache.camel.spi.Metadata;
 
 /**
- * Tokenize text payloads using the specified delimiter patterns.
- *
- * @see org.apache.camel.language.tokenizer.TokenizeLanguage
+ * Tokenize text payloads using delimiter patterns.
  */
 @Metadata(firstVersion = "2.0.0", label = "language,core", title = "Tokenize")
 @XmlRootElement(name = "tokenize")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class TokenizerExpression extends ExpressionDefinition {
+
     @XmlAttribute(required = true)
     private String token;
     @XmlAttribute
     private String endToken;
     @XmlAttribute
+    @Metadata(label = "advanced")
     private String inheritNamespaceTagName;
     @XmlAttribute
+    @Metadata(label = "advanced")
     private String headerName;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String regex;
     @XmlAttribute
     @Metadata(javaType = "java.lang.Boolean")
@@ -50,11 +51,13 @@ public class TokenizerExpression extends ExpressionDefinition {
     @Metadata(javaType = "java.lang.Boolean")
     private String includeTokens;
     @XmlAttribute
+    @Metadata(label = "advanced")
     private String group;
     @XmlAttribute
+    @Metadata(label = "advanced")
     private String groupDelimiter;
     @XmlAttribute
-    @Metadata(javaType = "java.lang.Boolean")
+    @Metadata(label = "advanced", javaType = "java.lang.Boolean")
     private String skipFirst;
 
     public TokenizerExpression() {

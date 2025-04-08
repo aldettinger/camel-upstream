@@ -73,6 +73,10 @@ public class SftpConfiguration extends RemoteFileConfiguration {
     private String bindAddress;
     @UriParam(label = "advanced", defaultValue = "true")
     private boolean existDirCheckUsingLs = true;
+    @UriParam(label = "security")
+    private String keyExchangeProtocols;
+    @UriParam(label = "producer,advanced")
+    private String chmodDirectory;
 
     public SftpConfiguration() {
         setProtocol("sftp");
@@ -248,6 +252,17 @@ public class SftpConfiguration extends RemoteFileConfiguration {
     }
 
     /**
+     * Allows you to set chmod during path creation. For example chmod=640.
+     */
+    public void setChmodDirectory(String chmodDirectory) {
+        this.chmodDirectory = chmodDirectory;
+    }
+
+    public String getChmodDirectory() {
+        return chmodDirectory;
+    }
+
+    /**
      * Set a comma separated list of ciphers that will be used in order of preference. Possible cipher names are defined
      * by JCraft JSCH. Some examples include:
      * aes128-ctr,aes128-cbc,3des-ctr,3des-cbc,blowfish-cbc,aes192-cbc,aes256-cbc. If not specified the default list
@@ -333,4 +348,18 @@ public class SftpConfiguration extends RemoteFileConfiguration {
         this.existDirCheckUsingLs = existDirCheckUsingLs;
     }
 
+    public String getKeyExchangeProtocols() {
+        return keyExchangeProtocols;
+    }
+
+    /**
+     * Set a comma separated list of key exchange protocols that will be used in order of preference. Possible cipher
+     * names are defined by JCraft JSCH. Some examples include:
+     * diffie-hellman-group-exchange-sha1,diffie-hellman-group1-sha1,diffie-hellman-group14-sha1,
+     * diffie-hellman-group-exchange-sha256,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521. If not specified
+     * the default list from JSCH will be used.
+     */
+    public void setKeyExchangeProtocols(String keyExchangeProtocols) {
+        this.keyExchangeProtocols = keyExchangeProtocols;
+    }
 }

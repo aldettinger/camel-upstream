@@ -175,4 +175,44 @@ public @interface UriEndpoint {
      */
     String apiSyntax() default "";
 
+    /**
+     * The class that contains all the name of headers that are supported by the consumer and/or producer. The name of
+     * the headers are defined as {@code String} constants in the headers class.
+     * <p/>
+     * The class to provide can be any class but by convention, we would expect a class whose name is of type
+     * <i>xxxConstants</i> where <i>xxx</i> is the name of the corresponding component like for example
+     * <i>FtpConstants</i> for the component <i>camel-ftp</i>.
+     * <p/>
+     * The metadata of a given header are retrieved directly from the annotation {@code @Metadata} added to the
+     * {@code String} constant representing its name and defined in the headers class.
+     */
+    Class<?> headersClass() default void.class;
+
+    /**
+     * The name of the field to get or the name of the method without parameters to invoke to get the name of the
+     * headers defined in an enum.
+     * <p/>
+     * Only took into account if and only if the class defined as {@code headersClass} is an enum.
+     * <p/>
+     * For example, assuming that {@code SomeEnum} has been configured as the {@code headersClass} of a given component,
+     * since the name of the header is actually the value of the field {@code headerName}, the element
+     * {@code headersNameProvider} should be set to {@code "headerName"} to get the expected header names.
+     *
+     * <pre>
+     * <code>
+     *
+     * public enum SomeEnum {
+     *    {@literal @}Metadata
+     *     FOO("fooKey");
+     *
+     *     public final String headerName;
+     *
+     *     SomeEnum(final String str) {
+     *         this.headerName = str;
+     *     }
+     * }
+     * </code>
+     * </pre>
+     */
+    String headersNameProvider() default "";
 }

@@ -17,6 +17,7 @@
 package org.apache.camel.component.jms;
 
 import java.io.File;
+import java.io.InputStream;
 
 import javax.jms.ConnectionFactory;
 
@@ -62,10 +63,7 @@ public class JmsStreamMessageTypeTest extends CamelTestSupport {
         assertMockEndpointsSatisfied();
 
         Object body = getMockEndpoint("mock:result").getReceivedExchanges().get(0).getIn().getBody();
-        StreamMessageInputStream is = assertIsInstanceOf(StreamMessageInputStream.class, body);
-
-        // no more bytes should be available on the inputstream
-        assertEquals(0, is.available());
+        InputStream is = assertIsInstanceOf(InputStream.class, body);
 
         // assert on the content of input versus output file
         String srcContent = context.getTypeConverter().mandatoryConvertTo(String.class, new File("src/test/data/message1.xml"));
@@ -74,11 +72,30 @@ public class JmsStreamMessageTypeTest extends CamelTestSupport {
         assertEquals(srcContent, dstContent, "both the source and destination files should have the same content");
     }
 
+    @Test
+    public void testStreamTypeWithBigFile() throws Exception {
+        getMockEndpoint("mock:result").expectedMessageCount(1);
+
+        // copy the file
+        FileUtil.copyFile(new File("src/test/data/message1.txt"), new File("target/stream/in/message1.txt"));
+
+        assertMockEndpointsSatisfied();
+
+        Object body = getMockEndpoint("mock:result").getReceivedExchanges().get(0).getIn().getBody();
+        InputStream is = assertIsInstanceOf(InputStream.class, body);
+
+        // assert on the content of input versus output file
+        String srcContent = context.getTypeConverter().mandatoryConvertTo(String.class, new File("src/test/data/message1.txt"));
+        String dstContent
+                = context.getTypeConverter().mandatoryConvertTo(String.class, new File("target/stream/out/message1.txt"));
+        assertEquals(srcContent, dstContent, "both the source and destination files should have the same content");
+    }
+
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("file:target/stream/in").to("jms:queue:foo");
 
                 from("jms:queue:foo").to("file:target/stream/out").to("mock:result");

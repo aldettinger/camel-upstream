@@ -55,6 +55,8 @@ public final class IOHelper {
 
     public static final int DEFAULT_BUFFER_SIZE = 1024 * 4;
 
+    public static final long INITIAL_OFFSET = 0;
+
     private static final Logger LOG = LoggerFactory.getLogger(IOHelper.class);
 
     // allows to turn on backwards compatible to turn off regarding the first
@@ -116,11 +118,22 @@ public final class IOHelper {
     }
 
     public static String toString(Reader reader) throws IOException {
-        return toString(buffered(reader));
+        return toString(reader, INITIAL_OFFSET);
+    }
+
+    public static String toString(Reader reader, long offset) throws IOException {
+        return toString(buffered(reader), offset);
     }
 
     public static String toString(BufferedReader reader) throws IOException {
+        return toString(reader, INITIAL_OFFSET);
+    }
+
+    public static String toString(BufferedReader reader, long offset) throws IOException {
         StringBuilder sb = new StringBuilder(1024);
+
+        reader.skip(offset);
+
         char[] buf = new char[1024];
         try {
             int len;
@@ -460,6 +473,30 @@ public final class IOHelper {
     }
 
     /**
+     * Writes the text to the file.
+     */
+    public static void writeText(String text, File file) throws IOException {
+        if (!file.exists()) {
+            String path = FileUtil.onlyPath(file.getPath());
+            if (path != null) {
+                new File(path).mkdirs();
+            }
+        }
+        writeText(text, new FileOutputStream(file, false));
+    }
+
+    /**
+     * Writes the text to the stream.
+     */
+    public static void writeText(String text, OutputStream os) throws IOException {
+        try {
+            os.write(text.getBytes());
+        } finally {
+            close(os);
+        }
+    }
+
+    /**
      * Get the charset name from the content type string
      *
      * @param  contentType the content type
@@ -469,6 +506,11 @@ public final class IOHelper {
         // try optimized for direct match without using splitting
         int pos = contentType.indexOf("charset=");
         if (pos != -1) {
+            // special optimization for utf-8 which is a common charset
+            if (contentType.regionMatches(true, pos + 8, "utf-8", 0, 5)) {
+                return "UTF-8";
+            }
+
             int end = contentType.indexOf(';', pos);
             String charset;
             if (end > pos) {
@@ -594,8 +636,16 @@ public final class IOHelper {
          * @param in      file to read
          * @param charset character set to use
          */
-        public EncodingFileReader(FileInputStream in, String charset) throws FileNotFoundException,
-                                                                      UnsupportedEncodingException {
+        public EncodingFileReader(FileInputStream in, String charset) throws UnsupportedEncodingException {
+            super(in, charset);
+            this.in = in;
+        }
+
+        /**
+         * @param in      file to read
+         * @param charset character set to use
+         */
+        public EncodingFileReader(FileInputStream in, Charset charset) {
             super(in, charset);
             this.in = in;
         }
@@ -621,8 +671,16 @@ public final class IOHelper {
          * @param out     file to write
          * @param charset character set to use
          */
-        public EncodingFileWriter(FileOutputStream out, String charset) throws FileNotFoundException,
-                                                                        UnsupportedEncodingException {
+        public EncodingFileWriter(FileOutputStream out, String charset) throws UnsupportedEncodingException {
+            super(out, charset);
+            this.out = out;
+        }
+
+        /**
+         * @param out     file to write
+         * @param charset character set to use
+         */
+        public EncodingFileWriter(FileOutputStream out, Charset charset) {
             super(out, charset);
             this.out = out;
         }
@@ -657,7 +715,16 @@ public final class IOHelper {
         return IOHelper.buffered(new EncodingFileReader(in, charset));
     }
 
+    public static BufferedReader toReader(File file, Charset charset) throws IOException {
+        FileInputStream in = new FileInputStream(file);
+        return IOHelper.buffered(new EncodingFileReader(in, charset));
+    }
+
     public static BufferedWriter toWriter(FileOutputStream os, String charset) throws IOException {
+        return IOHelper.buffered(new EncodingFileWriter(os, charset));
+    }
+
+    public static BufferedWriter toWriter(FileOutputStream os, Charset charset) throws IOException {
         return IOHelper.buffered(new EncodingFileWriter(os, charset));
     }
 }

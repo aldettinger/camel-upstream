@@ -21,15 +21,15 @@ import org.apache.camel.Exchange;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.component.salesforce.api.SalesforceException;
 import org.apache.camel.component.salesforce.internal.OperationName;
-import org.apache.camel.component.salesforce.internal.PayloadFormat;
 import org.apache.camel.component.salesforce.internal.SalesforceSession;
 import org.apache.camel.component.salesforce.internal.processor.AnalyticsApiProcessor;
 import org.apache.camel.component.salesforce.internal.processor.BulkApiProcessor;
 import org.apache.camel.component.salesforce.internal.processor.BulkApiV2Processor;
 import org.apache.camel.component.salesforce.internal.processor.CompositeApiProcessor;
+import org.apache.camel.component.salesforce.internal.processor.CompositeSObjectCollectionsProcessor;
 import org.apache.camel.component.salesforce.internal.processor.JsonRestProcessor;
+import org.apache.camel.component.salesforce.internal.processor.RawProcessor;
 import org.apache.camel.component.salesforce.internal.processor.SalesforceProcessor;
-import org.apache.camel.component.salesforce.internal.processor.XmlRestProcessor;
 import org.apache.camel.support.DefaultAsyncProducer;
 import org.apache.camel.support.service.ServiceHelper;
 import org.slf4j.Logger;
@@ -48,7 +48,6 @@ public class SalesforceProducer extends DefaultAsyncProducer {
         super(endpoint);
 
         final SalesforceEndpointConfig endpointConfig = endpoint.getConfiguration();
-        final PayloadFormat payloadFormat = endpointConfig.getFormat();
 
         // check if its a Bulk Operation
         final OperationName operationName = endpoint.getOperationName();
@@ -60,14 +59,12 @@ public class SalesforceProducer extends DefaultAsyncProducer {
             processor = new AnalyticsApiProcessor(endpoint);
         } else if (isCompositeOperation(operationName)) {
             processor = new CompositeApiProcessor(endpoint);
+        } else if (isCompositeSObjectCollectionsOperation(operationName)) {
+            processor = new CompositeSObjectCollectionsProcessor(endpoint);
+        } else if (isRawOperation(operationName)) {
+            processor = new RawProcessor(endpoint);
         } else {
-            // create an appropriate processor
-            if (payloadFormat == PayloadFormat.JSON) {
-                // create a JSON exchange processor
-                processor = new JsonRestProcessor(endpoint);
-            } else {
-                processor = new XmlRestProcessor(endpoint);
-            }
+            processor = new JsonRestProcessor(endpoint);
         }
     }
 
@@ -131,13 +128,30 @@ public class SalesforceProducer extends DefaultAsyncProducer {
 
     private static boolean isCompositeOperation(OperationName operationName) {
         switch (operationName) {
-            case COMPOSITE_TREE:
-            case COMPOSITE_BATCH:
             case COMPOSITE:
+            case COMPOSITE_BATCH:
+            case COMPOSITE_TREE:
                 return true;
             default:
                 return false;
         }
+    }
+
+    private static boolean isCompositeSObjectCollectionsOperation(OperationName operationName) {
+        switch (operationName) {
+            case COMPOSITE_CREATE_SOBJECT_COLLECTIONS:
+            case COMPOSITE_UPDATE_SOBJECT_COLLECTIONS:
+            case COMPOSITE_UPSERT_SOBJECT_COLLECTIONS:
+            case COMPOSITE_RETRIEVE_SOBJECT_COLLECTIONS:
+            case COMPOSITE_DELETE_SOBJECT_COLLECTIONS:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static boolean isRawOperation(OperationName operationName) {
+        return operationName == OperationName.RAW;
     }
 
     @Override
@@ -171,5 +185,4 @@ public class SalesforceProducer extends DefaultAsyncProducer {
 
         super.doStop();
     }
-
 }

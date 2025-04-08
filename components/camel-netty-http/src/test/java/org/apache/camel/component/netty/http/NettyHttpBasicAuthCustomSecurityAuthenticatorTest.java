@@ -16,6 +16,8 @@
  */
 package org.apache.camel.component.netty.http;
 
+import java.util.concurrent.TimeUnit;
+
 import javax.security.auth.Subject;
 import javax.security.auth.login.LoginException;
 
@@ -25,6 +27,7 @@ import org.apache.camel.builder.RouteBuilder;
 import org.junit.jupiter.api.Test;
 
 import static org.apache.camel.test.junit5.TestSupport.assertIsInstanceOf;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -45,24 +48,24 @@ public class NettyHttpBasicAuthCustomSecurityAuthenticatorTest extends BaseNetty
 
         // wait a little bit before next as the connection was closed when
         // denied
-        Thread.sleep(500);
-
+        String auth = "Basic c2NvdHQ6c2VjcmV0";
         getMockEndpoint("mock:input").expectedBodiesReceived("Hello World");
 
-        // username:password is scott:secret
-        String auth = "Basic c2NvdHQ6c2VjcmV0";
-        String out = template.requestBodyAndHeader("netty-http:http://localhost:{{port}}/foo", "Hello World", "Authorization",
-                auth, String.class);
-        assertEquals("Bye World", out);
-
+        await().atMost(500, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    String out = template.requestBodyAndHeader("netty-http:http://localhost:{{port}}/foo", "Hello World",
+                            "Authorization",
+                            auth, String.class);
+                    assertEquals("Bye World", out);
+                });
         assertMockEndpointsSatisfied();
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("netty-http:http://0.0.0.0:{{port}}/foo?securityConfiguration.realm=foo&securityConfiguration.securityAuthenticator=#myAuthenticator")
                         .to("mock:input")
                         .transform().constant("Bye World");
@@ -97,7 +100,7 @@ public class NettyHttpBasicAuthCustomSecurityAuthenticatorTest extends BaseNetty
         }
 
         @Override
-        public void logout(Subject subject) throws LoginException {
+        public void logout(Subject subject) {
             // noop
         }
 

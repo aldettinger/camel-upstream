@@ -19,13 +19,18 @@ package org.apache.camel.component.fhir;
 import java.util.HashMap;
 import java.util.Map;
 
+import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.fhir.context.FhirVersionEnum;
 import ca.uhn.fhir.rest.api.MethodOutcome;
+import org.apache.camel.CamelContext;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.fhir.api.ExtraParameters;
 import org.apache.camel.component.fhir.internal.FhirApiCollection;
 import org.apache.camel.component.fhir.internal.FhirCreateApiMethod;
-import org.hl7.fhir.dstu3.model.HumanName;
-import org.hl7.fhir.dstu3.model.Patient;
+import org.apache.camel.impl.DefaultCamelContext;
+import org.apache.camel.spi.Registry;
+import org.hl7.fhir.r4.model.HumanName;
+import org.hl7.fhir.r4.model.Patient;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,8 +47,34 @@ public class FhirCreateIT extends AbstractFhirTestSupport {
     private static final Logger LOG = LoggerFactory.getLogger(FhirCreateIT.class);
     private static final String PATH_PREFIX = FhirApiCollection.getCollection().getApiName(FhirCreateApiMethod.class).getName();
 
+    @Override
+    protected CamelContext createCamelContext() throws Exception {
+        //don't set serverUrl on component, use it from endpoint configration
+        Registry registry = createCamelRegistry();
+
+        if (registry != null) {
+            context = new DefaultCamelContext(registry);
+        } else {
+            context = new DefaultCamelContext();
+        }
+
+        this.fhirContext = new FhirContext(FhirVersionEnum.R4);
+        // Set proxy so that FHIR resource URLs returned by the server are using the correct host and port
+        this.fhirContext.getRestfulClientFactory().setProxy(service.getHost(), service.getPort());
+        this.fhirClient = this.fhirContext.newRestfulGenericClient(service.getServiceBaseURL());
+        final FhirConfiguration configuration = new FhirConfiguration();
+
+        configuration.setFhirContext(this.fhirContext);
+
+        // add FhirComponent to Camel context
+        final FhirComponent component = new FhirComponent(context);
+        component.setConfiguration(configuration);
+        context.addComponent("fhir", component);
+        return context;
+    }
+
     @Test
-    public void testCreateResource() throws Exception {
+    public void testCreateResource() {
         Patient patient = new Patient().addName(new HumanName().addGiven("Vincent").setFamily("Freeman"));
 
         MethodOutcome result = requestBody("direct://RESOURCE", patient);
@@ -54,7 +85,7 @@ public class FhirCreateIT extends AbstractFhirTestSupport {
     }
 
     @Test
-    public void testCreateStringResource() throws Exception {
+    public void testCreateStringResource() {
         Patient patient = new Patient().addName(new HumanName().addGiven("Vincent").setFamily("Freeman"));
         String patientString = this.fhirContext.newXmlParser().encodeResourceToString(patient);
 
@@ -66,7 +97,7 @@ public class FhirCreateIT extends AbstractFhirTestSupport {
     }
 
     @Test
-    public void testCreateStringResourceEncodeXml() throws Exception {
+    public void testCreateStringResourceEncodeXml() {
         Patient patient = new Patient().addName(new HumanName().addGiven("Vincent").setFamily("Freeman"));
         String patientString = this.fhirContext.newXmlParser().encodeResourceToString(patient);
         Map<String, Object> headers = new HashMap<>();
@@ -79,16 +110,19 @@ public class FhirCreateIT extends AbstractFhirTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             public void configure() {
                 // test route for resource
+                String serverUrl = service.getServiceBaseURL();
                 from("direct://RESOURCE")
-                        .to("fhir://" + PATH_PREFIX + "/resource?inBody=resource");
+                        .to("fhir://" + PATH_PREFIX + "/resource?inBody=resource&serverUrl="
+                            + serverUrl);
 
                 // test route for resource
                 from("direct://RESOURCE_STRING")
-                        .to("fhir://" + PATH_PREFIX + "/resource?inBody=resourceAsString&log=true");
+                        .to("fhir://" + PATH_PREFIX + "/resource?inBody=resourceAsString&log=true&serverUrl="
+                            + serverUrl);
 
             }
         };
